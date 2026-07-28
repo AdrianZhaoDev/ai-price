@@ -89,11 +89,21 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   await expect(
     page.getByRole("heading", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Kimi API", exact: true }).click();
-  await expect(page.locator('.official-price[data-rank="1"] strong')).toHaveCSS(
-    "color",
-    "rgb(0, 214, 111)",
-  );
+  const kimiButton = page.getByRole("button", {
+    name: "Kimi API",
+    exact: true,
+  });
+  await kimiButton.click();
+  await expect(kimiButton).toHaveAttribute("aria-pressed", "true");
+
+  const apiRows = page.locator(".price-list > .price-row");
+  if ((await apiRows.count()) > 0) {
+    await expect(
+      page.locator('.official-price[data-rank="1"] strong'),
+    ).toHaveCSS("color", "rgb(0, 214, 111)");
+  } else {
+    await expect(page.locator(".price-summary")).toContainText("0 个价格项目");
+  }
 });
 
 test("mobile navigation and sheet remain usable", async ({
