@@ -2,6 +2,7 @@ import { config } from "dotenv";
 import { createCollectorRegistry } from "@/lib/collectors/registry";
 import { runCollectors } from "@/lib/collectors/runner";
 import { closeDatabase, isDatabaseConfigured } from "@/lib/db/client";
+import { dataSyncErrorMessage, runConfiguredDataSync } from "@/lib/sync";
 
 config({ path: [".env.local", ".env"] });
 
@@ -41,6 +42,16 @@ async function main() {
     acceptPlanCountChange,
   });
   console.log(JSON.stringify(summary, null, 2));
+
+  try {
+    const syncResult = await runConfiguredDataSync();
+    if (syncResult) {
+      console.log(JSON.stringify({ dataSync: syncResult }, null, 2));
+    }
+  } catch (error) {
+    console.error(`Data sync failed: ${dataSyncErrorMessage(error)}`);
+    process.exitCode = 1;
+  }
 
   if (summary.failureCount > 0) process.exitCode = 1;
 }

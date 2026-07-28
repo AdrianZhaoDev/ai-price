@@ -1,5 +1,8 @@
 # 邮件系统
 
+面向站点管理员的服务商选择、QQ/163/腾讯云/Amazon SES 配置、VPS 填写与测试
+步骤见 [SMTP 邮件配置教程](SMTP_SETUP.md)。
+
 ## 功能
 
 - 用户价格订阅确认。
@@ -30,7 +33,7 @@ SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM="AI Price Atlas <price@example.com>"
 ADMIN_EMAIL=
-APP_URL=http://localhost:3000
+APP_URL=http://localhost:3100
 EMAIL_TOKEN_SECRET=
 ```
 

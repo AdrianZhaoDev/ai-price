@@ -37,6 +37,23 @@
 
 ### Database
 
+运行时数据库角色可独立配置：
+
+- `DATABASE_READ_TARGET=local|remote`：公开价格页面的读取目标。
+- `DATABASE_WRITE_TARGET=local|remote`：采集、订阅和邮件状态的运行数据库。
+- `DATABASE_URL` / `LOCAL_DATABASE_URL`：本地 PostgreSQL。
+- `REMOTE_DATABASE_URL`：可选远程运行数据库；未设置时复用同步目标地址。
+
+当前 VPS 使用本地读取和本地写入。本地采集批次结束后，可通过独立同步通道把
+公开价格与采集数据作为一个事务一致的完整镜像同步到远程 PostgreSQL。目标事务
+会先清空镜像表再写入源库快照，因此也能接管已有不同 UUID 的目标数据。Neon 与
+`postgresql` 渠道当前都使用标准 PostgreSQL 协议同步器；渠道名称用于标识服务
+类型。远程同步失败不会回滚已经写入本地的数据。
+
+默认同步 `providers`、`products`、`plans`、`sources`、`collection_runs`、
+`fx_rates`、`price_observations`、`price_change_events` 和
+`collection_errors`。包含邮箱或 token 的订阅与邮件表不参与同步。
+
 主要实体：
 
 - `providers`
@@ -129,6 +146,9 @@ interface PriceSourceAdapter {
 ## 可移植性
 
 - PostgreSQL 使用标准连接串。
+- 读目标、写目标与同步目标相互独立，默认都保持原有单数据库行为。
+- 数据同步通道由 `DATA_SYNC_ENABLED`、`DATA_SYNC_CHANNEL`、
+  `DATA_SYNC_TARGET` 和 `DATA_SYNC_TARGET_URL` 配置。
 - SMTP 使用标准协议。
 - 采集 CLI 不依赖 Vercel。
 - 部署可从 Vercel + Neon 迁移到 Docker + 任意 PostgreSQL。

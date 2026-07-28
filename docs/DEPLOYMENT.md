@@ -1,10 +1,14 @@
 # 部署说明
 
+> 当前 `american-vps` 自建生产环境的代码更新、数据库备份、发布、验证与回滚，
+> 统一以 [VPS 生产运维更新流程](VPS_OPERATIONS.md) 为准。SMTP 的人工配置见
+> [SMTP 邮件配置教程](SMTP_SETUP.md)。
+
 ## 推荐组合
 
 - Web：Vercel
 - Database：Neon PostgreSQL 或任意托管 PostgreSQL
-- Scheduler：GitHub Actions 每天两次
+- Scheduler：GitHub Actions 每 4 小时
 - Email：任意标准 SMTP，生产推荐 SES 或国内云邮件服务
 
 该组合使网页请求只读取数据库，采集不会占用网页服务器资源。
@@ -16,6 +20,14 @@
 ```dotenv
 DATABASE_URL=
 DIRECT_DATABASE_URL=
+LOCAL_DATABASE_URL=
+REMOTE_DATABASE_URL=
+DATABASE_READ_TARGET=local
+DATABASE_WRITE_TARGET=local
+DATA_SYNC_ENABLED=false
+DATA_SYNC_CHANNEL=neon
+DATA_SYNC_TARGET=neondb
+DATA_SYNC_TARGET_URL=
 APP_URL=
 CONTACT_EMAIL=
 CRON_SECRET=
@@ -27,8 +39,18 @@ SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM=
 ADMIN_EMAIL=
-COLLECTOR_CONCURRENCY=5
+COLLECTOR_CONCURRENCY=3
 ```
+
+`DATABASE_URL` 保持向后兼容并默认作为本地写库。页面读取可通过
+`DATABASE_READ_TARGET` 在本地和远程之间切换；采集与订阅通过
+`DATABASE_WRITE_TARGET` 选择运行数据库。
+
+开启 `DATA_SYNC_ENABLED` 后，每轮采集完成都会把公开价格和采集表完整镜像到目标
+PostgreSQL。`neon` 与 `postgresql` 通道都使用标准 PostgreSQL 协议。
+`DATA_SYNC_TARGET_URL` 是生产密钥，不得提交到仓库。
+服务器环境文件会被 Bash 读取；连接串含 `&` 等 shell 特殊字符时，必须将完整值
+放在单引号内。
 
 ## 本地开发
 
@@ -75,8 +97,8 @@ npm run local:db:down
 - `EMAIL_TOKEN_SECRET`
 
 仓库内 `.github/workflows/collect-prices.yml` 使用
-`0 10,22 * * *`，对应北京时间 18:00 与次日 06:00。先迁移数据库，再运行采集；
-任何来源失败会使任务以非零状态结束。
+`0 */4 * * *`，即每 4 小时运行一次。先迁移数据库，再运行采集；任何来源失败
+会使任务以非零状态结束。
 
 CI 不应获得生产数据库和 SMTP 密钥。
 

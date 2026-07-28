@@ -20,6 +20,8 @@
 - [测试策略](docs/TESTING.md)
 - [邮件系统](docs/EMAIL.md)
 - [部署说明](docs/DEPLOYMENT.md)
+- [VPS 生产运维更新流程（AI 必读）](docs/VPS_OPERATIONS.md)
+- [SMTP 邮件配置教程](docs/SMTP_SETUP.md)
 
 ## 快速开始
 
@@ -54,6 +56,8 @@ npm run collect
 - 15 个国内订阅来源，包含 GLM Coding、Comate、Qoder、TRAE、CodeBuddy、MiMo、华为 MaaS 和 SenseNova。
 - 16 个国内 API 平台，新增 MiMo、百川、LongCat、SiliconFlow、华为 MaaS 与中国电信 TeleAI。
 - 每 4 小时 GitHub Actions、人民币最低三档变化邮件、管理员故障告警。
+- 本地 PostgreSQL 主写，支持采集完成后向 Neon/PostgreSQL 异步同步，并可配置
+  页面读取和运行写入目标。
 - Vitest 覆盖率门槛与桌面 / 手机 Playwright smoke。
 
 文档是实现的约束来源；实现变化时需同步更新对应文档。

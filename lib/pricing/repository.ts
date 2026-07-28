@@ -1,5 +1,5 @@
 import { providerCatalog } from "@/lib/data/catalog";
-import { getDatabase, isDatabaseConfigured } from "@/lib/db/client";
+import { getReadDatabase, isReadDatabaseConfigured } from "@/lib/db/client";
 import { plans, priceObservations, products, sources } from "@/lib/db/schema";
 import type {
   PriceOffer,
@@ -17,10 +17,10 @@ function cloneCatalog(): ProviderCatalogItem[] {
 
 export async function loadProviderCatalog(): Promise<ProviderCatalogItem[]> {
   const catalog = cloneCatalog();
-  if (!isDatabaseConfigured()) return catalog;
+  if (!isReadDatabaseConfigured()) return catalog;
 
   try {
-    const observations = await getDatabase()
+    const observations = await getReadDatabase()
       .selectDistinctOn([
         priceObservations.planId,
         priceObservations.sourceId,

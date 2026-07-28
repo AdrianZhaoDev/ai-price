@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "test:stability": "tsx scripts/verify-collection-stability.ts",
     "collect": "tsx scripts/collect-prices.ts",
+    "sync:data": "tsx scripts/sync-data.ts",
     "seed": "tsx scripts/seed.ts",
     "local:db:up": "docker compose -f compose.local.yml up -d --wait",
     "local:db:down": "docker compose -f compose.local.yml down",
