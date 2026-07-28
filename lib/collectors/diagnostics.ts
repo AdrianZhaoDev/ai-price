@@ -86,6 +86,7 @@ export function diagnosticValue(
       "address",
       "port",
       "cause",
+      "details",
     ]) {
       if (extended[key] !== undefined) {
         result[key] = diagnosticValue(extended[key], depth + 1, seen);

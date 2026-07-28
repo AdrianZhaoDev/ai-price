@@ -1,4 +1,5 @@
 import { currencyFractionDigits } from "@/lib/collectors/price-parser";
+import { fetchPage } from "@/lib/collectors/http-client";
 import { getDatabase } from "@/lib/db/client";
 import { fxRates } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
@@ -45,49 +46,41 @@ async function fetchFrankfurterRates(
   const url = new URL(fxSourceUrl);
   url.searchParams.set("base", "CNY");
   url.searchParams.set("quotes", quotes.join(","));
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      throw new Error(`FX service returned HTTP ${response.status}.`);
-    }
-    const payload = (await response.json()) as FrankfurterRate[];
-    if (!Array.isArray(payload)) {
-      throw new Error("FX service returned an unexpected payload.");
-    }
-
-    const rates = payload.map((row) => {
-      if (
-        row.base !== "CNY" ||
-        !quotes.includes(row.quote) ||
-        !Number.isFinite(row.rate) ||
-        row.rate <= 0 ||
-        !isFreshEnough(row.date, observedAt)
-      ) {
-        throw new Error(`Invalid or stale FX rate for ${row.quote || "?"}.`);
-      }
-      return {
-        currency: row.quote,
-        cnyPerUnit: 1 / row.rate,
-        rateDate: row.date,
-        observedAt,
-        sourceUrl: url.toString(),
-      };
-    });
-    const returned = new Set(rates.map((rate) => rate.currency));
-    const missing = quotes.filter((currency) => !returned.has(currency));
-    if (missing.length > 0) {
-      throw new Error(`FX service omitted currencies: ${missing.join(", ")}.`);
-    }
-    return rates;
-  } finally {
-    clearTimeout(timeout);
+  const raw = await fetchPage(url.toString(), {
+    observedAt,
+    timeoutMs: 15_000,
+    attempts: 2,
+    headers: { accept: "application/json" },
+  });
+  const payload = JSON.parse(raw.body) as FrankfurterRate[];
+  if (!Array.isArray(payload)) {
+    throw new Error("FX service returned an unexpected payload.");
   }
+
+  const rates = payload.map((row) => {
+    if (
+      row.base !== "CNY" ||
+      !quotes.includes(row.quote) ||
+      !Number.isFinite(row.rate) ||
+      row.rate <= 0 ||
+      !isFreshEnough(row.date, observedAt)
+    ) {
+      throw new Error(`Invalid or stale FX rate for ${row.quote || "?"}.`);
+    }
+    return {
+      currency: row.quote,
+      cnyPerUnit: 1 / row.rate,
+      rateDate: row.date,
+      observedAt,
+      sourceUrl: url.toString(),
+    };
+  });
+  const returned = new Set(rates.map((rate) => rate.currency));
+  const missing = quotes.filter((currency) => !returned.has(currency));
+  if (missing.length > 0) {
+    throw new Error(`FX service omitted currencies: ${missing.join(", ")}.`);
+  }
+  return rates;
 }
 
 async function persistRates(rates: FxRate[]): Promise<void> {

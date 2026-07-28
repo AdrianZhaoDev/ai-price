@@ -1,5 +1,6 @@
 import { load } from "cheerio";
 import { fetchPage } from "@/lib/collectors/http-client";
+import { errorDiagnosticDetails } from "@/lib/collectors/diagnostics";
 import {
   parseBaichuanApi,
   parseBaiduApi,
@@ -29,6 +30,7 @@ import type {
   RawCollectionResult,
   SourceHealth,
 } from "@/lib/collectors/types";
+import { CollectionError } from "@/lib/collectors/types";
 
 type Parser = (raw: RawCollectionResult) => NormalizedOffer[];
 
@@ -837,7 +839,7 @@ export function parseGlmCodingPlan(
     quarter: "季付",
     year: "年付",
   } as const;
-  return [
+  const dynamicOffers = [
     ...raw.body.matchAll(
       /\{productId:"[^"]+",productName:"(Lite|Pro|Max)"[^}]{0,1000}\}/g,
     ),
@@ -857,7 +859,51 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v3",
+        parserVersion: "glm-coding-plan-v4",
+      }),
+    ];
+  });
+  if (dynamicOffers.length > 0) return dynamicOffers;
+
+  return [
+    ...raw.body.matchAll(
+      /(?:^|\n)(Lite|Pro|Max)\s*\n([\s\S]*?)(?=\n(?:Lite|Pro|Max)\s*\n|$)/g,
+    ),
+  ].flatMap((product) => {
+    const monthlyPrices = [...product[2].matchAll(/[¥￥]\s*([\d.]+)\/月/g)].map(
+      (match) => Number(match[1]),
+    );
+    const quarterTotal = Number(
+      product[2].match(/下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/)?.[1],
+    );
+    const standardMonth = monthlyPrices[1] ?? monthlyPrices[0];
+    if (!Number.isFinite(standardMonth) || !Number.isFinite(quarterTotal)) {
+      return [];
+    }
+
+    const planName = product[1];
+    return [
+      cnyOffer({
+        providerSlug: "glm-coding-plan",
+        planSlug: `glm-coding-${planName.toLowerCase()}-month`,
+        planName: `${planName} · ${periodNames.month}`,
+        displayPrice: `¥${standardMonth}`,
+        billingPeriod: "month",
+        channel: "official_web",
+        sourceUrl: raw.sourceUrl,
+        observedAt: raw.observedAt,
+        parserVersion: "glm-coding-plan-v4",
+      }),
+      cnyOffer({
+        providerSlug: "glm-coding-plan",
+        planSlug: `glm-coding-${planName.toLowerCase()}-quarter`,
+        planName: `${planName} · ${periodNames.quarter}`,
+        displayPrice: `¥${quarterTotal}`,
+        billingPeriod: "quarter",
+        channel: "official_web",
+        sourceUrl: raw.sourceUrl,
+        observedAt: raw.observedAt,
+        parserVersion: "glm-coding-plan-v4",
       }),
     ];
   });
@@ -1157,45 +1203,72 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   readonly id = "glm-coding-plan-official";
   readonly providerSlug = "glm-coding-plan";
   readonly sourceUrl = "https://www.bigmodel.cn/claude-code";
-  readonly parserVersion = "glm-coding-plan-v3";
+  readonly parserVersion = "glm-coding-plan-v4";
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
-    const page = await fetchPage(this.sourceUrl, {
-      observedAt: context.observedAt,
-      signal: context.signal,
-    });
-    const $ = load(page.body);
-    const runtimePath = $("script[src]")
-      .map((_, element) => $(element).attr("src"))
-      .get()
-      .find((src) => /\/runtime\.[a-f0-9]+\.js$/i.test(src));
-    if (!runtimePath) {
-      throw new Error("GLM Coding Plan runtime asset was not found.");
+    try {
+      const page = await fetchPage(this.sourceUrl, {
+        observedAt: context.observedAt,
+        signal: context.signal,
+        timeoutMs: 12_000,
+        attempts: 1,
+      });
+      const $ = load(page.body);
+      const runtimePath = $("script[src]")
+        .map((_, element) => $(element).attr("src"))
+        .get()
+        .find((src) => /\/runtime\.[a-f0-9]+\.js$/i.test(src));
+      if (!runtimePath) {
+        throw new Error("GLM Coding Plan runtime asset was not found.");
+      }
+      const runtimeUrl = new URL(
+        runtimePath.startsWith("//") ? `https:${runtimePath}` : runtimePath,
+        this.sourceUrl,
+      ).toString();
+      const runtime = await fetchPage(runtimeUrl, {
+        observedAt: context.observedAt,
+        signal: context.signal,
+      });
+      const hash = runtime.body.match(
+        /"ClaudeCode~subscribe-overview":"([a-f0-9]+)"/,
+      )?.[1];
+      if (!hash) {
+        throw new Error("GLM Coding Plan price chunk hash was not found.");
+      }
+      const chunkUrl = new URL(
+        `ClaudeCode~subscribe-overview.${hash}.js`,
+        runtimeUrl,
+      ).toString();
+      const raw = await fetchPage(chunkUrl, {
+        observedAt: context.observedAt,
+        signal: context.signal,
+        timeoutMs: 35_000,
+      });
+      return { ...raw, sourceUrl: this.sourceUrl };
+    } catch (primaryError) {
+      const renderedFallbackUrl =
+        "https://r.jina.ai/https://bigmodel.cn/claude-code";
+      try {
+        const rendered = await fetchPage(renderedFallbackUrl, {
+          observedAt: context.observedAt,
+          signal: context.signal,
+          timeoutMs: 30_000,
+          attempts: 2,
+        });
+        return { ...rendered, sourceUrl: this.sourceUrl };
+      } catch (fallbackError) {
+        throw new CollectionError(
+          "FETCH_FAILED",
+          "GLM Coding Plan official page and rendered fallback both failed.",
+          {
+            primaryUrl: this.sourceUrl,
+            fallbackUrl: renderedFallbackUrl,
+            primaryError: errorDiagnosticDetails(primaryError),
+            fallbackError: errorDiagnosticDetails(fallbackError),
+          },
+        );
+      }
     }
-    const runtimeUrl = new URL(
-      runtimePath.startsWith("//") ? `https:${runtimePath}` : runtimePath,
-      this.sourceUrl,
-    ).toString();
-    const runtime = await fetchPage(runtimeUrl, {
-      observedAt: context.observedAt,
-      signal: context.signal,
-    });
-    const hash = runtime.body.match(
-      /"ClaudeCode~subscribe-overview":"([a-f0-9]+)"/,
-    )?.[1];
-    if (!hash) {
-      throw new Error("GLM Coding Plan price chunk hash was not found.");
-    }
-    const chunkUrl = new URL(
-      `ClaudeCode~subscribe-overview.${hash}.js`,
-      runtimeUrl,
-    ).toString();
-    const raw = await fetchPage(chunkUrl, {
-      observedAt: context.observedAt,
-      signal: context.signal,
-      timeoutMs: 35_000,
-    });
-    return { ...raw, sourceUrl: this.sourceUrl };
   }
 
   async parse(raw: RawCollectionResult): Promise<NormalizedOffer[]> {
@@ -1203,7 +1276,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, 9);
+    return officialPageHealthCheck(offers, 6);
   }
 }
 

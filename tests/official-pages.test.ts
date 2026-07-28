@@ -238,6 +238,37 @@ describe("official table adapters", () => {
     ]);
   });
 
+  it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
+    const glm = parseGlmCodingPlan(
+      raw(`
+Lite
+￥44.1/月
+￥49/月
+下个季度续费金额：￥132.3
+Pro
+￥134.1/月
+￥149/月
+下个季度续费金额：￥402.3
+Max
+￥422.1/月
+￥469/月
+下个季度续费金额：￥1266.3
+`),
+    );
+
+    expect(glm.map((offer) => offer.amountMinor)).toEqual([
+      4900, 13230, 14900, 40230, 46900, 126630,
+    ]);
+    expect(glm.map((offer) => offer.billingPeriod)).toEqual([
+      "month",
+      "quarter",
+      "month",
+      "quarter",
+      "month",
+      "quarter",
+    ]);
+  });
+
   it("parses additional domestic token plans", () => {
     const mimo = parseMimoTokenPlan(
       raw(`<table>
