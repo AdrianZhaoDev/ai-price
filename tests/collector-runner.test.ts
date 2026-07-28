@@ -21,8 +21,10 @@ const state = vi.hoisted(() => ({
   recordCollectionFailure: vi.fn(async () => ({
     errorId: "error-1",
     consecutiveFailures: 3,
+    shouldAlert: true,
   })),
   finishCollectionRun: vi.fn(async () => undefined),
+  markCollectionAlertFailed: vi.fn(async () => undefined),
   markCollectionAlertSent: vi.fn(async () => undefined),
   markPriceChangesNotified: vi.fn(async () => undefined),
   buildPriceChangeDigests: vi.fn(
@@ -83,6 +85,7 @@ vi.mock("@/lib/collectors/persistence", () => ({
   recordSuccessfulCollection: state.recordSuccessfulCollection,
   recordCollectionFailure: state.recordCollectionFailure,
   finishCollectionRun: state.finishCollectionRun,
+  markCollectionAlertFailed: state.markCollectionAlertFailed,
   markCollectionAlertSent: state.markCollectionAlertSent,
   markPriceChangesNotified: state.markPriceChangesNotified,
   buildPriceChangeDigests: state.buildPriceChangeDigests,
@@ -235,6 +238,40 @@ describe("collector runner", () => {
     expect(state.recordCollectionFailure).toHaveBeenCalledWith(
       expect.objectContaining({ code: "PLAN_COUNT_COLLAPSE" }),
     );
+  });
+
+  it("does not repeat an alert for an already-alerted open incident", async () => {
+    state.databaseConfigured = true;
+    state.recordCollectionFailure.mockResolvedValueOnce({
+      errorId: "error-2",
+      consecutiveFailures: 4,
+      shouldAlert: false,
+    });
+    const summary = await runCollectors([
+      adapter("still-failing", {
+        collect: async () => {
+          throw new Error("upstream still unavailable");
+        },
+      }),
+    ]);
+    expect(summary.failureCount).toBe(1);
+    expect(state.sendAdminCollectionAlert).not.toHaveBeenCalled();
+    expect(state.markCollectionAlertSent).not.toHaveBeenCalled();
+  });
+
+  it("releases the alert claim when delivery fails", async () => {
+    state.databaseConfigured = true;
+    state.sendAdminCollectionAlert.mockResolvedValueOnce(false);
+    const summary = await runCollectors([
+      adapter("delivery-failed", {
+        collect: async () => {
+          throw new Error("upstream unavailable");
+        },
+      }),
+    ]);
+    expect(summary.failureCount).toBe(1);
+    expect(state.markCollectionAlertFailed).toHaveBeenCalledWith("error-1");
+    expect(state.markCollectionAlertSent).not.toHaveBeenCalled();
   });
 
   it("accepts a one-offer change in a small App Store plan set", async () => {

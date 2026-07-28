@@ -74,12 +74,41 @@ describe("collector HTTP client", () => {
     ).resolves.toMatchObject({ body: "ok" });
     expect(mockedFetch).toHaveBeenCalledTimes(2);
 
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    const networkCause = Object.assign(new Error("getaddrinfo ENOTFOUND"), {
+      code: "ENOTFOUND",
+      syscall: "getaddrinfo",
+      hostname: "example.com",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValue(
+          new TypeError("fetch failed", { cause: networkCause }),
+        ),
+    );
     await expect(
-      fetchPage("https://example.com", { attempts: 1 }),
-    ).rejects.toEqual(
+      fetchPage("https://example.com?token=secret-value", { attempts: 1 }),
+    ).rejects.toMatchObject(
       expect.objectContaining<Partial<CollectionError>>({
         code: "FETCH_FAILED",
+        details: {
+          url: "https://example.com/?token=[redacted]",
+          attempts: [
+            expect.objectContaining({
+              attempt: 1,
+              error: expect.objectContaining({
+                cause: expect.objectContaining({ code: "ENOTFOUND" }),
+              }),
+            }),
+          ],
+          finalError: expect.objectContaining({
+            cause: expect.objectContaining({
+              code: "ENOTFOUND",
+              hostname: "example.com",
+            }),
+          }),
+        },
       }),
     );
   });

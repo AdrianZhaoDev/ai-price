@@ -6,6 +6,7 @@ import {
   buildPriceChangeDigests,
   ensureSource,
   finishCollectionRun,
+  markCollectionAlertFailed,
   markCollectionAlertSent,
   markPriceChangesNotified,
   markSourceAttempt,
@@ -22,6 +23,10 @@ import {
 import { appStorefronts } from "@/lib/collectors/adapters/app-store";
 import { refreshFxRates, type FxRate } from "@/lib/collectors/fx";
 import { isDatabaseConfigured } from "@/lib/db/client";
+import {
+  errorDiagnosticDetails,
+  redactDiagnosticText,
+} from "@/lib/collectors/diagnostics";
 
 export type CollectionSummary = {
   sourceCount: number;
@@ -65,14 +70,16 @@ function failureDetails(error: unknown): {
   if (error instanceof CollectionError) {
     return {
       code: error.code,
-      message: error.message,
+      message: redactDiagnosticText(error.message),
       details: error.details,
     };
   }
   return {
     code: "COLLECTION_FAILED",
-    message: error instanceof Error ? error.message : String(error),
-    details: {},
+    message: redactDiagnosticText(
+      error instanceof Error ? error.message : String(error),
+    ),
+    details: errorDiagnosticDetails(error),
   };
 }
 
@@ -177,7 +184,7 @@ export async function runCollectors(
           sourceId: source.id,
           ...failure,
         });
-        if (recorded.consecutiveFailures >= 3) {
+        if (recorded.shouldAlert) {
           const alerted = await sendAdminCollectionAlert({
             sourceName: adapter.id,
             errorCode: failure.code,
@@ -187,6 +194,8 @@ export async function runCollectors(
           });
           if (alerted) {
             await markCollectionAlertSent(recorded.errorId);
+          } else {
+            await markCollectionAlertFailed(recorded.errorId);
           }
         }
       }

@@ -206,6 +206,8 @@ curl -fsS -o /dev/null -w "nginx=%{http_code}\n" http://127.0.0.1/
 curl -fsS -o /dev/null -w "public=%{http_code}\n" http://107.173.87.110/
 curl -fsS -o /dev/null -w "admin-login=%{http_code}\n" \
   http://127.0.0.1:3100/admin/login
+curl -sS -o /dev/null -w "admin-errors-unauth=%{http_code}\n" \
+  http://127.0.0.1:3100/admin/errors
 
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'observations=' || count(*) FROM price_observations"
@@ -229,6 +231,7 @@ journalctl -u ai-price.service --since "-10 minutes" --no-pager
 - 四个服务检查均为 `active`；
 - 三个 HTTP 检查均为 `200`；
 - 管理员登录页返回 `200`，未认证访问 `/admin` 会跳转到 `/admin/login`；
+- 未认证访问 `/admin/errors` 返回重定向，登录后可查看分页完整错误日志；
 - observation 数量大于 0；
 - 启用同步时 `npm run sync:data` 返回目标名称和各表同步数量；
 - timer 有下一次执行时间；

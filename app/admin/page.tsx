@@ -4,6 +4,7 @@ import { providerCatalog } from "@/lib/data/catalog";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminHeader } from "./admin-header";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -63,18 +64,11 @@ export default async function AdminSubscriptionsPage({
 
   return (
     <main className="admin-shell">
-      <header className="admin-header">
-        <div>
-          <p className="admin-eyebrow">AI 价签 · 管理后台</p>
-          <h1>订阅通知</h1>
-          <p>查看全部订阅记录，时间按中国标准时间显示。</p>
-        </div>
-        <form action="/api/admin/logout" method="post">
-          <button className="secondary-button" type="submit">
-            退出登录
-          </button>
-        </form>
-      </header>
+      <AdminHeader
+        current="subscriptions"
+        title="订阅通知"
+        description="查看全部订阅记录，时间按中国标准时间显示。"
+      />
 
       <section className="admin-metrics" aria-label="订阅统计">
         {(["all", "active", "pending", "unsubscribed"] as const).map((key) => (

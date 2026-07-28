@@ -16,7 +16,7 @@ import {
   providers,
   sources,
 } from "@/lib/db/schema";
-import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 
 export type SourceReference = {
   id: string;
@@ -403,16 +403,26 @@ export async function recordSuccessfulCollection(input: {
       );
   }
 
+  const resolvedAt = new Date();
   await db
     .update(sources)
     .set({
       consecutiveFailures: 0,
-      lastSuccessAt: new Date(),
+      lastSuccessAt: resolvedAt,
       lastContentHash: input.contentHash,
       lastOfferCount: input.offers.length,
       updatedAt: new Date(),
     })
     .where(eq(sources.id, input.source.id));
+  await db
+    .update(collectionErrors)
+    .set({ resolvedAt })
+    .where(
+      and(
+        eq(collectionErrors.sourceId, input.source.id),
+        isNull(collectionErrors.resolvedAt),
+      ),
+    );
 
   return changes;
 }
@@ -423,36 +433,74 @@ export async function recordCollectionFailure(input: {
   code: string;
   message: string;
   details?: Record<string, unknown>;
-}): Promise<{ errorId: string; consecutiveFailures: number }> {
+}): Promise<{
+  errorId: string;
+  consecutiveFailures: number;
+  shouldAlert: boolean;
+}> {
   const db = getDatabase();
-  const [source] = await db
-    .select({ consecutiveFailures: sources.consecutiveFailures })
-    .from(sources)
-    .where(eq(sources.id, input.sourceId))
-    .limit(1);
-  const consecutiveFailures = (source?.consecutiveFailures ?? 0) + 1;
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`collector:${input.sourceId}:${input.code}`}))`,
+    );
+    const [source] = await tx
+      .select({ consecutiveFailures: sources.consecutiveFailures })
+      .from(sources)
+      .where(eq(sources.id, input.sourceId))
+      .limit(1);
+    const [alertedIncident] = await tx
+      .select({ id: collectionErrors.id })
+      .from(collectionErrors)
+      .where(
+        and(
+          eq(collectionErrors.sourceId, input.sourceId),
+          eq(collectionErrors.code, input.code),
+          isNull(collectionErrors.resolvedAt),
+          isNotNull(collectionErrors.alertSentAt),
+        ),
+      )
+      .limit(1);
+    const consecutiveFailures = (source?.consecutiveFailures ?? 0) + 1;
+    const shouldAlert =
+      consecutiveFailures >= 3 && alertedIncident === undefined;
+    const alertClaimedAt = shouldAlert ? new Date() : null;
 
-  await db
-    .update(sources)
-    .set({ consecutiveFailures, updatedAt: new Date() })
-    .where(eq(sources.id, input.sourceId));
-  const [error] = await db
-    .insert(collectionErrors)
-    .values({
-      sourceId: input.sourceId,
-      collectionRunId: input.runId,
-      code: input.code,
-      message: input.message,
-      details: input.details ?? {},
-    })
-    .returning({ id: collectionErrors.id });
-  return { errorId: error.id, consecutiveFailures };
+    await tx
+      .update(sources)
+      .set({ consecutiveFailures, updatedAt: new Date() })
+      .where(eq(sources.id, input.sourceId));
+    const [error] = await tx
+      .insert(collectionErrors)
+      .values({
+        sourceId: input.sourceId,
+        collectionRunId: input.runId,
+        code: input.code,
+        message: input.message,
+        details: input.details ?? {},
+        alertSentAt: alertClaimedAt,
+      })
+      .returning({ id: collectionErrors.id });
+    return {
+      errorId: error.id,
+      consecutiveFailures,
+      shouldAlert,
+    };
+  });
 }
 
 export async function markCollectionAlertSent(errorId: string): Promise<void> {
   await getDatabase()
     .update(collectionErrors)
     .set({ alertSentAt: new Date() })
+    .where(eq(collectionErrors.id, errorId));
+}
+
+export async function markCollectionAlertFailed(
+  errorId: string,
+): Promise<void> {
+  await getDatabase()
+    .update(collectionErrors)
+    .set({ alertSentAt: null })
     .where(eq(collectionErrors.id, errorId));
 }
 

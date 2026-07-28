@@ -28,6 +28,7 @@ type AdminAlertTemplateInput = {
   errorCode: string;
   message: string;
   occurredAt: string;
+  adminUrl?: string;
 };
 
 function shell(content: string): string {
@@ -162,22 +163,29 @@ export function adminAlertEmail({
   errorCode,
   message,
   occurredAt,
+  adminUrl,
 }: AdminAlertTemplateInput) {
   const safeSourceName = escapeHtml(sourceName);
   const safeErrorCode = escapeHtml(errorCode);
   const safeMessage = escapeHtml(message);
   const safeOccurredAt = escapeHtml(occurredAt);
+  const safeAdminUrl = adminUrl ? safeHttpUrl(adminUrl) : null;
   const html = shell(`
     <p style="margin:0;color:#c9342f;font-size:12px;font-weight:700;">采集异常</p>
     <h1 style="margin:10px 0 16px;font-size:23px;">${safeSourceName}</h1>
     <p style="margin:0 0 8px;font-size:13px;"><strong>错误码：</strong>${safeErrorCode}</p>
     <p style="margin:0 0 8px;font-size:13px;"><strong>时间：</strong>${safeOccurredAt}</p>
     <pre style="margin:16px 0 0;padding:14px;border-radius:12px;background:#f2f2f4;color:#3a3a3c;white-space:pre-wrap;font-size:12px;">${safeMessage}</pre>
+    ${
+      safeAdminUrl
+        ? `<p style="margin:18px 0 0;"><a href="${safeAdminUrl}" style="color:#0066cc;font-size:13px;font-weight:700;">在管理后台查看完整错误日志 →</a></p>`
+        : ""
+    }
   `);
 
   return {
     subject: `[AI 价签] ${sourceName} 采集异常`,
     html,
-    text: `${sourceName} 采集异常\n${errorCode}\n${occurredAt}\n${message}`,
+    text: `${sourceName} 采集异常\n${errorCode}\n${occurredAt}\n${message}${adminUrl ? `\n完整日志：${adminUrl}` : ""}`,
   };
 }

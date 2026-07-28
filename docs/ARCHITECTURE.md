@@ -153,6 +153,9 @@ interface PriceSourceAdapter {
 - 采集 CLI 不依赖 Vercel。
 - `/admin` 通过管理员邮箱一次性验证码和签名 HttpOnly Cookie 保护，验证码与
   会话不写入 URL、浏览器本地存储或数据库。
+- `/admin/errors` 读取本地运行数据库中的采集错误，支持种类、渠道、状态筛选与
+  分页；网络请求会保存脱敏后的重试、底层 cause、HTTP 响应摘要和堆栈。来源恢复
+  时关闭未解决错误，同一故障事件只发送一次管理员邮件。
 - 部署可从 Vercel + Neon 迁移到 Docker + 任意 PostgreSQL。
 
 ## 性能策略

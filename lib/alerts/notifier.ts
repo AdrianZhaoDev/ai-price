@@ -100,10 +100,16 @@ export async function sendAdminCollectionAlert(input: {
   if (!deliveryId) return false;
 
   try {
+    const adminUrl = process.env.APP_URL
+      ? new URL(
+          `/admin/errors?code=${encodeURIComponent(input.errorCode)}&status=open`,
+          process.env.APP_URL,
+        ).toString()
+      : undefined;
     const result = await getEmailTransport().sendMail({
       from: process.env.SMTP_FROM,
       to: recipient,
-      ...adminAlertEmail(input),
+      ...adminAlertEmail({ ...input, adminUrl }),
     });
     await settleEmailDelivery(deliveryId, {
       status: "sent",

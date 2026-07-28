@@ -3,6 +3,11 @@ import {
   CollectionError,
   type RawCollectionResult,
 } from "@/lib/collectors/types";
+import {
+  diagnosticValue,
+  errorDiagnosticDetails,
+  sanitizeDiagnosticUrl,
+} from "@/lib/collectors/diagnostics";
 
 type FetchPageOptions = {
   observedAt?: Date;
@@ -26,14 +31,39 @@ function responseHeaders(headers: Headers): Record<string, string> {
   return Object.fromEntries(headers.entries());
 }
 
+function diagnosticHeaders(headers: Headers): Record<string, string> {
+  const allowed = [
+    "content-type",
+    "content-length",
+    "server",
+    "retry-after",
+    "location",
+    "cf-ray",
+    "x-request-id",
+  ];
+  return Object.fromEntries(
+    allowed
+      .map((name) => [name, headers.get(name)] as const)
+      .filter((entry): entry is [string, string] => entry[1] !== null)
+      .map(([name, value]) => [
+        name,
+        name === "location"
+          ? sanitizeDiagnosticUrl(value)
+          : String(diagnosticValue(value)),
+      ]),
+  );
+}
+
 export async function fetchPage(
   url: string,
   options: FetchPageOptions = {},
 ): Promise<RawCollectionResult> {
-  const attempts = options.attempts ?? 3;
+  const attempts = Math.max(1, Math.min(5, Math.trunc(options.attempts ?? 3)));
   let lastError: unknown;
+  const attemptFailures: Array<Record<string, unknown>> = [];
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const attemptStartedAt = Date.now();
     const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeoutSignal])
@@ -58,7 +88,14 @@ export async function fetchPage(
         throw new CollectionError(
           "HTTP_ERROR",
           `Official source returned HTTP ${response.status}.`,
-          { status: response.status, url },
+          {
+            status: response.status,
+            statusText: response.statusText,
+            url: sanitizeDiagnosticUrl(url),
+            responseUrl: sanitizeDiagnosticUrl(response.url || url),
+            responseHeaders: diagnosticHeaders(response.headers),
+            responseBodyPreview: diagnosticValue(body.slice(0, 4_000)),
+          },
         );
       }
 
@@ -70,7 +107,14 @@ export async function fetchPage(
         throw new CollectionError(
           "ACCESS_BLOCKED",
           "Official source returned an access challenge.",
-          { url },
+          {
+            status: response.status,
+            url: sanitizeDiagnosticUrl(url),
+            responseUrl: sanitizeDiagnosticUrl(response.url || url),
+            responseHeaders: diagnosticHeaders(response.headers),
+            responseTitle: diagnosticValue(title),
+            responseBodyPreview: diagnosticValue(body.slice(0, 4_000)),
+          },
         );
       }
 
@@ -84,16 +128,38 @@ export async function fetchPage(
       };
     } catch (error) {
       lastError = error;
-      if (attempt < attempts) {
+      attemptFailures.push({
+        attempt,
+        attemptedAt: new Date(attemptStartedAt).toISOString(),
+        durationMs: Date.now() - attemptStartedAt,
+        error: errorDiagnosticDetails(error),
+      });
+      const retryable =
+        !(error instanceof CollectionError) ||
+        (error.code === "HTTP_ERROR" &&
+          (Number(error.details.status) === 429 ||
+            Number(error.details.status) >= 500));
+      if (attempt < attempts && retryable) {
         await delay((options.retryDelayMs ?? 750) * 2 ** (attempt - 1));
+      } else if (!retryable) {
+        break;
       }
     }
   }
 
-  if (lastError instanceof CollectionError) throw lastError;
+  if (lastError instanceof CollectionError) {
+    throw new CollectionError(lastError.code, lastError.message, {
+      ...lastError.details,
+      attempts: attemptFailures,
+    });
+  }
   throw new CollectionError(
     "FETCH_FAILED",
     lastError instanceof Error ? lastError.message : "Source request failed.",
-    { url },
+    {
+      url: sanitizeDiagnosticUrl(url),
+      attempts: attemptFailures,
+      finalError: errorDiagnosticDetails(lastError),
+    },
   );
 }
