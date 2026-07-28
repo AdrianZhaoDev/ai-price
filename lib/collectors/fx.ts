@@ -49,7 +49,7 @@ async function fetchFrankfurterRates(
   const raw = await fetchPage(url.toString(), {
     observedAt,
     timeoutMs: 15_000,
-    attempts: 2,
+    attempts: 3,
     headers: { accept: "application/json" },
   });
   const payload = JSON.parse(raw.body) as FrankfurterRate[];

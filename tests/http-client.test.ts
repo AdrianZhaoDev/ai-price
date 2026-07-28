@@ -134,4 +134,25 @@ describe("collector HTTP client", () => {
     expect(mockedFetch.mock.calls[0][1]).toHaveProperty("dispatcher");
     expect(mockedFetch.mock.calls[1][1]).not.toHaveProperty("dispatcher");
   });
+
+  it("retries the proxy after a direct connection also fails", async () => {
+    vi.stubEnv("COLLECTOR_PROXY_URL", "http://127.0.0.1:40000");
+    const mockedFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("proxy temporarily unavailable"))
+      .mockRejectedValueOnce(new Error("direct connection unavailable"))
+      .mockResolvedValueOnce(new Response("proxy recovered"));
+    vi.stubGlobal("fetch", mockedFetch);
+
+    await expect(
+      fetchPage("https://example.com", {
+        attempts: 3,
+        retryDelayMs: 0,
+      }),
+    ).resolves.toMatchObject({ body: "proxy recovered" });
+
+    expect(mockedFetch.mock.calls[0][1]).toHaveProperty("dispatcher");
+    expect(mockedFetch.mock.calls[1][1]).not.toHaveProperty("dispatcher");
+    expect(mockedFetch.mock.calls[2][1]).toHaveProperty("dispatcher");
+  });
 });

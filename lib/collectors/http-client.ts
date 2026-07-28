@@ -76,7 +76,7 @@ export async function fetchPage(
       const signal = options.signal
         ? AbortSignal.any([options.signal, timeoutSignal])
         : timeoutSignal;
-      const useProxy = Boolean(proxyAgent && attempt === 1);
+      const useProxy = Boolean(proxyAgent && attempt % 2 === 1);
 
       try {
         const requestInit: RequestInit & { dispatcher?: ProxyAgent } = {
