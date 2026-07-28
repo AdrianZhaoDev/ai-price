@@ -1,69 +1,16 @@
 import type { PriceChangeDigest } from "@/lib/collectors/persistence";
 import { markPriceChangesNotified } from "@/lib/collectors/persistence";
-import { isDatabaseConfigured, getDatabase } from "@/lib/db/client";
-import { emailDeliveries } from "@/lib/db/schema";
+import { isDatabaseConfigured } from "@/lib/db/client";
+import {
+  reserveEmailDelivery,
+  settleEmailDelivery,
+} from "@/lib/email/delivery";
 import { adminAlertEmail, priceChangeEmail } from "@/lib/email/templates";
 import { getEmailTransport, isSmtpConfigured } from "@/lib/email/transport";
-import { hashEmail } from "@/lib/security/tokens";
 import {
   createUnsubscribeToken,
   listActivePriceSubscribers,
 } from "@/lib/subscriptions/repository";
-import { eq } from "drizzle-orm";
-
-async function reserveDelivery(input: {
-  type: string;
-  recipient: string;
-  dedupeKey: string;
-}): Promise<string | null> {
-  if (!isDatabaseConfigured()) return crypto.randomUUID();
-  const [delivery] = await getDatabase()
-    .insert(emailDeliveries)
-    .values({
-      messageType: input.type,
-      recipientHash: hashEmail(input.recipient),
-      dedupeKey: input.dedupeKey,
-      status: "sending",
-    })
-    .onConflictDoNothing()
-    .returning({ id: emailDeliveries.id });
-  if (delivery) return delivery.id;
-
-  const [existing] = await getDatabase()
-    .select({
-      id: emailDeliveries.id,
-      status: emailDeliveries.status,
-    })
-    .from(emailDeliveries)
-    .where(eq(emailDeliveries.dedupeKey, input.dedupeKey))
-    .limit(1);
-  if (existing?.status !== "failed") return null;
-  await getDatabase()
-    .update(emailDeliveries)
-    .set({ status: "sending", error: null })
-    .where(eq(emailDeliveries.id, existing.id));
-  return existing.id;
-}
-
-async function settleDelivery(
-  deliveryId: string,
-  input: {
-    status: "sent" | "failed";
-    providerMessageId?: string;
-    error?: string;
-  },
-): Promise<void> {
-  if (!isDatabaseConfigured()) return;
-  await getDatabase()
-    .update(emailDeliveries)
-    .set({
-      status: input.status,
-      providerMessageId: input.providerMessageId,
-      error: input.error,
-      sentAt: input.status === "sent" ? new Date() : null,
-    })
-    .where(eq(emailDeliveries.id, deliveryId));
-}
 
 export async function notifyPriceChangeDigest(
   digest: PriceChangeDigest,
@@ -85,7 +32,7 @@ export async function notifyPriceChangeDigest(
   let failed = 0;
 
   for (const recipient of recipients) {
-    const deliveryId = await reserveDelivery({
+    const deliveryId = await reserveEmailDelivery({
       type: "price_change",
       recipient: recipient.email,
       dedupeKey: `price-change:${digest.runId}:${digest.planSlug}:${recipient.subscriptionId}`,
@@ -113,14 +60,14 @@ export async function notifyPriceChangeDigest(
         to: recipient.email,
         ...message,
       });
-      await settleDelivery(deliveryId, {
+      await settleEmailDelivery(deliveryId, {
         status: "sent",
         providerMessageId: result.messageId,
       });
       sent += 1;
     } catch (error) {
       failed += 1;
-      await settleDelivery(deliveryId, {
+      await settleEmailDelivery(deliveryId, {
         status: "failed",
         error: error instanceof Error ? error.message : String(error),
       });
@@ -145,7 +92,7 @@ export async function sendAdminCollectionAlert(input: {
 }): Promise<boolean> {
   const recipient = process.env.ADMIN_EMAIL;
   if (!recipient || !isSmtpConfigured()) return false;
-  const deliveryId = await reserveDelivery({
+  const deliveryId = await reserveEmailDelivery({
     type: "admin_collection_alert",
     recipient,
     dedupeKey: input.dedupeKey,
@@ -158,13 +105,13 @@ export async function sendAdminCollectionAlert(input: {
       to: recipient,
       ...adminAlertEmail(input),
     });
-    await settleDelivery(deliveryId, {
+    await settleEmailDelivery(deliveryId, {
       status: "sent",
       providerMessageId: result.messageId,
     });
     return true;
   } catch (error) {
-    await settleDelivery(deliveryId, {
+    await settleEmailDelivery(deliveryId, {
       status: "failed",
       error: error instanceof Error ? error.message : String(error),
     });

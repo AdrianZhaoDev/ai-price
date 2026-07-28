@@ -7,22 +7,22 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 
 ## 1. 固定生产信息
 
-| 项目 | 值 |
-| --- | --- |
-| SSH | `ssh american-vps` |
-| 公网地址 | `http://107.173.87.110` |
-| 应用根目录 | `/opt/ai-price` |
-| 当前版本软链接 | `/opt/ai-price/current` |
-| 版本目录 | `/opt/ai-price/releases/<UTC 时间戳>` |
-| 环境变量 | `/etc/ai-price.env` |
-| Web 服务 | `ai-price.service` |
-| 采集服务 | `ai-price-collect.service` |
-| 采集 timer | `ai-price-collect.timer` |
-| 应用监听 | `127.0.0.1:3100` |
-| Nginx | 公网 80 端口 |
-| PostgreSQL | `127.0.0.1:5432`，数据库 `ai_price` |
-| 当前数据库模式 | 本地读取、本地写入、Neon 异步同步 |
-| 特殊约束 | v2ray 正在占用公网 443 |
+| 项目           | 值                                    |
+| -------------- | ------------------------------------- |
+| SSH            | `ssh american-vps`                    |
+| 公网地址       | `http://107.173.87.110`               |
+| 应用根目录     | `/opt/ai-price`                       |
+| 当前版本软链接 | `/opt/ai-price/current`               |
+| 版本目录       | `/opt/ai-price/releases/<UTC 时间戳>` |
+| 环境变量       | `/etc/ai-price.env`                   |
+| Web 服务       | `ai-price.service`                    |
+| 采集服务       | `ai-price-collect.service`            |
+| 采集 timer     | `ai-price-collect.timer`              |
+| 应用监听       | `127.0.0.1:3100`                      |
+| Nginx          | 公网 80 端口                          |
+| PostgreSQL     | `127.0.0.1:5432`，数据库 `ai_price`   |
+| 当前数据库模式 | 本地读取、本地写入、Neon 异步同步     |
+| 特殊约束       | v2ray 正在占用公网 443                |
 
 ## 2. 强制规则
 
@@ -204,6 +204,8 @@ systemctl is-active ai-price-collect.timer
 curl -fsS -o /dev/null -w "app=%{http_code}\n" http://127.0.0.1:3100/
 curl -fsS -o /dev/null -w "nginx=%{http_code}\n" http://127.0.0.1/
 curl -fsS -o /dev/null -w "public=%{http_code}\n" http://107.173.87.110/
+curl -fsS -o /dev/null -w "admin-login=%{http_code}\n" \
+  http://127.0.0.1:3100/admin/login
 
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'observations=' || count(*) FROM price_observations"
@@ -226,6 +228,7 @@ journalctl -u ai-price.service --since "-10 minutes" --no-pager
 
 - 四个服务检查均为 `active`；
 - 三个 HTTP 检查均为 `200`；
+- 管理员登录页返回 `200`，未认证访问 `/admin` 会跳转到 `/admin/login`；
 - observation 数量大于 0；
 - 启用同步时 `npm run sync:data` 返回目标名称和各表同步数量；
 - timer 有下一次执行时间；

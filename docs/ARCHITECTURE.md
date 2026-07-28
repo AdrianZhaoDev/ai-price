@@ -151,6 +151,8 @@ interface PriceSourceAdapter {
   `DATA_SYNC_TARGET` 和 `DATA_SYNC_TARGET_URL` 配置。
 - SMTP 使用标准协议。
 - 采集 CLI 不依赖 Vercel。
+- `/admin` 通过管理员邮箱一次性验证码和签名 HttpOnly Cookie 保护，验证码与
+  会话不写入 URL、浏览器本地存储或数据库。
 - 部署可从 Vercel + Neon 迁移到 Docker + 任意 PostgreSQL。
 
 ## 性能策略
