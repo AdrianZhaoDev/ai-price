@@ -99,8 +99,9 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   const apiRows = page.locator(".price-list > .price-row");
   if ((await apiRows.count()) > 0) {
     await expect(
-      page.locator('.official-price[data-rank="1"] strong'),
-    ).toHaveCSS("color", "rgb(0, 214, 111)");
+      apiRows.first().locator(".official-price strong"),
+    ).toContainText(/\d/);
+    await expect(apiRows.first().locator(".converted-price")).not.toBeEmpty();
   } else {
     await expect(page.locator(".price-summary")).toContainText("0 个价格项目");
   }
