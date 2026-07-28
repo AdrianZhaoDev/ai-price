@@ -1,0 +1,143 @@
+# 技术架构
+
+## 决策摘要
+
+采用可部署、低运维且无供应商强绑定的全栈 TypeScript 架构：
+
+- Next.js 16 App Router
+- React 19
+- TypeScript strict
+- PostgreSQL
+- Drizzle ORM
+- Zod 运行时校验
+- Nodemailer 通用 SMTP
+- Vitest + Testing Library + Playwright
+- GitHub Actions CI 与每 4 小时定时采集
+
+网页服务不在用户请求期间抓取第三方价格。采集通过独立 CLI 运行，可由 GitHub Actions、服务器 cron 或任意云调度器触发。
+
+## 服务边界
+
+### Web
+
+- Server Components 默认。
+- 读取数据库中的最后有效价格。
+- 对公开页面使用缓存和增量再验证。
+- 提供订阅、确认、退订 API。
+- 不持有第三方登录态，不执行长时间抓取。
+
+### Collector
+
+- 每 4 小时运行一次。
+- 按数据源适配器采集。
+- 原始响应先存证，再解析和标准化。
+- 解析失败不覆盖最后有效记录。
+- 指数退避重试三次后发送管理员邮件。
+- 每轮生成 `collection_run` 与来源级状态。
+
+### Database
+
+主要实体：
+
+- `providers`
+- `products`
+- `plans`
+- `sources`
+- `price_observations`
+- `fx_rates`
+- `collection_runs`
+- `collection_errors`
+- `subscribers`
+- `subscriptions`
+- `confirmation_tokens`
+- `price_change_events`
+- `email_deliveries`
+
+`latest_prices` 不单独存表。当前价由
+`price_observations` 按 plan、source、storefront 做 `DISTINCT ON` 读取，
+避免双写造成当前价与历史价不一致。
+
+每轮先从 Frankfurter v2 获取人民币基准汇率并写入 `fx_rates`。报价观察同时保存
+`converted_cny`、`fx_rate` 与汇率观察时间；原币价未变时只刷新人民币换算，不生成
+价格变化事件。
+
+## 目录结构
+
+```text
+app/
+  (public)/
+  api/
+components/
+  primitives/
+  pricing/
+  subscription/
+  themes/
+lib/
+  db/
+  pricing/
+  providers/
+  collectors/
+  email/
+  alerts/
+  security/
+scripts/
+  collect-prices.ts
+  seed.ts
+tests/
+  unit/
+  integration/
+  e2e/
+docs/
+design-system/
+.github/workflows/
+```
+
+## 领域接口
+
+所有采集器实现相同接口：
+
+```ts
+interface PriceSourceAdapter {
+  id: string;
+  collect(context: CollectionContext): Promise<RawCollectionResult>;
+  parse(raw: RawCollectionResult): Promise<NormalizedOffer[]>;
+  healthCheck(result: NormalizedOffer[]): SourceHealth;
+}
+```
+
+页面只依赖标准化后的 `NormalizedOffer`，不感知 HTML、JSON、App Store 或人工录入的差异。
+
+## 主题边界
+
+领域数据不得包含视觉类名。主题通过以下三层替换：
+
+1. CSS 语义令牌，例如 `--surface-primary`。
+2. 无业务逻辑的 UI primitives。
+3. 页面 composition。
+
+更换主题包不修改数据库、采集器、API 响应和价格组件的数据契约。
+
+## 安全
+
+- 订阅确认 token 只保存哈希。
+- 所有公开写 API 做限流和蜜罐校验。
+- 邮件地址标准化后加密或最小化存储。
+- SMTP 密钥只存在服务端环境变量。
+- 管理员重试入口使用 `CRON_SECRET` 或管理员认证。
+- 禁止把登录后结账 URL、会话 cookie 和第三方 token 写入数据库。
+
+## 可移植性
+
+- PostgreSQL 使用标准连接串。
+- SMTP 使用标准协议。
+- 采集 CLI 不依赖 Vercel。
+- 部署可从 Vercel + Neon 迁移到 Docker + 任意 PostgreSQL。
+
+## 性能策略
+
+- Server Components 优先，交互组件最小化。
+- 首页只加载当前模式需要的数据。
+- 价格表客户端按持久化人民币值切换高到低 / 低到高排序。
+- 仅在价格变化时新增历史事件，相同价格更新 `last_seen_at`。
+- 静态图标本地化，避免运行时请求第三方 Logo。
+- 动效只使用 `transform` 和 `opacity`。

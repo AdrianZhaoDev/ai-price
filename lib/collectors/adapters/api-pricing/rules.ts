@@ -1,0 +1,801 @@
+/**
+ * Platform-owned API pricing rules.
+ *
+ * Keep each provider in its own exported function. Shared HTML mechanics live in
+ * shared.ts; provider-specific selectors, column meanings and unit conversions
+ * stay here so an official-page change has a single obvious edit point.
+ */
+import { load } from "cheerio";
+import type {
+  NormalizedOffer,
+  RawCollectionResult,
+} from "@/lib/collectors/types";
+import {
+  apiOffer,
+  compactLabel,
+  dedupeOffers,
+  firstNumberFrom,
+  normalizeTokenUnit,
+  numberFrom,
+  officialTables,
+  priceColumns,
+  priceTypeFrom,
+} from "@/lib/collectors/adapters/api-pricing/shared";
+
+function modelOrderer() {
+  const order = new Map<string, number>();
+  return (model: string) => {
+    const key = compactLabel(model).toLowerCase();
+    if (!order.has(key)) order.set(key, order.size);
+    return order.get(key)!;
+  };
+}
+
+function validPrice(value: number | null): value is number {
+  return value !== null && Number.isFinite(value) && value >= 0;
+}
+
+function officialPriceFrom(value: string): number | null {
+  const discount = value.match(/原价\s*([\d.]+)\s*元[^元]{0,30}?([\d.]+)\s*折/);
+  if (discount) return Number(discount[1]) * (Number(discount[2]) / 10);
+  const yuanValues = [...value.matchAll(/([\d.]+)\s*元/g)].map((match) =>
+    Number(match[1]),
+  );
+  return yuanValues.at(-1) ?? numberFrom(value);
+}
+
+export function parseDeepSeekApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const rows = officialTables(raw.body)[0]?.rows ?? [];
+  const modelRow = rows.find(
+    (row) => row.length > 1 && row.some((cell) => /deepseek-/i.test(cell)),
+  );
+  const modelColumns =
+    modelRow
+      ?.map((cell, index) => (/deepseek-/i.test(cell) ? index : -1))
+      .filter((index) => index >= 0) ?? [];
+  const versionRow = rows.find((row) =>
+    row.some((cell) => /模型版本/.test(cell)),
+  );
+  const modelNames = modelColumns.map(
+    (column) => versionRow?.[column] || modelRow?.[column] || "",
+  );
+  if (!modelNames.length) return [];
+  const definitions = [
+    ["缓存命中输入", "cached_input", /缓存命中/],
+    ["缓存未命中输入", "input", /缓存未命中/],
+    ["输出", "output", /百万.*输出|tokens输出/i],
+  ] as const;
+  return definitions.flatMap(([label, priceType, matcher]) => {
+    const row = rows.find((candidate) =>
+      candidate.some((cell) => matcher.test(cell)),
+    );
+    if (!row) return [];
+    return modelNames.flatMap((modelName, modelOrder) => {
+      const value = numberFrom(row[modelColumns[modelOrder]]);
+      return validPrice(value)
+        ? [
+            apiOffer({
+              raw,
+              providerSlug: "deepseek-api",
+              parserVersion: "deepseek-api-v5",
+              modelName,
+              modelOrder,
+              priceLabel: label,
+              priceType,
+              value,
+            }),
+          ]
+        : [];
+    });
+  });
+}
+
+export function parseQwenApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const table of officialTables(raw.body)) {
+    const headerIndex = table.rows.findIndex(
+      (row) =>
+        row.some((cell) => /模型\s*ID/i.test(cell)) &&
+        row.some((cell) => /输入.*单价|输出.*单价/i.test(cell)),
+    );
+    if (headerIndex < 0) continue;
+    const headers = table.rows[headerIndex];
+    const modelIndex = headers.findIndex((cell) => /模型\s*ID/i.test(cell));
+    const columns = priceColumns(headers).filter(
+      (column) => column.type !== "other",
+    );
+    for (const row of table.rows.slice(headerIndex + 1)) {
+      const rawModelName = compactLabel(row[modelIndex] ?? "");
+      const modelName =
+        rawModelName.match(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*/)?.[0] ?? rawModelName;
+      if (!modelName || /模型\s*ID/i.test(modelName)) continue;
+      for (const column of columns) {
+        const cell = row[column.index] ?? "";
+        if (!/[元¥￥]/.test(cell)) continue;
+        const value = officialPriceFrom(cell);
+        if (!validPrice(value)) continue;
+        const unitInfo = normalizeTokenUnit(`${column.label} ${table.context}`);
+        const tier = row
+          .slice(modelIndex + 1, Math.min(...columns.map((item) => item.index)))
+          .filter(Boolean)
+          .join(" · ");
+        const sameLabelColumns = columns.filter(
+          (candidate) => candidate.label === column.label,
+        );
+        const duplicateLabelIndex = sameLabelColumns.findIndex(
+          (candidate) => candidate.index === column.index,
+        );
+        const priceLabel =
+          sameLabelColumns.length > 1
+            ? `${compactLabel(column.label)} ${duplicateLabelIndex + 1}`
+            : compactLabel(column.label);
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "qwen-api",
+            parserVersion: "qwen-api-v5",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel,
+            priceType: column.type,
+            value,
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: table.context || "模型调用",
+            tier: tier || undefined,
+            tierOrder: /华北|中国内地|北京/.test(table.context) ? 0 : 10,
+          }),
+        );
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseBaiduApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const table of officialTables(raw.body)) {
+    const headerIndex = table.rows.findIndex((row) =>
+      row.some((cell) => /模型名称|模型名/.test(cell)),
+    );
+    if (headerIndex < 0) continue;
+    const headers = table.rows[headerIndex];
+    const modelIndex = headers.findIndex((cell) =>
+      /模型名称|模型名/.test(cell),
+    );
+    const itemIndex = headers.findIndex((cell) => /子项|计费项/.test(cell));
+    const onlineIndex = headers.findIndex((cell) =>
+      /在线推理|单价|价格/.test(cell),
+    );
+    if (onlineIndex < 0) continue;
+    for (const row of table.rows.slice(headerIndex + 1)) {
+      const modelName = compactLabel(row[modelIndex] ?? "");
+      const priceLabel = compactLabel(row[itemIndex] ?? "价格");
+      const priceText = row[onlineIndex] ?? "";
+      const value = firstNumberFrom(priceText);
+      if (!modelName || !validPrice(value)) continue;
+      const priceType = priceTypeFrom(priceLabel);
+      const unitText = `${headers[onlineIndex]} ${headers[itemIndex] ?? ""} ${priceLabel}`;
+      const parsedUnit = normalizeTokenUnit(unitText);
+      const unitInfo =
+        priceType !== "other" && !/token/i.test(unitText)
+          ? { unit: "/百万 tokens", multiplier: 1_000 }
+          : parsedUnit;
+      offers.push(
+        apiOffer({
+          raw,
+          providerSlug: "ernie-api",
+          parserVersion: "baidu-api-v4",
+          modelName,
+          modelOrder: orderFor(modelName),
+          priceLabel,
+          priceType,
+          value,
+          unit: unitInfo.unit,
+          multiplier: unitInfo.multiplier,
+          category: table.context || "在线推理",
+          tier: row
+            .slice(modelIndex + 1, itemIndex >= 0 ? itemIndex : onlineIndex)
+            .filter(Boolean)
+            .join(" · "),
+        }),
+      );
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseSparkApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const tables = officialTables(raw.body);
+  const member = tables
+    .flatMap((table) => table.rows)
+    .find((row) => row[0] === "标准成员" && validPrice(numberFrom(row[1])));
+  const yuanPerPoint =
+    member &&
+    validPrice(numberFrom(member[1])) &&
+    validPrice(numberFrom(member[2]))
+      ? numberFrom(member[1])! / numberFrom(member[2])!
+      : null;
+  if (!validPrice(yuanPerPoint) || yuanPerPoint === 0) return [];
+  const table = tables.find((candidate) =>
+    candidate.rows[0]?.some((cell) => /积分.*百万.*Token/i.test(cell)),
+  );
+  if (!table) return [];
+  const headers = table.rows[0];
+  const columns = priceColumns(headers);
+  const orderFor = modelOrderer();
+  return dedupeOffers(
+    table.rows.slice(1).flatMap((row) => {
+      const modelName = compactLabel(row[0] ?? "");
+      if (!modelName) return [];
+      return columns.flatMap((column) => {
+        const points = numberFrom(row[column.index]);
+        if (!validPrice(points)) return [];
+        return [
+          apiOffer({
+            raw,
+            providerSlug: "spark-api",
+            parserVersion: "spark-api-v4",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel:
+              column.type === "cached_input"
+                ? "缓存命中输入"
+                : column.type === "input"
+                  ? "输入"
+                  : column.type === "output"
+                    ? "输出"
+                    : compactLabel(column.label),
+            priceType: column.type,
+            value: points * yuanPerPoint,
+            unit: "/百万 tokens",
+            category: "Token Plan 标准成员折算",
+            tier: row
+              .slice(1, Math.min(...columns.map((item) => item.index)))
+              .join(" · "),
+          }),
+        ];
+      });
+    }),
+  );
+}
+
+export function parseHunyuanApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const [tableOrder, table] of officialTables(raw.body).entries()) {
+    const headerIndex = table.rows.findIndex((row) =>
+      row.some((cell) => /模型名称|模型名|模型/.test(cell)),
+    );
+    if (headerIndex < 0) continue;
+    const headers = table.rows[headerIndex];
+    const modelIndex = headers.findIndex((cell) =>
+      /模型名称|模型名|模型/.test(cell),
+    );
+    const columns = priceColumns(headers);
+    if (!columns.length) continue;
+    for (const row of table.rows.slice(headerIndex + 1)) {
+      const modelName = compactLabel(row[modelIndex] ?? "");
+      if (!modelName) continue;
+      const alignedPriceCells =
+        row.length > headers.length
+          ? row.slice(-columns.length)
+          : columns.map((column) => row[column.index]);
+      const tierEnd =
+        row.length > headers.length
+          ? row.length - columns.length
+          : Math.min(...columns.map((item) => item.index));
+      for (const [columnOrder, column] of columns.entries()) {
+        const value = numberFrom(alignedPriceCells[columnOrder]);
+        if (!validPrice(value)) continue;
+        const parsedUnit = normalizeTokenUnit(
+          `${column.label} ${table.context}`,
+        );
+        const unitInfo =
+          column.type !== "other" && parsedUnit.unit === "按官方单位"
+            ? { unit: "/百万 tokens", multiplier: 1 }
+            : parsedUnit;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "hunyuan-api",
+            parserVersion: "hunyuan-api-v4",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: compactLabel(column.label),
+            priceType: column.type,
+            value,
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: table.context || `价目表 ${tableOrder + 1}`,
+            tier: row
+              .slice(modelIndex + 1, tierEnd)
+              .filter(Boolean)
+              .join(" · "),
+            tierOrder: tableOrder * 10,
+          }),
+        );
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const [tableOrder, table] of officialTables(raw.body).entries()) {
+    const headerIndex = table.rows.findIndex((row) =>
+      row.some((cell) => /模型|功能|服务/.test(cell)),
+    );
+    if (headerIndex < 0) continue;
+    const headers = table.rows[headerIndex];
+    const modelIndex = headers.findIndex((cell) => /模型|功能|服务/.test(cell));
+    const columns = priceColumns(headers);
+    if (!columns.length) continue;
+    for (const row of table.rows.slice(headerIndex + 1)) {
+      const rawModelName = compactLabel(row[modelIndex] ?? "");
+      const modelName =
+        rawModelName.match(/MiniMax-[A-Za-z0-9.()_-]+/i)?.[0] ?? rawModelName;
+      const modelQualifier = compactLabel(rawModelName.replace(modelName, ""));
+      if (!modelName) continue;
+      for (const column of columns) {
+        const cell = row[column.index] ?? "";
+        const value = numberFrom(cell);
+        if (!validPrice(value) || !/[0-9]/.test(cell)) continue;
+        const parsedUnit = normalizeTokenUnit(
+          `${column.label} ${cell} ${table.context}`,
+        );
+        const unitInfo =
+          column.type !== "other" &&
+          parsedUnit.unit === "按官方单位" &&
+          /minimax/i.test(modelName)
+            ? { unit: "/百万 tokens", multiplier: 1 }
+            : parsedUnit;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "minimax-api",
+            parserVersion: "minimax-api-v5",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: compactLabel(column.label),
+            priceType: column.type,
+            value,
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: table.context || `价目表 ${tableOrder + 1}`,
+            tier: [
+              modelQualifier,
+              ...row
+                .slice(
+                  modelIndex + 1,
+                  Math.min(...columns.map((item) => item.index)),
+                )
+                .filter(Boolean),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }),
+        );
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseKimiApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const matches = [
+    ...raw.body.matchAll(
+      /\["([^"]+)",\s*"([^"]*tokens[^"]*)",\s*"¥([\d.]+)",\s*"¥([\d.]+)",\s*"¥([\d.]+)"/gi,
+    ),
+  ];
+  return matches.flatMap((match, modelOrder) => {
+    const modelName = match[1];
+    return [
+      ["缓存命中输入", "cached_input", Number(match[3])],
+      ["缓存未命中输入", "input", Number(match[4])],
+      ["输出", "output", Number(match[5])],
+    ].map(([priceLabel, priceType, value]) =>
+      apiOffer({
+        raw,
+        providerSlug: "kimi-api",
+        parserVersion: "kimi-api-v4",
+        modelName,
+        modelOrder,
+        priceLabel: String(priceLabel),
+        priceType: priceType as "cached_input" | "input" | "output",
+        value: Number(value),
+      }),
+    );
+  });
+}
+
+export function parseGlmApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const matches = [
+    ...raw.body.matchAll(
+      /name:"([^"]+)"[^{}]{0,2500}?inPrice:\["([\d.]+)元"[^{}]{0,1000}?outPrice:\["([\d.]+)元"[^{}]{0,1000}?hit:\["([\d.]+)元"/g,
+    ),
+  ];
+  return dedupeOffers(
+    matches.flatMap((match, modelOrder) => [
+      apiOffer({
+        raw,
+        providerSlug: "glm-api",
+        parserVersion: "glm-api-v4",
+        modelName: match[1],
+        modelOrder,
+        priceLabel: "输入",
+        priceType: "input",
+        value: Number(match[2]),
+      }),
+      apiOffer({
+        raw,
+        providerSlug: "glm-api",
+        parserVersion: "glm-api-v4",
+        modelName: match[1],
+        modelOrder,
+        priceLabel: "缓存命中输入",
+        priceType: "cached_input",
+        value: Number(match[4]),
+      }),
+      apiOffer({
+        raw,
+        providerSlug: "glm-api",
+        parserVersion: "glm-api-v4",
+        modelName: match[1],
+        modelOrder,
+        priceLabel: "输出",
+        priceType: "output",
+        value: Number(match[3]),
+      }),
+    ]),
+  );
+}
+
+export function parseDoubaoApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const $ = load(raw.body);
+  const offers: NormalizedOffer[] = [];
+  $(".rank-item").each((modelOrder, element) => {
+    const modelName = compactLabel($(element).find("h4,h3").first().text());
+    if (!modelName) return;
+    $(element)
+      .find(".rank-item__price-row")
+      .each((_, row) => {
+        const label = compactLabel(
+          $(row).find(".rank-item__price-label").text(),
+        );
+        const value = numberFrom($(row).find(".rank-item__price-value").text());
+        if (!label || !validPrice(value)) return;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "doubao-api",
+            parserVersion: "doubao-api-v4",
+            modelName,
+            modelOrder,
+            priceLabel: label,
+            value,
+            unit: /输入|输出|缓存/.test(label) ? "/百万 tokens" : "按官方单位",
+            category: "火山方舟",
+          }),
+        );
+      });
+  });
+  return dedupeOffers(offers);
+}
+
+export function parseStepFunApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const offers: NormalizedOffer[] = [];
+  const orderFor = modelOrderer();
+  for (const table of officialTables(raw.body)) {
+    const headers = table.rows[0] ?? [];
+    for (const row of table.rows.slice(1)) {
+      const modelName = compactLabel(row[0] ?? "");
+      if (!modelName) continue;
+      row.slice(1).forEach((cell, offset) => {
+        if (!/[¥￥元]/.test(cell)) return;
+        const value = numberFrom(cell);
+        if (!validPrice(value)) return;
+        const label = compactLabel(headers[offset + 1] || "价格");
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "stepfun-api",
+            parserVersion: "stepfun-api-v4",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: label,
+            value,
+            unit: row[2] || label,
+            category: table.context || "Step Plan",
+          }),
+        );
+      });
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseMimoApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const offers: NormalizedOffer[] = [];
+  const orderFor = modelOrderer();
+  for (const table of officialTables(raw.body)) {
+    const headers = table.rows[0] ?? [];
+    const columns = priceColumns(headers);
+    if (!columns.length) continue;
+    for (const row of table.rows.slice(1)) {
+      const modelName = compactLabel(row[0] ?? "");
+      if (!modelName || /\$|美元/.test(row.join(" "))) continue;
+      for (const column of columns) {
+        const value = numberFrom(row[column.index]);
+        if (!validPrice(value)) continue;
+        const parsedUnit = normalizeTokenUnit(
+          `${column.label} ${table.context}`,
+        );
+        const unitInfo =
+          column.type !== "other" &&
+          parsedUnit.unit === "按官方单位" &&
+          /^mimo-/i.test(modelName)
+            ? { unit: "/百万 tokens", multiplier: 1 }
+            : parsedUnit;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "mimo-api",
+            parserVersion: "mimo-api-v4",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: compactLabel(column.label),
+            priceType: column.type,
+            value,
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: table.context || "按量付费",
+          }),
+        );
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseBaichuanApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const [tableOrder, table] of officialTables(raw.body).entries()) {
+    for (const [rowOrder, row] of table.rows.slice(1).entries()) {
+      const modelName = compactLabel(row[0] ?? "");
+      if (!modelName) continue;
+      const text = row.join(" ");
+      const pairs = [
+        ...text.matchAll(
+          /(输入|输出|缓存[^：:\s]*)[：:\s]*([\d.]+)\s*元\/(千|万|百万)?\s*tokens?/gi,
+        ),
+      ];
+      for (const pair of pairs) {
+        const unitInfo = normalizeTokenUnit(`/${pair[3] ?? ""}tokens`);
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "baichuan-api",
+            parserVersion: "baichuan-api-v4",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: pair[1],
+            priceType: priceTypeFrom(pair[1]),
+            value: Number(pair[2]),
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: table.context || `价目表 ${tableOrder + 1}`,
+            tier: row.slice(1, -1).filter(Boolean).join(" · "),
+          }),
+        );
+      }
+      if (!pairs.length) {
+        row.slice(1).forEach((cell, index) => {
+          if (!/[¥￥元]/.test(cell)) return;
+          const value = numberFrom(cell);
+          if (!validPrice(value)) return;
+          offers.push(
+            apiOffer({
+              raw,
+              providerSlug: "baichuan-api",
+              parserVersion: "baichuan-api-v4",
+              modelName,
+              modelOrder: orderFor(modelName),
+              priceLabel: `${table.rows[0]?.[index + 1] || "价格"} ${index + 1}`,
+              value,
+              unit: normalizeTokenUnit(cell).unit,
+              category: table.context || `价目表 ${tableOrder + 1}`,
+              tier: row.slice(1, -1).filter(Boolean).join(" · ") || undefined,
+              planSuffix: `price-${index + 1}-row-${rowOrder}`,
+            }),
+          );
+        });
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseLongCatApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const rows = officialTables(raw.body)[0]?.rows ?? [];
+  return rows.slice(1).flatMap((row) => {
+    const label = compactLabel(row[0] ?? "");
+    const value = numberFrom(row.at(-1));
+    if (!label || !validPrice(value)) return [];
+    return [
+      apiOffer({
+        raw,
+        providerSlug: "longcat-api",
+        parserVersion: "longcat-api-v5",
+        modelName: "LongCat-2.0",
+        modelOrder: 0,
+        priceLabel: label,
+        value,
+        category: "限时折扣",
+      }),
+    ];
+  });
+}
+
+export function parseSiliconFlowApi(
+  raw: RawCollectionResult,
+): NormalizedOffer[] {
+  const $ = load(raw.body);
+  const offers: NormalizedOffer[] = [];
+  $('[id^="pricing-row-"]').each((modelOrder, row) => {
+    const link = $(row).find("a[title]").first();
+    const modelName = compactLabel(link.text() || link.attr("title") || "");
+    if (!modelName) return;
+    const route = link.attr("title") || modelName;
+    const prices = $(row)
+      .find("span")
+      .map((_, span) => {
+        const text = $(span).text().replace(/\s+/g, "");
+        return /^¥[\d.]+$/.test(text) ? numberFrom(text) : null;
+      })
+      .get()
+      .filter(validPrice);
+    if (!prices.length) return;
+    const category =
+      ($(row).attr("id") ?? "").match(/^pricing-row-([a-z-]+)-/)?.[1] ??
+      "model";
+    const definitions =
+      prices.length >= 3
+        ? [
+            ["输入", "input", prices[0]],
+            ["输出", "output", prices[1]],
+            ["缓存命中输入", "cached_input", prices[2]],
+          ]
+        : prices.length === 2
+          ? [
+              ["输入", "input", prices[0]],
+              ["输出", "output", prices[1]],
+            ]
+          : [["价格", "other", prices[0]]];
+    for (const [priceLabel, priceType, value] of definitions) {
+      offers.push(
+        apiOffer({
+          raw,
+          providerSlug: "siliconflow-api",
+          parserVersion: "siliconflow-api-v5",
+          modelName,
+          modelOrder,
+          priceLabel: String(priceLabel),
+          priceType: priceType as "input" | "output" | "cached_input" | "other",
+          value: Number(value),
+          unit:
+            category === "text" || category === "embedding"
+              ? "/百万 tokens"
+              : "按官方单位",
+          category,
+          tier: route,
+        }),
+      );
+    }
+  });
+  return dedupeOffers(offers);
+}
+
+export function parseHuaweiMaaSApi(
+  raw: RawCollectionResult,
+): NormalizedOffer[] {
+  const orderFor = modelOrderer();
+  const rows = officialTables(raw.body)[0]?.rows ?? [];
+  const priceIndex = rows[0]?.findIndex((cell) => /单价|价格/.test(cell)) ?? -1;
+  return dedupeOffers(
+    rows.slice(1).flatMap((row) => {
+      const modelName = compactLabel(row[0] ?? "");
+      const priceIndexInRow =
+        [3, 1].find((index) => /输入|输出|缓存/.test(row[index] ?? "")) ?? 1;
+      const priceLabel = compactLabel(row[priceIndexInRow] ?? "价格");
+      const tier = [
+        ...new Set(
+          row
+            .slice(1, 4)
+            .filter(
+              (value) =>
+                value &&
+                value !== priceLabel &&
+                !/^(输入|输出|缓存)$/.test(value),
+            ),
+        ),
+      ].join(" · ");
+      const value = numberFrom(priceIndex >= 0 ? row[priceIndex] : row.at(-1));
+      if (!modelName || !validPrice(value)) return [];
+      const unitInfo = normalizeTokenUnit(
+        (priceIndex >= 0 ? rows[0]?.[priceIndex] : undefined) || "/千Token",
+      );
+      return [
+        apiOffer({
+          raw,
+          providerSlug: "huawei-maas-api",
+          parserVersion: "huawei-maas-api-v4",
+          modelName,
+          modelOrder: orderFor(modelName),
+          priceLabel,
+          value,
+          unit: unitInfo.unit,
+          multiplier: unitInfo.multiplier,
+          category: "华为云 MaaS",
+          tier: tier || undefined,
+        }),
+      ];
+    }),
+  );
+}
+
+export function parseTeleAiApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const body = raw.body.replace(/\\"/g, '"');
+  const matches = [
+    ...body.matchAll(
+      /"discountedPrice":"([\d.]+)","discountedUnit":"元\/([^"]+)"/g,
+    ),
+  ];
+  return dedupeOffers(
+    matches.map((match, modelOrder) => {
+      const start = Math.max(0, (match.index ?? 0) - 900);
+      const context = body.slice(start, match.index);
+      const names = [
+        ...context.matchAll(
+          /"(?:productName|modelName|title|name)":"([^"]+)"/g,
+        ),
+      ];
+      const modelName = names.at(-1)?.[1] || `TeleAI 价格项 ${modelOrder + 1}`;
+      return apiOffer({
+        raw,
+        providerSlug: "teleai-api",
+        parserVersion: "teleai-api-v4",
+        modelName,
+        modelOrder,
+        priceLabel: match[2],
+        value: Number(match[1]),
+        unit: `/${match[2]}`,
+        category: "TeleAI 官方套餐",
+      });
+    }),
+  );
+}
+
+export const apiPricingRules = {
+  "stepfun-api": parseStepFunApi,
+  "deepseek-api": parseDeepSeekApi,
+  "qwen-api": parseQwenApi,
+  "ernie-api": parseBaiduApi,
+  "spark-api": parseSparkApi,
+  "hunyuan-api": parseHunyuanApi,
+  "minimax-api": parseMiniMaxApi,
+  "kimi-api": parseKimiApi,
+  "glm-api": parseGlmApi,
+  "doubao-api": parseDoubaoApi,
+  "mimo-api": parseMimoApi,
+  "baichuan-api": parseBaichuanApi,
+  "longcat-api": parseLongCatApi,
+  "siliconflow-api": parseSiliconFlowApi,
+  "huawei-maas-api": parseHuaweiMaaSApi,
+  "teleai-api": parseTeleAiApi,
+} as const;
