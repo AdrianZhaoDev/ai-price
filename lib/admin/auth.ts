@@ -145,5 +145,10 @@ export function adminCookieOptions(maxAge: number) {
 
 export function isSameOriginRequest(request: Request): boolean {
   const origin = request.headers.get("origin");
-  return Boolean(origin && origin === new URL(request.url).origin);
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const protocol =
+    request.headers.get("x-forwarded-proto") ??
+    new URL(request.url).protocol.replace(":", "");
+  return Boolean(origin && host && origin === `${protocol}://${host}`);
 }
