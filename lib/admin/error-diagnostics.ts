@@ -30,8 +30,8 @@ export function errorResolutionGuide(input: DiagnosticInput): {
       return {
         diagnosis: "请求在采集超时前未完成。",
         actions: [
-          "核对每次 attempt 的 durationMs，判断是否稳定触及超时阈值。",
-          "检查官方站响应速度与 VPS 出口；必要时只对该来源提高 timeoutMs。",
+          "核对每次 attempt 的 route 与 durationMs，判断代理和直连是否都触及超时阈值。",
+          "若 direct 超时但 proxy 成功，检查 COLLECTOR_PROXY_URL 与 warp-svc；两者都超时才考虑提高该来源 timeoutMs。",
         ],
       };
     }
@@ -92,6 +92,15 @@ export function errorResolutionGuide(input: DiagnosticInput): {
     input.code === "EMPTY_RESULT" ||
     input.code === "MISSING_PRICE"
   ) {
+    if (/duplicateidentities/.test(text)) {
+      return {
+        diagnosis: "多个不同套餐被归一化成了同一个套餐标识。",
+        actions: [
+          "查看 duplicateIdentities 中的 rawPlanName、价格和现有 canonical slug。",
+          "为新套餐补充更具体且优先级更高的归一化规则，并加入回归测试。",
+        ],
+      };
+    }
     return {
       diagnosis: "页面内容与当前解析器预期不一致。",
       actions: [

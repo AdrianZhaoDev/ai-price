@@ -53,23 +53,23 @@ V3 改为：
 
 ### 色彩
 
-| Token | OKLCH | 用途 |
-| --- | --- | --- |
-| `--color-paper` | `oklch(13% 0.014 265)` | 深紫近黑主画布 |
-| `--color-paper-2` | `oklch(17% 0.016 265)` | 抬升表面 |
-| `--color-paper-3` | `oklch(21% 0.018 265)` | 活动行、sheet |
-| `--color-ink` | `oklch(96% 0.006 262)` | 标题与主要金额 |
-| `--color-ink-2` | `oklch(78% 0.010 262)` | 正文 |
-| `--color-muted` | `oklch(58% 0.012 264)` | 元信息 |
-| `--color-rule` | `oklch(31% 0.014 265)` | 规则线 |
-| `--color-rule-2` | `oklch(25% 0.014 265)` | 次级规则线 |
-| `--color-accent` | `oklch(76% 0.17 50)` | 熔融黄铜信号 |
-| `--color-accent-2` | `oklch(68% 0.16 18)` | 珊瑚色动词/警示 |
-| `--color-glow` | `oklch(80% 0.16 50 / 0.42)` | 装置内部光 |
-| `--color-verified` | `oklch(76% 0.12 145)` | 已核验，小面积 |
-| `--color-warning` | `oklch(72% 0.15 75)` | 可能过期、等待采集 |
-| `--color-negative` | `oklch(63% 0.17 28)` | 错误 |
-| `--color-focus` | `oklch(80% 0.19 50)` | 键盘焦点 |
+| Token              | OKLCH                       | 用途               |
+| ------------------ | --------------------------- | ------------------ |
+| `--color-paper`    | `oklch(13% 0.014 265)`      | 深紫近黑主画布     |
+| `--color-paper-2`  | `oklch(17% 0.016 265)`      | 抬升表面           |
+| `--color-paper-3`  | `oklch(21% 0.018 265)`      | 活动行、sheet      |
+| `--color-ink`      | `oklch(96% 0.006 262)`      | 标题与主要金额     |
+| `--color-ink-2`    | `oklch(78% 0.010 262)`      | 正文               |
+| `--color-muted`    | `oklch(58% 0.012 264)`      | 元信息             |
+| `--color-rule`     | `oklch(31% 0.014 265)`      | 规则线             |
+| `--color-rule-2`   | `oklch(25% 0.014 265)`      | 次级规则线         |
+| `--color-accent`   | `oklch(76% 0.17 50)`        | 熔融黄铜信号       |
+| `--color-accent-2` | `oklch(68% 0.16 18)`        | 珊瑚色动词/警示    |
+| `--color-glow`     | `oklch(80% 0.16 50 / 0.42)` | 装置内部光         |
+| `--color-verified` | `oklch(76% 0.12 145)`       | 已核验，小面积     |
+| `--color-warning`  | `oklch(72% 0.15 75)`        | 可能过期、等待采集 |
+| `--color-negative` | `oklch(63% 0.17 28)`        | 错误               |
+| `--color-focus`    | `oklch(80% 0.19 50)`        | 键盘焦点           |
 
 约束：
 

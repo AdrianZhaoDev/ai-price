@@ -123,7 +123,11 @@ export async function runCollectors(
         health = adapter.healthCheck(offers);
       }
       if (!health.ok) {
-        throw new CollectionError(health.code, health.message);
+        throw new CollectionError(
+          health.code,
+          health.message,
+          health.details ?? {},
+        );
       }
       if (
         source?.lastOfferCount &&

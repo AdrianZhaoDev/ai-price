@@ -90,6 +90,7 @@ const canonicalPlanMatchers: Record<string, Array<[RegExp, string]>> = {
   grok: [
     [/heavy/i, "supergrok-heavy-monthly"],
     [/lite/i, "supergrok-lite-monthly"],
+    [/plus/i, "supergrok-plus-monthly"],
     [/supergrok|super grok/i, "supergrok-monthly"],
   ],
 };
@@ -293,16 +294,30 @@ export function appStoreHealthCheck(offers: NormalizedOffer[]): SourceHealth {
       message: "At least one App Store offer has an invalid price.",
     };
   }
-  const identities = offers.map(
-    (offer) =>
-      `${offer.canonicalPlanSlug}:${offer.storefront}:${offer.billingPeriod}`,
-  );
-  if (new Set(identities).size !== identities.length) {
+  const offersByIdentity = new Map<string, NormalizedOffer[]>();
+  for (const offer of offers) {
+    const identity = `${offer.canonicalPlanSlug}:${offer.storefront}:${offer.billingPeriod}`;
+    const matches = offersByIdentity.get(identity) ?? [];
+    matches.push(offer);
+    offersByIdentity.set(identity, matches);
+  }
+  const duplicateIdentities = [...offersByIdentity.entries()]
+    .filter(([, matches]) => matches.length > 1)
+    .map(([identity, matches]) => ({
+      identity,
+      offers: matches.map((offer) => ({
+        rawPlanName: offer.rawPlanName,
+        displayPrice: offer.displayPrice,
+        amountMinor: offer.amountMinor,
+      })),
+    }));
+  if (duplicateIdentities.length > 0) {
     return {
       ok: false,
       code: "STRUCTURE_CHANGED",
       message:
         "Multiple App Store offers collapsed into the same plan identity.",
+      details: { duplicateIdentities },
     };
   }
   return {

@@ -156,6 +156,8 @@ interface PriceSourceAdapter {
 - `/admin/errors` 读取本地运行数据库中的采集错误，支持种类、渠道、状态筛选与
   分页；网络请求会保存脱敏后的重试、底层 cause、HTTP 响应摘要和堆栈。来源恢复
   时关闭未解决错误，同一故障事件只发送一次管理员邮件。
+- 生产采集可通过 `COLLECTOR_PROXY_URL` 使用本地 WARP 出站代理；代理不可用时
+  自动回退直连，并在诊断详情中记录实际请求路由。
 - 部署可从 Vercel + Neon 迁移到 Docker + 任意 PostgreSQL。
 
 ## 性能策略

@@ -19,6 +19,8 @@
 
 - 不得在 `/opt/ai-price/current` 中直接修改生产代码。
 - 必须使用文档中的 release 打包、上传、验证和原子切换流程。
+- 正常更新必须先由 GitHub Actions 完成质量检查并生成生产构建产物，再执行
+  `deploy/vps-update.ps1`；只有 GitHub 不可用时才使用文档中的手工回退流程。
 - VPS 必须使用原生 Next.js webpack 生产构建
   `npx next build --webpack`；不得用面向 Cloudflare/vinext 的
   `npm run build` 作为 VPS 生产构建。

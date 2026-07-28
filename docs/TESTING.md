@@ -7,7 +7,7 @@
 - 函数覆盖率不低于 70%。
 - 采集失败、告警和退订路径属于强制覆盖范围。
 
-当前本地基线：语句 76.17%、分支 70.84%、函数 82.20%、行 79.02%。
+当前本地基线：语句 77.97%、分支 70.46%、函数 85.33%、行 81.61%。
 数据库 SQL 路径由部署环境集成测试验证，不计入纯单元覆盖率分母。
 
 ## 测试分层
@@ -75,3 +75,8 @@ playwright smoke
 ```
 
 采集工作流与 CI 分离，CI 只使用 fixture。
+
+`main` 分支的成功 CI 还会生成 `production-release` artifact，其中包含同一提交
+的 Linux Next.js webpack 构建、源码、锁文件、安装器、提交号和 SHA-256 清单。
+生产更新只接受整个 CI run（包括 E2E）成功的 artifact；具体流程见
+[`VPS_OPERATIONS.md`](VPS_OPERATIONS.md)。

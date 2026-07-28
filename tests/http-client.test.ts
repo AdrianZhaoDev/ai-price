@@ -3,7 +3,10 @@ import { fetchPage, hashContent } from "@/lib/collectors/http-client";
 import { CollectionError } from "@/lib/collectors/types";
 
 describe("collector HTTP client", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   it("returns a hashed successful response", async () => {
     vi.stubGlobal(
@@ -92,7 +95,7 @@ describe("collector HTTP client", () => {
     ).rejects.toMatchObject(
       expect.objectContaining<Partial<CollectionError>>({
         code: "FETCH_FAILED",
-        details: {
+        details: expect.objectContaining({
           url: "https://example.com/?token=[redacted]",
           attempts: [
             expect.objectContaining({
@@ -108,8 +111,27 @@ describe("collector HTTP client", () => {
               hostname: "example.com",
             }),
           }),
-        },
+        }),
       }),
     );
+  });
+
+  it("uses the configured collector proxy and falls back to direct", async () => {
+    vi.stubEnv("COLLECTOR_PROXY_URL", "http://127.0.0.1:40000");
+    const mockedFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("proxy unavailable"))
+      .mockResolvedValueOnce(new Response("direct response"));
+    vi.stubGlobal("fetch", mockedFetch);
+
+    await expect(
+      fetchPage("https://example.com", {
+        attempts: 2,
+        retryDelayMs: 0,
+      }),
+    ).resolves.toMatchObject({ body: "direct response" });
+
+    expect(mockedFetch.mock.calls[0][1]).toHaveProperty("dispatcher");
+    expect(mockedFetch.mock.calls[1][1]).not.toHaveProperty("dispatcher");
   });
 });

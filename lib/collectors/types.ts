@@ -56,6 +56,7 @@ export type SourceHealth = {
     | "ACCESS_BLOCKED"
     | "STRUCTURE_CHANGED";
   message: string;
+  details?: Record<string, unknown>;
 };
 
 export interface PriceSourceAdapter {

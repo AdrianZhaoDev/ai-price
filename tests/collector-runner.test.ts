@@ -240,6 +240,36 @@ describe("collector runner", () => {
     );
   });
 
+  it("persists actionable health-check details", async () => {
+    state.databaseConfigured = true;
+    const summary = await runCollectors([
+      adapter("duplicate-plan", {
+        healthCheck: () => ({
+          ok: false,
+          code: "STRUCTURE_CHANGED",
+          message: "duplicate identity",
+          details: {
+            duplicateIdentities: [
+              {
+                identity: "supergrok-monthly:PH:month",
+                offers: ["SuperGrok", "SuperGrok Plus"],
+              },
+            ],
+          },
+        }),
+      }),
+    ]);
+    expect(summary.failureCount).toBe(1);
+    expect(state.recordCollectionFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "STRUCTURE_CHANGED",
+        details: expect.objectContaining({
+          duplicateIdentities: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
   it("does not repeat an alert for an already-alerted open incident", async () => {
     state.databaseConfigured = true;
     state.recordCollectionFailure.mockResolvedValueOnce({

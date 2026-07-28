@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  apiPricingRules,
   parseBaiduApi,
+  parseBaichuanApi,
   parseDeepSeekApi,
+  parseDoubaoApi,
+  parseGlmApi,
+  parseHuaweiMaaSApi,
   parseHunyuanApi,
   parseKimiApi,
   parseLongCatApi,
+  parseMimoApi,
   parseMiniMaxApi,
   parseQwenApi,
+  parseSiliconFlowApi,
+  parseSparkApi,
+  parseStepFunApi,
+  parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
 import { hashContent } from "@/lib/collectors/http-client";
 import type { RawCollectionResult } from "@/lib/collectors/types";
@@ -23,6 +33,14 @@ function raw(body: string): RawCollectionResult {
 }
 
 describe("maintainable API pricing rules", () => {
+  it("rejects malformed or empty pages for every pricing rule", () => {
+    for (const parse of Object.values(apiPricingRules)) {
+      expect(parse(raw("<html><body>no pricing data</body></html>"))).toEqual(
+        [],
+      );
+    }
+  });
+
   it("adds model order and the three ranking price types", () => {
     const offers = parseDeepSeekApi(
       raw(`<table>
@@ -51,6 +69,23 @@ describe("maintainable API pricing rules", () => {
     expect(offers).toHaveLength(4);
     expect(offers.map((offer) => offer.modelName)).toContain("qwen3.7-plus");
     expect(offers.every((offer) => offer.unit === "/百万 tokens")).toBe(true);
+  });
+
+  it("handles duplicate Qwen columns, discounts and invalid rows", () => {
+    const offers = parseQwenApi(
+      raw(`<table>
+        <tr><th>模型 ID</th><th>输入单价</th><th>输入单价</th></tr>
+        <tr><td>qwen-discount</td><td>原价 10 元，当前 5 折</td><td>2元</td></tr>
+        <tr><td>模型 ID</td><td>1元</td><td>2元</td></tr>
+        <tr><td>qwen-no-price</td><td>免费</td><td>不可用</td></tr>
+      </table>`),
+    );
+    expect(offers).toHaveLength(2);
+    expect(offers.map((offer) => offer.displayPrice)).toEqual(["¥5", "¥2"]);
+    expect(offers.map((offer) => offer.rawPlanName)).toEqual([
+      expect.stringContaining("输入单价 1"),
+      expect.stringContaining("输入单价 2"),
+    ]);
   });
 
   it("expands rowspans and normalizes per-thousand token prices", () => {
@@ -85,6 +120,27 @@ describe("maintainable API pricing rules", () => {
     expect(minimax).toHaveLength(8);
   });
 
+  it("handles aligned Hunyuan prices and qualified MiniMax names", () => {
+    const hunyuan = parseHunyuanApi(
+      raw(`<table>
+        <tr><th>模型</th><th>输入</th><th>输出</th></tr>
+        <tr><td>Hy-Aligned</td><td>标准档</td><td>1</td><td>4</td></tr>
+        <tr><td></td><td>1</td><td>4</td></tr>
+      </table>`),
+    );
+    const minimax = parseMiniMaxApi(
+      raw(`<table>
+        <tr><th>模型</th><th>输入</th></tr>
+        <tr><td>MiniMax-M4 高速档</td><td>2</td></tr>
+        <tr><td></td><td>不可用</td></tr>
+      </table>`),
+    );
+    expect(hunyuan).toHaveLength(2);
+    expect(hunyuan[0].priceTier).toContain("标准档");
+    expect(minimax).toHaveLength(1);
+    expect(minimax[0].priceTier).toContain("高速档");
+  });
+
   it("reads every Kimi model row in the official data block", () => {
     const offers = parseKimiApi(
       raw(`rows={[
@@ -108,5 +164,134 @@ describe("maintainable API pricing rules", () => {
       "cached_input",
       "output",
     ]);
+  });
+
+  it("converts Spark points to prices", () => {
+    const offers = parseSparkApi(
+      raw(`<table>
+        <tr><th>标准成员</th><th>100元</th><th>1000积分</th></tr>
+      </table>
+      <table>
+        <tr><th>模型</th><th>输入积分/百万Token</th><th>输出积分/百万Token</th></tr>
+        <tr><td>Spark-X</td><td>10</td><td>20</td></tr>
+      </table>`),
+    );
+    expect(offers).toHaveLength(2);
+    expect(offers.map((offer) => offer.amountMinor)).toEqual([100, 200]);
+  });
+
+  it("parses GLM and Doubao embedded price blocks", () => {
+    const glm = parseGlmApi(
+      raw('name:"glm-5" inPrice:["1元"] outPrice:["4元"] hit:["0.2元"]'),
+    );
+    const doubao = parseDoubaoApi(
+      raw(`<section class="rank-item"><h4>Doubao-2</h4>
+        <div class="rank-item__price-row">
+          <span class="rank-item__price-label">输入</span>
+          <span class="rank-item__price-value">1.2</span>
+        </div>
+        <div class="rank-item__price-row">
+          <span class="rank-item__price-label">输出</span>
+          <span class="rank-item__price-value">4.8</span>
+        </div>
+      </section>`),
+    );
+    expect(glm.map((offer) => offer.priceType)).toEqual([
+      "input",
+      "cached_input",
+      "output",
+    ]);
+    expect(doubao).toHaveLength(2);
+  });
+
+  it("parses StepFun and MiMo tables", () => {
+    const stepfun = parseStepFunApi(
+      raw(`<table>
+        <tr><th>模型</th><th>输入</th><th>输出</th></tr>
+        <tr><td>step-4</td><td>¥1/百万 tokens</td><td>¥4/百万 tokens</td></tr>
+      </table>`),
+    );
+    const mimo = parseMimoApi(
+      raw(`<table>
+        <tr><th>模型</th><th>输入单价</th><th>输出单价</th></tr>
+        <tr><td>mimo-v3</td><td>1</td><td>5</td></tr>
+        <tr><td>mimo-usd</td><td>$1</td><td>$5</td></tr>
+      </table>`),
+    );
+    expect(stepfun).toHaveLength(2);
+    expect(mimo).toHaveLength(2);
+    expect(mimo.map((offer) => offer.priceType)).toEqual(["input", "output"]);
+  });
+
+  it("parses Baichuan explicit units and fallback price columns", () => {
+    const offers = parseBaichuanApi(
+      raw(`<table>
+        <tr><th>模型</th><th>价格</th></tr>
+        <tr><td>Baichuan-X</td><td>输入 0.01 元/千 tokens；输出 0.02 元/千 tokens</td></tr>
+        <tr><td>Baichuan-Y</td><td>¥3/百万 tokens</td></tr>
+      </table>`),
+    );
+    expect(offers).toHaveLength(3);
+    expect(offers.map((offer) => offer.modelName)).toContain("Baichuan-Y");
+  });
+
+  it("parses SiliconFlow rows for text and media prices", () => {
+    const offers = parseSiliconFlowApi(
+      raw(`<div id="pricing-row-text-1">
+        <a title="Qwen/Qwen-X">Qwen-X</a>
+        <span>¥1</span><span>¥4</span><span>¥0.2</span>
+      </div>
+      <div id="pricing-row-image-2">
+        <a title="Image-X">Image-X</a><span>¥0.1</span>
+      </div>`),
+    );
+    expect(offers).toHaveLength(4);
+    expect(offers.at(-1)).toMatchObject({
+      modelName: "Image-X",
+      unit: "按官方单位",
+    });
+  });
+
+  it("handles two-column SiliconFlow and headerless Huawei prices", () => {
+    const siliconflow = parseSiliconFlowApi(
+      raw(`<div id="pricing-row-embedding-1">
+        <a title="Embedding-X"></a><span>¥0.2</span><span>¥0.4</span>
+      </div>
+      <div id="pricing-row-text-2"><a title=""></a><span>not-a-price</span></div>`),
+    );
+    const huawei = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th>模型</th><th>计费项</th></tr>
+        <tr><td>Pangu-Y</td><td>输出</td><td>0.02</td></tr>
+      </table>`),
+    );
+    expect(siliconflow).toHaveLength(2);
+    expect(huawei).toHaveLength(1);
+    expect(huawei[0].unit).toBe("/百万 tokens");
+  });
+
+  it("parses Huawei MaaS and TeleAI prices", () => {
+    const huawei = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th>模型</th><th>计费项</th><th>规格</th><th>单价/千Token</th></tr>
+        <tr><td>Pangu-X</td><td>输入</td><td>标准</td><td>0.01</td></tr>
+      </table>`),
+    );
+    const teleai = parseTeleAiApi(
+      raw(
+        '{"productName":"TeleChat-X","discountedPrice":"2.5","discountedUnit":"元/百万tokens"}',
+      ),
+    );
+    expect(huawei).toHaveLength(1);
+    expect(huawei[0]).toMatchObject({
+      rawPlanName: expect.stringContaining("输入"),
+      unit: "/百万 tokens",
+    });
+    expect(teleai).toHaveLength(1);
+    expect(teleai[0].modelName).toBe("TeleChat-X");
+    const unnamedTeleai = parseTeleAiApi(
+      raw('{"discountedPrice":"1","discountedUnit":"元/千tokens"}'),
+    );
+    expect(unnamedTeleai[0].modelName).toBe("TeleAI 价格项 1");
   });
 });

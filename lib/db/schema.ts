@@ -255,12 +255,13 @@ export const priceObservations = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("price_observation_identity_unique").on(
+    uniqueIndex("price_observation_run_identity_unique").on(
       table.planId,
       table.sourceId,
       table.storefront,
       table.currency,
       table.rawHash,
+      table.collectionRunId,
     ),
     index("price_observations_latest_idx").on(
       table.planId,

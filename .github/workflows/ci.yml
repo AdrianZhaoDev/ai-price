@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -19,10 +23,36 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:coverage
-      - run: npm run build
+      - run: npx next build --webpack
+      - name: Package verified production release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          printf '%s\n' "${GITHUB_SHA}" > RELEASE_COMMIT
+          git archive --format=tar --output=ai-price.tar HEAD
+          tar --exclude='.next/cache' --append --file=ai-price.tar \
+            .next RELEASE_COMMIT
+          gzip -9 ai-price.tar
+          mkdir production-release
+          mv ai-price.tar.gz production-release/
+          cp RELEASE_COMMIT production-release/
+          cp package-lock.json deploy/vps-install.sh production-release/
+          (
+            cd production-release
+            sha256sum ai-price.tar.gz package-lock.json vps-install.sh \
+              RELEASE_COMMIT > manifest.sha256
+          )
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: production-release
+          path: production-release/
+          retention-days: 14
+          if-no-files-found: error
 
   e2e:
     runs-on: ubuntu-latest
@@ -36,3 +66,5 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_WEB_SERVER_COMMAND: npm run dev:local -- -H 127.0.0.1

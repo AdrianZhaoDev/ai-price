@@ -132,6 +132,15 @@ describe("App Store adapter", () => {
     expect(appStoreHealthCheck(offers).ok).toBe(true);
   });
 
+  it("keeps SuperGrok Plus distinct from SuperGrok", () => {
+    expect(canonicalAppStorePlan("grok", "SuperGrok")).toBe(
+      "supergrok-monthly",
+    );
+    expect(canonicalAppStorePlan("grok", "SuperGrok Plus")).toBe(
+      "supergrok-plus-monthly",
+    );
+  });
+
   it("reports empty and invalid collections", () => {
     expect(appStoreHealthCheck([]).code).toBe("EMPTY_RESULT");
     expect(
@@ -158,8 +167,18 @@ describe("App Store adapter", () => {
       sourceUrl: "https://example.com",
       observedAt: new Date().toISOString(),
     })[0];
-    expect(appStoreHealthCheck([validOffer, validOffer]).code).toBe(
-      "STRUCTURE_CHANGED",
-    );
+    expect(appStoreHealthCheck([validOffer, validOffer])).toMatchObject({
+      code: "STRUCTURE_CHANGED",
+      details: {
+        duplicateIdentities: [
+          {
+            offers: [
+              { rawPlanName: "ChatGPT Plus", displayPrice: "$19.99" },
+              { rawPlanName: "ChatGPT Plus", displayPrice: "$19.99" },
+            ],
+          },
+        ],
+      },
+    });
   });
 });

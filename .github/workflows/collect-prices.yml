@@ -1,9 +1,8 @@
 name: Collect official prices
 
 on:
-  schedule:
-    # Every four hours; GitHub Actions cron uses UTC.
-    - cron: "0 */4 * * *"
+  # Production collection remains on the VPS so data is written locally first
+  # and synchronized to Neon only after the run. This workflow is manual only.
   workflow_dispatch:
 
 permissions:

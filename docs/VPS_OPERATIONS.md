@@ -22,6 +22,7 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 | Nginx          | 公网 80 端口                          |
 | PostgreSQL     | `127.0.0.1:5432`，数据库 `ai_price`   |
 | 当前数据库模式 | 本地读取、本地写入、Neon 异步同步     |
+| 采集出站代理   | WARP Proxy `127.0.0.1:40000`          |
 | 特殊约束       | v2ray 正在占用公网 443                |
 
 ## 2. 强制规则
@@ -41,179 +42,95 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 
 ## 3. 标准更新流程
 
-### 3.1 本地确认代码
+正常发布使用 GitHub Actions 验证过的 Linux 构建产物。VPS 不再重复安装相同依赖，
+也不重复构建同一提交。`deploy/vps-update.ps1` 会核对提交、CI 结论和 SHA-256，
+自动备份数据库、上传、原子切换并完成基础验收。
 
-在 PowerShell 中：
+### 3.1 提交并推送
 
 ```powershell
 Set-Location 'C:\Users\zhangjunjun\Documents\ai-price'
 git branch --show-current
 git status --short
-git log -1 --oneline
-```
-
-如果需要同步远端：
-
-```powershell
-git fetch --all --prune
-git pull --ff-only
-```
-
-有未知本地修改时停止，不得使用 `reset --hard` 或强制 checkout。
-
-发布内容必须先提交，因为 `git archive HEAD` 不包含未提交文件：
-
-```powershell
 git diff --check
-git diff
-git add <本次文件>
-git commit -m "type: describe the change"
-git status --short
-```
-
-发布前 `git status --short` 应为空；否则必须明确哪些文件不发布。
-
-### 3.2 本地验证
-
-```powershell
-npm ci
 npm run typecheck
 npm test
-npx next build --webpack
+git add <本次文件>
+git commit -m "type: describe the change"
+git push origin main
 ```
 
-如果修改采集器或数据源：
+必须在 `main` 分支且工作区干净。有未知修改时停止，不得强制覆盖。
 
-```powershell
-npm run test:stability
-```
+GitHub `CI` 工作流会执行：
 
-`npm ci` 报锁文件不同步时：
-
-```powershell
-npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+```text
 npm ci
-git diff -- package-lock.json
+format check
+lint
+typecheck
+coverage tests
+Next.js webpack production build
+Playwright E2E
+production artifact + SHA-256 manifest
 ```
 
-审查并提交 `package-lock.json` 后再发布。不得在 VPS 改用宽松的
-`npm install` 绕过锁文件。
+第三方实时采集不进入 CI，避免外站波动造成随机失败。
 
-### 3.3 连接并确认 VPS
+### 3.2 发布 GitHub 验证产物
+
+```powershell
+.\deploy\vps-update.ps1
+```
+
+脚本只接受当前本地 `HEAD` 对应且结论为 `success` 的 CI run。如果 CI 尚在执行，
+脚本会等待；失败则停止，不会改动生产。也可明确指定 run：
+
+```powershell
+.\deploy\vps-update.ps1 -RunId 123456789
+```
+
+脚本成功时应输出：
+
+```text
+DEPLOYED_COMMIT=<40 位提交>
+GITHUB_RUN_ID=<run id>
+DEPLOY_SECONDS=<秒数>
+```
+
+安装脚本还会输出：
+
+- `DEPENDENCIES_REUSED=1`：复用按 lockfile 哈希保存的依赖；
+- `PREBUILT_BUILD=1`：使用 CI 已验证的 Linux 构建；
+- `RELEASE_DIR=...`：本次不可变 release；
+- `INITIAL_COLLECTION_SKIPPED=1`：已有生产数据，由 timer 继续采集。
+
+### 3.3 发布后完整验收
+
+快速脚本已验证服务和 HTTP；执行者仍须检查数据库、timer 和日志：
 
 ```powershell
 ssh american-vps
 ```
 
-在 VPS 执行：
-
-```bash
-whoami
-hostname
-curl -4 https://api.ipify.org
-echo
-readlink -f /opt/ai-price/current
-node --version
-npm --version
-```
-
-预期公网 IP 为 `107.173.87.110`，Node.js 不低于 20.9。目标不符时停止。
-
-### 3.4 数据库变更时备份
-
-仅在本次包含 schema 或 migration 变化时执行：
-
-```bash
-install -d -o postgres -g postgres -m 0700 /var/backups/ai-price
-BACKUP_FILE="/var/backups/ai-price/ai_price_$(date -u +%Y%m%d%H%M%S).dump"
-sudo -u postgres pg_dump --format=custom --file="$BACKUP_FILE" ai_price
-ls -lh "$BACKUP_FILE"
-```
-
-记录备份完整路径。备份包含生产数据，不得提交或公开。
-
-退出 VPS：
-
-```bash
-exit
-```
-
-### 3.5 本地打包
-
-```powershell
-Set-Location 'C:\Users\zhangjunjun\Documents\ai-price'
-$releaseStamp = Get-Date -Format 'yyyyMMddHHmmss'
-$releaseArchive = Join-Path $env:TEMP "ai-price-$releaseStamp.tar.gz"
-git archive --format=tar.gz -o $releaseArchive HEAD
-Get-Item $releaseArchive
-git log -1 --oneline
-git status --short
-```
-
-### 3.6 上传
-
-```powershell
-scp $releaseArchive american-vps:/tmp/ai-price.tar.gz
-scp package-lock.json american-vps:/tmp/ai-price-package-lock.json
-scp deploy/vps-install.sh american-vps:/tmp/ai-price-vps-install.sh
-```
-
-确认上传完整：
-
-```powershell
-ssh american-vps "stat -c '%n %s bytes' /tmp/ai-price.tar.gz /tmp/ai-price-package-lock.json /tmp/ai-price-vps-install.sh"
-```
-
-### 3.7 发布
-
-```powershell
-ssh american-vps
-```
-
-记录旧版本：
-
 ```bash
 readlink -f /opt/ai-price/current
-```
-
-执行：
-
-```bash
-chmod 700 /tmp/ai-price-vps-install.sh
-/tmp/ai-price-vps-install.sh \
-  107.173.87.110 \
-  /tmp/ai-price.tar.gz \
-  /tmp/ai-price-package-lock.json
-```
-
-脚本应输出新的 `RELEASE_DIR` 和 `DEPLOYED_URL`。
-
-- `INITIAL_COLLECTION_SKIPPED=1`：已有历史数据，交给 timer 后续采集。
-- `INITIAL_COLLECTION_FAILED=1`：Web 可能已上线，但采集失败；必须继续检查。
-
-### 3.8 发布后验证
-
-```bash
-readlink -f /opt/ai-price/current
-
-systemctl is-active ai-price.service
-systemctl is-active nginx
-systemctl is-active postgresql
-systemctl is-active ai-price-collect.timer
-
+systemctl is-active ai-price.service nginx postgresql ai-price-collect.timer
 curl -fsS -o /dev/null -w "app=%{http_code}\n" http://127.0.0.1:3100/
-curl -fsS -o /dev/null -w "nginx=%{http_code}\n" http://127.0.0.1/
 curl -fsS -o /dev/null -w "public=%{http_code}\n" http://107.173.87.110/
-curl -fsS -o /dev/null -w "admin-login=%{http_code}\n" \
-  http://127.0.0.1:3100/admin/login
-curl -sS -o /dev/null -w "admin-errors-unauth=%{http_code}\n" \
+curl -sS -o /dev/null -w "admin-errors=%{http_code}\n" \
   http://127.0.0.1:3100/admin/errors
-
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'observations=' || count(*) FROM price_observations"
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'runs=' || count(*) FROM collection_runs"
+systemctl list-timers ai-price-collect.timer --no-pager
+journalctl -u ai-price.service --since "-10 minutes" --no-pager
+```
 
+启用 Neon 同步时还要执行：
+
+```bash
 sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
   set -a
   source /etc/ai-price.env
@@ -221,46 +138,47 @@ sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
   cd /opt/ai-price/current
   npm run sync:data
 '
-
-systemctl list-timers ai-price-collect.timer --no-pager
-journalctl -u ai-price.service --since "-10 minutes" --no-pager
 ```
 
-验收条件：
+验收条件：四个服务均为 `active`，公网为 `200`，错误页未登录时重定向，数据库
+记录大于 0，timer 有下次运行时间，Web 日志无持续重启或连接错误。
 
-- 四个服务检查均为 `active`；
-- 三个 HTTP 检查均为 `200`；
-- 管理员登录页返回 `200`，未认证访问 `/admin` 会跳转到 `/admin/login`；
-- 未认证访问 `/admin/errors` 返回重定向，登录后可查看分页完整错误日志；
-- observation 数量大于 0；
-- 启用同步时 `npm run sync:data` 返回目标名称和各表同步数量；
-- timer 有下一次执行时间；
-- Web 没有持续重启、数据库连接或模块加载错误。
+### 3.4 GitHub 不可用时的手工回退
 
-退出 VPS，从本机再验证：
+只有 GitHub Actions 或 artifact 服务不可用时才使用。手工流程必须在本机完成
+全套检查，并让 VPS 自行构建：
 
 ```powershell
-curl.exe -I --max-time 20 http://107.173.87.110/
-curl.exe -sS -o NUL -w "methodology=%{http_code}`n" http://107.173.87.110/methodology
-curl.exe -sS -o NUL -w "privacy=%{http_code}`n" http://107.173.87.110/privacy
+npm ci
+npm run format:check
+npm run lint
+npm run typecheck
+npm run test:coverage
+npx next build --webpack
+
+$releaseArchive = Join-Path $env:TEMP "ai-price-manual.tar.gz"
+git archive --format=tar.gz -o $releaseArchive HEAD
+scp $releaseArchive american-vps:/tmp/ai-price.tar.gz
+scp package-lock.json american-vps:/tmp/ai-price-package-lock.json
+scp deploy/vps-install.sh american-vps:/tmp/ai-price-vps-install.sh
+ssh american-vps
 ```
 
-### 3.9 清理临时文件
-
-VPS：
+进入 VPS 后先按第 3.3 节确认目标，再备份数据库：
 
 ```bash
-rm -f -- \
+install -d -o postgres -g postgres -m 0700 /var/backups/ai-price
+BACKUP_FILE="/var/backups/ai-price/ai_price_$(date -u +%Y%m%d%H%M%S).dump"
+sudo -u postgres pg_dump --format=custom --file="$BACKUP_FILE" ai_price
+chmod 700 /tmp/ai-price-vps-install.sh
+/tmp/ai-price-vps-install.sh \
+  107.173.87.110 \
   /tmp/ai-price.tar.gz \
-  /tmp/ai-price-package-lock.json \
-  /tmp/ai-price-vps-install.sh
+  /tmp/ai-price-package-lock.json
 ```
 
-本机：
-
-```powershell
-Remove-Item -LiteralPath $releaseArchive
-```
+手工 archive 不含 `.next/BUILD_ID`，所以安装器会在 VPS 运行强制的
+`next build --webpack`。完成后按第 3.3 节验收并删除 `/tmp/ai-price-*`。
 
 ## 4. 采集任务
 
@@ -313,6 +231,7 @@ DATABASE_WRITE_TARGET=local
 DATA_SYNC_ENABLED=true
 DATA_SYNC_CHANNEL=neon
 DATA_SYNC_TARGET=neondb
+COLLECTOR_PROXY_URL=http://127.0.0.1:40000
 ```
 
 `DATA_SYNC_TARGET_URL` 和 `REMOTE_DATABASE_URL` 属于密钥，不得输出。
@@ -330,6 +249,16 @@ curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
 ```
 
 SMTP 的具体值和测试步骤只按 [`SMTP_SETUP.md`](SMTP_SETUP.md) 执行。
+
+`COLLECTOR_PROXY_URL` 只影响采集 HTTP 请求。采集器优先使用代理；代理失败时会
+自动改为直连并把 `proxy`/`direct` 路由写入错误详情。修改前先验证：
+
+```bash
+systemctl is-active warp-svc
+warp-cli --accept-tos status
+curl --proxy http://127.0.0.1:40000 --max-time 20 \
+  -o /dev/null -w "%{http_code}\n" https://help.aliyun.com/
+```
 
 ## 6. 代码回滚
 
