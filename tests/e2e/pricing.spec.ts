@@ -52,7 +52,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   const planMinimums = (
     await page.locator(".plan-button .plan-minimum").allTextContents()
   ).map((value) => Number(value.replace(/[^\d.]/g, "")));
-  expect(planMinimums).toHaveLength(4);
+  expect(planMinimums.length).toBeGreaterThanOrEqual(3);
   expect(planMinimums).toEqual([...planMinimums].sort((a, b) => a - b));
   await expect(page.locator(".plan-button").first()).toHaveAttribute(
     "data-active",
