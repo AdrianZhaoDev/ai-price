@@ -7,7 +7,6 @@ type PriceFingerprintInput = {
   billingPeriod: string | null;
   unit: string | null;
   taxIncluded: boolean | null;
-  status: string;
 };
 
 export type StoredPriceCandidate = {
@@ -37,7 +36,6 @@ export function priceFingerprint(input: PriceFingerprintInput): string {
       billingPeriod: input.billingPeriod,
       unit: input.unit,
       taxIncluded: input.taxIncluded,
-      status: input.status,
     }),
   );
 }

@@ -134,4 +134,12 @@ describe("offer stability", () => {
       }),
     ).toBe("stage");
   });
+
+  it("does not treat a record-status correction as a price change", () => {
+    const unpublishedOffer: NormalizedOffer = {
+      ...offer,
+      status: "unpublished",
+    };
+    expect(priceFingerprint(offer)).toBe(priceFingerprint(unpublishedOffer));
+  });
 });

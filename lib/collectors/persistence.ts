@@ -320,7 +320,6 @@ export async function recordSuccessfulCollection(input: {
         billingPeriod: previous.billingPeriod,
         unit: previous.unit,
         taxIncluded: previous.taxIncluded,
-        status: previous.status,
       });
       const candidate: StoredPriceCandidate | undefined =
         candidateRow?.lastCollectionRunId
