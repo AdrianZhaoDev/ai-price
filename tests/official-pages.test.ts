@@ -202,10 +202,31 @@ describe("official table adapters", () => {
         <tr><td>单价</td><td>免费</td><td>59 元/月</td><td>169 元/月</td></tr>
       </table>`),
     );
-    const trae = parseTraePricing(
-      raw(`<main>免费 ¥0 速通 Pro 限时 ¥59/月 速通 Pro+ ¥239/月
-        速通 Ultra ¥699/月 优速通 Express 限时 ¥1399/月</main>`),
-    );
+    const traePayload = [
+      { id: "free", title: "免费", price: "¥0" },
+      { id: "pro", title: "速通 Pro", price: "¥59", priceSuffix: "/月" },
+      {
+        id: "pro-plus",
+        title: "速通 Pro+",
+        price: "¥239",
+        priceSuffix: "/月",
+      },
+      {
+        id: "ultra",
+        title: "速通 Ultra",
+        price: "¥699",
+        priceSuffix: "/月",
+      },
+      {
+        id: "express",
+        title: "优速通",
+        titleSuffix: "Express",
+        price: "¥1999",
+        priceSuffix: "/月",
+      },
+      { id: "future-plan", title: "未来套餐", price: "¥9999" },
+    ];
+    const trae = parseTraePricing(raw(JSON.stringify(traePayload)));
 
     expect(stepfun.map((offer) => offer.amountMinor)).toEqual([
       990, 3900, 9900, 19900, 49900,
@@ -216,7 +237,7 @@ describe("official table adapters", () => {
     ]);
     expect(qoder.map((offer) => offer.amountMinor)).toEqual([0, 5900, 16900]);
     expect(trae.map((offer) => offer.amountMinor)).toEqual([
-      0, 5900, 23900, 69900, 139900,
+      0, 5900, 23900, 69900, 199900,
     ]);
     expect(trae.map((offer) => offer.canonicalPlanSlug)).toEqual([
       "trae-免费-monthly",
@@ -228,6 +249,21 @@ describe("official table adapters", () => {
     expect(new Set(trae.map((offer) => offer.canonicalPlanSlug)).size).toBe(
       trae.length,
     );
+    expect(
+      parseTraePricing(raw(JSON.stringify(traePayload.slice(0, 4)))),
+    ).toHaveLength(4);
+    expect(
+      parseTraePricing(
+        raw(
+          JSON.stringify(
+            traePayload.map((plan) =>
+              plan.id === "ultra" ? { ...plan, price: "联系销售" } : plan,
+            ),
+          ),
+        ),
+      ),
+    ).toHaveLength(4);
+    expect(parseTraePricing(raw("<html>not json</html>"))).toEqual([]);
   });
 
   it("parses coding plans from dynamic official JavaScript payloads", () => {

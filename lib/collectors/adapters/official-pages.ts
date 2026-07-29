@@ -720,35 +720,48 @@ export function parseQoderPricing(raw: RawCollectionResult): NormalizedOffer[] {
 }
 
 export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
-  const text = load(raw.body).text().replace(/\s+/g, "");
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw.body);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(payload)) return [];
+
   const plans = [
-    { name: "免费", slug: "trae-免费-monthly", pattern: /免费¥0/, price: 0 },
+    { id: "free", name: "免费", slug: "trae-免费-monthly" },
     {
+      id: "pro",
       name: "速通 Pro",
       slug: "trae-速通-pro-monthly",
-      pattern: /速通Pro(?!\+).*?¥([\d.]+)\/月/,
     },
     {
+      id: "pro-plus",
       name: "速通 Pro+",
       slug: "trae-速通-pro-monthly-plus",
-      pattern: /速通Pro\+.*?¥([\d.]+)\/月/,
     },
     {
+      id: "ultra",
       name: "速通 Ultra",
       slug: "trae-速通-ultra-monthly",
-      pattern: /速通Ultra.*?¥([\d.]+)\/月/,
     },
     {
+      id: "express",
       name: "优速通 Express",
       slug: "trae-优速通-express-monthly",
-      pattern: /优速通Express.*?¥([\d.]+)\/月/,
     },
   ];
 
   return plans.flatMap((plan) => {
-    const match = text.match(plan.pattern);
-    const value = plan.price ?? Number(match?.[1]);
-    if (!match || !Number.isFinite(value)) return [];
+    const item = payload.find(
+      (candidate): candidate is Record<string, unknown> =>
+        typeof candidate === "object" &&
+        candidate !== null &&
+        candidate.id === plan.id,
+    );
+    const price = typeof item?.price === "string" ? item.price : "";
+    const value = Number(price.match(/^¥\s*([\d.]+)$/)?.[1]);
+    if (!Number.isFinite(value) || value < 0) return [];
     return [
       cnyOffer({
         providerSlug: "trae-subscription",
@@ -759,7 +772,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "trae-pricing-v2",
+        parserVersion: "trae-pricing-v3",
       }),
     ];
   });
@@ -1496,8 +1509,9 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "trae-pricing-official",
     "trae-subscription",
     "https://www.trae.cn/pricing",
-    "trae-pricing-v2",
+    "trae-pricing-v3",
     parseTraePricing,
+    "https://www.trae.cn/api/tcc/commerce?key=tocPlansConfig",
   ),
   new CodeBuddyPricingAdapter(),
   new OfficialPageAdapter(
