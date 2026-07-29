@@ -218,6 +218,16 @@ describe("official table adapters", () => {
     expect(trae.map((offer) => offer.amountMinor)).toEqual([
       0, 5900, 23900, 69900, 139900,
     ]);
+    expect(trae.map((offer) => offer.canonicalPlanSlug)).toEqual([
+      "trae-免费-monthly",
+      "trae-速通-pro-monthly",
+      "trae-速通-pro-monthly-plus",
+      "trae-速通-ultra-monthly",
+      "trae-优速通-express-monthly",
+    ]);
+    expect(new Set(trae.map((offer) => offer.canonicalPlanSlug)).size).toBe(
+      trae.length,
+    );
   });
 
   it("parses coding plans from dynamic official JavaScript payloads", () => {

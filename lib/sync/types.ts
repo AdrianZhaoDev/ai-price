@@ -6,6 +6,7 @@ export type DataSyncTableCounts = {
   collectionRuns: number;
   fxRates: number;
   priceObservations: number;
+  priceChangeCandidates: number;
   priceChangeEvents: number;
   collectionErrors: number;
 };

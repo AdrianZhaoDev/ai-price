@@ -20,6 +20,7 @@ import {
   CollectionError,
   type PriceSourceAdapter,
 } from "@/lib/collectors/types";
+import { offerIdentityHealthCheck } from "@/lib/collectors/offer-stability";
 import { appStorefronts } from "@/lib/collectors/adapters/app-store";
 import { refreshFxRates, type FxRate } from "@/lib/collectors/fx";
 import { isDatabaseConfigured } from "@/lib/db/client";
@@ -117,10 +118,12 @@ export async function runCollectors(
       let raw = await adapter.collect({ observedAt });
       let offers = await adapter.parse(raw);
       let health = adapter.healthCheck(offers);
+      if (health.ok) health = offerIdentityHealthCheck(offers);
       if (!health.ok) {
         raw = await adapter.collect({ observedAt });
         offers = await adapter.parse(raw);
         health = adapter.healthCheck(offers);
+        if (health.ok) health = offerIdentityHealthCheck(offers);
       }
       if (!health.ok) {
         throw new CollectionError(

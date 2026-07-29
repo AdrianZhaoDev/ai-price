@@ -104,8 +104,12 @@ export function canonicalAppStorePlan(
     pattern.test(rawPlanName),
   );
   const base = match?.[1] ?? `${providerSlug}-${slugifyPlan(rawPlanName)}`;
-  const periodBase =
+  let periodBase =
     billingPeriod === "year" ? base.replace(/-monthly$/, "-annual") : base;
+  const multiplier = rawPlanName.match(/\b(\d+)\s*x\b/i)?.[1];
+  if (multiplier && !periodBase.includes(`-${multiplier}x-`)) {
+    periodBase = periodBase.replace(/-(monthly|annual)$/, `-${multiplier}x-$1`);
+  }
   const storageTier = rawPlanName.match(/\b(\d+)\s*(gb|tb)\b/i);
   if (!storageTier) return periodBase;
   return periodBase.replace(
@@ -180,7 +184,7 @@ export function parseAppStoreHtml(input: {
         taxIncluded: null,
         sourceUrl: input.sourceUrl,
         observedAt: input.observedAt,
-        parserVersion: input.parserVersion ?? "app-store-v2",
+        parserVersion: input.parserVersion ?? "app-store-v3",
       },
     ];
   }
@@ -263,7 +267,7 @@ export function parseAppStoreHtml(input: {
         taxIncluded: null,
         sourceUrl: input.sourceUrl,
         observedAt: input.observedAt,
-        parserVersion: input.parserVersion ?? "app-store-v2",
+        parserVersion: input.parserVersion ?? "app-store-v3",
       });
     } catch {
       // App Store can include non-price metadata in text pairs. Ignore it.
@@ -328,7 +332,7 @@ export function appStoreHealthCheck(offers: NormalizedOffer[]): SourceHealth {
 }
 
 export class AppStoreAdapter implements PriceSourceAdapter {
-  readonly parserVersion = "app-store-v2";
+  readonly parserVersion = "app-store-v3";
   readonly id: string;
   readonly sourceUrl: string;
 

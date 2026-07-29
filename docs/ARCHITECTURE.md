@@ -51,8 +51,9 @@
 类型。远程同步失败不会回滚已经写入本地的数据。
 
 默认同步 `providers`、`products`、`plans`、`sources`、`collection_runs`、
-`fx_rates`、`price_observations`、`price_change_events` 和
-`collection_errors`。包含邮箱或 token 的订阅与邮件表不参与同步。
+`fx_rates`、`price_observations`、`price_change_events`、
+`price_change_candidates` 和 `collection_errors`。包含邮箱或 token 的订阅与邮件
+表不参与同步。
 
 主要实体：
 
@@ -68,6 +69,7 @@
 - `subscriptions`
 - `confirmation_tokens`
 - `price_change_events`
+- `price_change_candidates`
 - `email_deliveries`
 
 `latest_prices` 不单独存表。当前价由
@@ -165,6 +167,9 @@ interface PriceSourceAdapter {
 - Server Components 优先，交互组件最小化。
 - 首页只加载当前模式需要的数据。
 - 价格表客户端按持久化人民币值切换高到低 / 低到高排序。
-- 仅在价格变化时新增历史事件，相同价格更新 `last_seen_at`。
+- 同一轮同一来源、套餐和 storefront 只能有一个报价，冲突时拒绝整条来源写入。
+- 新价格先进入 `price_change_candidates`；下一次独立采集仍一致时才写入正式
+  observation 和事件，回到原价或变成第三个价格时取消或重置候选。
+- 仅在价格变化确认后新增历史事件，相同价格更新 `last_seen_at`。
 - 静态图标本地化，避免运行时请求第三方 Logo。
 - 动效只使用 `transform` 和 `opacity`。

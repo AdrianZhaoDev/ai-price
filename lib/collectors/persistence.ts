@@ -1,15 +1,21 @@
-import { hashContent } from "@/lib/collectors/http-client";
 import { convertMinorToCny, type FxRate } from "@/lib/collectors/fx";
 import type {
   NormalizedOffer,
   PriceSourceAdapter,
 } from "@/lib/collectors/types";
+import {
+  decidePriceSample,
+  offerPlanSlug,
+  priceFingerprint,
+  type StoredPriceCandidate,
+} from "@/lib/collectors/offer-stability";
 import { providerCatalog } from "@/lib/data/catalog";
 import { getDatabase } from "@/lib/db/client";
 import {
   collectionErrors,
   collectionRuns,
   plans,
+  priceChangeCandidates,
   priceChangeEvents,
   priceObservations,
   products,
@@ -183,9 +189,7 @@ async function ensurePlan(
   productId: string,
   offer: NormalizedOffer,
 ): Promise<{ id: string; slug: string }> {
-  const slug =
-    offer.canonicalPlanSlug ??
-    `${offer.providerSlug}-${hashContent(offer.rawPlanName).slice(0, 12)}`;
+  const slug = offerPlanSlug(offer);
   const metadata = {
     ...(offer.modelName ? { modelName: offer.modelName } : {}),
     ...(offer.modelSlug ? { modelSlug: offer.modelSlug } : {}),
@@ -231,60 +235,133 @@ export async function recordSuccessfulCollection(input: {
   const db = getDatabase();
   const changes: PriceChange[] = [];
   const activePlanSlugs = new Set<string>();
+  const activePlanIds = new Set<string>();
 
   for (const offer of input.offers) {
     const plan = await ensurePlan(input.source.productId, offer);
     activePlanSlugs.add(plan.slug);
+    activePlanIds.add(plan.id);
     const fxRate = input.fxRates.get(offer.currency.toUpperCase());
     const convertedCny = convertMinorToCny(
       offer.amountMinor,
       offer.currency,
       fxRate,
     );
-    const storefrontCondition = offer.storefront
-      ? eq(priceObservations.storefront, offer.storefront)
-      : isNull(priceObservations.storefront);
-    const [previous] = await db
-      .select()
-      .from(priceObservations)
-      .where(
-        and(
-          eq(priceObservations.planId, plan.id),
-          eq(priceObservations.sourceId, input.source.id),
-          storefrontCondition,
-        ),
-      )
-      .orderBy(desc(priceObservations.observedAt))
-      .limit(1);
-    const unchanged =
-      previous &&
-      previous.amountMinor === offer.amountMinor &&
-      previous.currency === offer.currency &&
-      previous.billingPeriod === offer.billingPeriod;
-
-    if (unchanged) {
-      await db
-        .update(priceObservations)
-        .set({
-          lastSeenAt: new Date(offer.observedAt),
-          status: "verified",
-          convertedCny,
-          fxRate: fxRate?.cnyPerUnit,
-          fxRateObservedAt: fxRate?.observedAt,
-        })
-        .where(eq(priceObservations.id, previous.id));
-      const [pendingEvent] = await db
+    const storefrontKey = offer.storefront ?? "";
+    const currentFingerprint = priceFingerprint(offer);
+    const observedAt = new Date(offer.observedAt);
+    const change = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`price:${input.source.id}:${plan.id}:${storefrontKey}`}))`,
+      );
+      const storefrontCondition = offer.storefront
+        ? eq(priceObservations.storefront, offer.storefront)
+        : isNull(priceObservations.storefront);
+      const [previous] = await tx
         .select()
-        .from(priceChangeEvents)
+        .from(priceObservations)
         .where(
           and(
-            eq(priceChangeEvents.currentObservationId, previous.id),
-            isNull(priceChangeEvents.notifiedAt),
+            eq(priceObservations.planId, plan.id),
+            eq(priceObservations.sourceId, input.source.id),
+            storefrontCondition,
           ),
         )
+        .orderBy(desc(priceObservations.observedAt))
         .limit(1);
-      if (pendingEvent?.previousObservationId) {
-        const [oldObservation] = await db
+      const candidateCondition = and(
+        eq(priceChangeCandidates.planId, plan.id),
+        eq(priceChangeCandidates.sourceId, input.source.id),
+        eq(priceChangeCandidates.storefrontKey, storefrontKey),
+      );
+      const [candidateRow] = await tx
+        .select()
+        .from(priceChangeCandidates)
+        .where(candidateCondition)
+        .limit(1);
+
+      const insertObservation = async () => {
+        const [current] = await tx
+          .insert(priceObservations)
+          .values({
+            planId: plan.id,
+            sourceId: input.source.id,
+            collectionRunId: input.runId,
+            rawPlanName: offer.rawPlanName,
+            region: offer.region,
+            storefront: offer.storefront,
+            currency: offer.currency,
+            amountMinor: offer.amountMinor,
+            convertedCny,
+            fxRate: fxRate?.cnyPerUnit,
+            fxRateObservedAt: fxRate?.observedAt,
+            displayPrice: offer.displayPrice,
+            billingPeriod: offer.billingPeriod,
+            unit: offer.unit,
+            taxIncluded: offer.taxIncluded,
+            status: offer.status,
+            rawHash: currentFingerprint,
+            observedAt,
+            lastSeenAt: observedAt,
+          })
+          .returning({ id: priceObservations.id });
+        return current;
+      };
+
+      if (!previous) {
+        await tx.delete(priceChangeCandidates).where(candidateCondition);
+        await insertObservation();
+        return null;
+      }
+
+      const baselineFingerprint = priceFingerprint({
+        amountMinor: previous.amountMinor,
+        currency: previous.currency,
+        billingPeriod: previous.billingPeriod,
+        unit: previous.unit,
+        taxIncluded: previous.taxIncluded,
+        status: previous.status,
+      });
+      const candidate: StoredPriceCandidate | undefined =
+        candidateRow?.lastCollectionRunId
+          ? {
+              fingerprint: candidateRow.fingerprint,
+              previousObservationId: candidateRow.previousObservationId,
+              lastCollectionRunId: candidateRow.lastCollectionRunId,
+            }
+          : undefined;
+      const decision = decidePriceSample({
+        baselineFingerprint,
+        baselineObservationId: previous.id,
+        currentFingerprint,
+        currentRunId: input.runId,
+        candidate,
+      });
+
+      if (decision === "unchanged") {
+        await tx.delete(priceChangeCandidates).where(candidateCondition);
+        await tx
+          .update(priceObservations)
+          .set({
+            lastSeenAt: observedAt,
+            status: offer.status,
+            convertedCny,
+            fxRate: fxRate?.cnyPerUnit,
+            fxRateObservedAt: fxRate?.observedAt,
+          })
+          .where(eq(priceObservations.id, previous.id));
+        const [pendingEvent] = await tx
+          .select()
+          .from(priceChangeEvents)
+          .where(
+            and(
+              eq(priceChangeEvents.currentObservationId, previous.id),
+              isNull(priceChangeEvents.notifiedAt),
+            ),
+          )
+          .limit(1);
+        if (!pendingEvent?.previousObservationId) return null;
+        const [oldObservation] = await tx
           .select({
             displayPrice: priceObservations.displayPrice,
             convertedCny: priceObservations.convertedCny,
@@ -292,63 +369,64 @@ export async function recordSuccessfulCollection(input: {
           .from(priceObservations)
           .where(eq(priceObservations.id, pendingEvent.previousObservationId))
           .limit(1);
-        if (oldObservation) {
-          changes.push({
-            eventId: pendingEvent.id,
-            planId: plan.id,
-            previousObservationId: pendingEvent.previousObservationId,
-            currentObservationId: previous.id,
-            providerSlug: offer.providerSlug,
-            planSlug: plan.slug,
-            planName: offer.rawPlanName,
-            region: offer.region ?? offer.storefront ?? "官方价格",
-            previousPrice: oldObservation.displayPrice,
-            currentPrice: offer.displayPrice,
-            previousCny: oldObservation.convertedCny,
-            currentCny: convertedCny,
-            sourceUrl: offer.sourceUrl,
-            changePercent: pendingEvent.changePercent,
-          });
-        }
+        if (!oldObservation) return null;
+        return {
+          eventId: pendingEvent.id,
+          planId: plan.id,
+          previousObservationId: pendingEvent.previousObservationId,
+          currentObservationId: previous.id,
+          providerSlug: offer.providerSlug,
+          planSlug: plan.slug,
+          planName: offer.rawPlanName,
+          region: offer.region ?? offer.storefront ?? "官方价格",
+          previousPrice: oldObservation.displayPrice,
+          currentPrice: offer.displayPrice,
+          previousCny: oldObservation.convertedCny,
+          currentCny: convertedCny,
+          sourceUrl: offer.sourceUrl,
+          changePercent: pendingEvent.changePercent,
+        } satisfies PriceChange;
       }
-      continue;
-    }
 
-    const rawHash = hashContent(
-      JSON.stringify({
-        plan: plan.slug,
-        storefront: offer.storefront,
-        currency: offer.currency,
-        amountMinor: offer.amountMinor,
-        billingPeriod: offer.billingPeriod,
-      }),
-    );
-    const [current] = await db
-      .insert(priceObservations)
-      .values({
-        planId: plan.id,
-        sourceId: input.source.id,
-        collectionRunId: input.runId,
-        rawPlanName: offer.rawPlanName,
-        region: offer.region,
-        storefront: offer.storefront,
-        currency: offer.currency,
-        amountMinor: offer.amountMinor,
-        convertedCny,
-        fxRate: fxRate?.cnyPerUnit,
-        fxRateObservedAt: fxRate?.observedAt,
-        displayPrice: offer.displayPrice,
-        billingPeriod: offer.billingPeriod,
-        unit: offer.unit,
-        taxIncluded: offer.taxIncluded,
-        status: offer.status,
-        rawHash,
-        observedAt: new Date(offer.observedAt),
-        lastSeenAt: new Date(offer.observedAt),
-      })
-      .returning({ id: priceObservations.id });
+      if (decision === "stage") {
+        await tx
+          .insert(priceChangeCandidates)
+          .values({
+            planId: plan.id,
+            sourceId: input.source.id,
+            storefrontKey,
+            previousObservationId: previous.id,
+            fingerprint: currentFingerprint,
+            lastCollectionRunId: input.runId,
+            firstSeenAt: observedAt,
+            lastSeenAt: observedAt,
+          })
+          .onConflictDoUpdate({
+            target: [
+              priceChangeCandidates.planId,
+              priceChangeCandidates.sourceId,
+              priceChangeCandidates.storefrontKey,
+            ],
+            set: {
+              previousObservationId: previous.id,
+              fingerprint: currentFingerprint,
+              lastCollectionRunId: input.runId,
+              firstSeenAt: observedAt,
+              lastSeenAt: observedAt,
+            },
+          });
+        return null;
+      }
 
-    if (previous) {
+      if (decision === "hold") {
+        await tx
+          .update(priceChangeCandidates)
+          .set({ lastSeenAt: observedAt })
+          .where(candidateCondition);
+        return null;
+      }
+
+      const current = await insertObservation();
       const changePercent =
         previous.amountMinor === null ||
         offer.amountMinor === null ||
@@ -359,7 +437,7 @@ export async function recordSuccessfulCollection(input: {
                 previous.amountMinor) *
                 100,
             );
-      const [event] = await db
+      const [event] = await tx
         .insert(priceChangeEvents)
         .values({
           planId: plan.id,
@@ -369,7 +447,8 @@ export async function recordSuccessfulCollection(input: {
           changePercent,
         })
         .returning({ id: priceChangeEvents.id });
-      changes.push({
+      await tx.delete(priceChangeCandidates).where(candidateCondition);
+      return {
         eventId: event.id,
         planId: plan.id,
         previousObservationId: previous.id,
@@ -384,8 +463,20 @@ export async function recordSuccessfulCollection(input: {
         currentCny: convertedCny,
         sourceUrl: offer.sourceUrl,
         changePercent,
-      });
-    }
+      } satisfies PriceChange;
+    });
+    if (change) changes.push(change);
+  }
+
+  if (activePlanIds.size > 0) {
+    await db
+      .delete(priceChangeCandidates)
+      .where(
+        and(
+          eq(priceChangeCandidates.sourceId, input.source.id),
+          notInArray(priceChangeCandidates.planId, [...activePlanIds]),
+        ),
+      );
   }
 
   if (

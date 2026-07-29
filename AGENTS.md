@@ -15,6 +15,21 @@
 [`docs/SMTP_SETUP.md`](docs/SMTP_SETUP.md)；涉及 SMTP 时应在执行运维流程的
 同时读取该文档，不得把两类说明重新混写。
 
+## 采集专项手册选择
+
+- 收到采集异常邮件、后台出现错误、采集服务失败、报价缺失、解析结构变化、网络
+  超时或 Neon 同步异常时，必须读取并执行
+  [`docs/COLLECTION_ERROR_RUNBOOK.md`](docs/COLLECTION_ERROR_RUNBOOK.md)。
+  如需修改代码并重新上线，还必须完整执行 `docs/VPS_OPERATIONS.md`。
+- 新增或删除 provider、产品、adapter、官方价格页、API 价目来源、App Store 应用
+  或 storefront 时，必须读取并执行
+  [`docs/COLLECTION_PROJECT_RUNBOOK.md`](docs/COLLECTION_PROJECT_RUNBOOK.md)，
+  同时读取 [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md)。如需上线，继续执行
+  `docs/VPS_OPERATIONS.md`。
+- 同一任务同时包含“修错误”和“增删项目”时，两份专项手册都必须读取。
+- 专项手册只规定诊断和采集代码流程；部署、备份、回滚及生产验收始终以
+  `docs/VPS_OPERATIONS.md` 为唯一准则。
+
 必须遵守以下约束：
 
 - 不得在 `/opt/ai-price/current` 中直接修改生产代码。

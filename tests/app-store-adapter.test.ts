@@ -139,6 +139,12 @@ describe("App Store adapter", () => {
     expect(canonicalAppStorePlan("grok", "SuperGrok Plus")).toBe(
       "supergrok-plus-monthly",
     );
+    expect(canonicalAppStorePlan("grok", "SuperGrok Plus 10x")).toBe(
+      "supergrok-plus-10x-monthly",
+    );
+    expect(canonicalAppStorePlan("gemini", "Google AI Pro 20x (5 TB)")).toBe(
+      "google-ai-pro-20x-5tb-monthly",
+    );
   });
 
   it("reports empty and invalid collections", () => {

@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:stability": "tsx scripts/verify-collection-stability.ts",
+    "test:price-stability": "tsx scripts/verify-price-change-stability.ts",
     "collect": "tsx scripts/collect-prices.ts",
     "sync:data": "tsx scripts/sync-data.ts",
     "seed": "tsx scripts/seed.ts",

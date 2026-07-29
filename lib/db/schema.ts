@@ -295,6 +295,41 @@ export const priceChangeEvents = pgTable(
   (table) => [index("price_change_events_pending_idx").on(table.notifiedAt)],
 );
 
+export const priceChangeCandidates = pgTable(
+  "price_change_candidates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    planId: uuid("plan_id")
+      .references(() => plans.id, { onDelete: "cascade" })
+      .notNull(),
+    sourceId: uuid("source_id")
+      .references(() => sources.id, { onDelete: "cascade" })
+      .notNull(),
+    storefrontKey: text("storefront_key").default("").notNull(),
+    previousObservationId: uuid("previous_observation_id")
+      .references(() => priceObservations.id, { onDelete: "cascade" })
+      .notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    lastCollectionRunId: uuid("last_collection_run_id")
+      .references(() => collectionRuns.id, { onDelete: "cascade" })
+      .notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("price_change_candidates_identity_unique").on(
+      table.planId,
+      table.sourceId,
+      table.storefrontKey,
+    ),
+    index("price_change_candidates_source_idx").on(table.sourceId),
+  ],
+);
+
 export const collectionErrors = pgTable(
   "collection_errors",
   {

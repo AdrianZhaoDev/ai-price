@@ -10,8 +10,9 @@ const counts = {
   collectionRuns: 5,
   fxRates: 6,
   priceObservations: 7,
-  priceChangeEvents: 8,
-  collectionErrors: 9,
+  priceChangeCandidates: 8,
+  priceChangeEvents: 9,
+  collectionErrors: 10,
 };
 
 describe("configured data sync", () => {

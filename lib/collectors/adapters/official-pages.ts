@@ -722,12 +722,25 @@ export function parseQoderPricing(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   const text = load(raw.body).text().replace(/\s+/g, "");
   const plans = [
-    { name: "免费", pattern: /免费¥0/, price: 0 },
-    { name: "速通 Pro", pattern: /速通Pro.*?¥([\d.]+)\/月/ },
-    { name: "速通 Pro+", pattern: /速通Pro\+¥([\d.]+)\/月/ },
-    { name: "速通 Ultra", pattern: /速通Ultra¥([\d.]+)\/月/ },
+    { name: "免费", slug: "trae-免费-monthly", pattern: /免费¥0/, price: 0 },
+    {
+      name: "速通 Pro",
+      slug: "trae-速通-pro-monthly",
+      pattern: /速通Pro(?!\+).*?¥([\d.]+)\/月/,
+    },
+    {
+      name: "速通 Pro+",
+      slug: "trae-速通-pro-monthly-plus",
+      pattern: /速通Pro\+.*?¥([\d.]+)\/月/,
+    },
+    {
+      name: "速通 Ultra",
+      slug: "trae-速通-ultra-monthly",
+      pattern: /速通Ultra.*?¥([\d.]+)\/月/,
+    },
     {
       name: "优速通 Express",
+      slug: "trae-优速通-express-monthly",
       pattern: /优速通Express.*?¥([\d.]+)\/月/,
     },
   ];
@@ -739,14 +752,14 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
     return [
       cnyOffer({
         providerSlug: "trae-subscription",
-        planSlug: `trae-${slugifyPlan(plan.name)}-monthly`,
+        planSlug: plan.slug,
         planName: plan.name,
         displayPrice: `¥${value}`,
         billingPeriod: "month",
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "trae-pricing-v1",
+        parserVersion: "trae-pricing-v2",
       }),
     ];
   });
@@ -1483,7 +1496,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "trae-pricing-official",
     "trae-subscription",
     "https://www.trae.cn/pricing",
-    "trae-pricing-v1",
+    "trae-pricing-v2",
     parseTraePricing,
   ),
   new CodeBuddyPricingAdapter(),

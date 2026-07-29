@@ -270,6 +270,33 @@ describe("collector runner", () => {
     );
   });
 
+  it("rejects universal offer identity collisions before persistence", async () => {
+    state.databaseConfigured = true;
+    const summary = await runCollectors([
+      adapter("duplicate-official-plan", {
+        parse: async () => [
+          offer,
+          {
+            ...offer,
+            rawPlanName: "ChatGPT Plus annual",
+            amountMinor: 19900,
+            displayPrice: "$199.00",
+          },
+        ],
+      }),
+    ]);
+    expect(summary.failureCount).toBe(1);
+    expect(state.recordSuccessfulCollection).not.toHaveBeenCalled();
+    expect(state.recordCollectionFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "STRUCTURE_CHANGED",
+        details: expect.objectContaining({
+          duplicateIdentities: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
   it("does not repeat an alert for an already-alerted open incident", async () => {
     state.databaseConfigured = true;
     state.recordCollectionFailure.mockResolvedValueOnce({

@@ -8,6 +8,7 @@ import {
   collectionRuns,
   fxRates,
   plans,
+  priceChangeCandidates,
   priceChangeEvents,
   priceObservations,
   products,
@@ -51,6 +52,7 @@ export async function syncPostgresqlData(
     collectionRunRows,
     fxRateRows,
     observationRows,
+    changeCandidateRows,
     changeEventRows,
     collectionErrorRows,
   ] = await source.transaction(
@@ -63,6 +65,7 @@ export async function syncPostgresqlData(
         snapshot.select().from(collectionRuns),
         snapshot.select().from(fxRates),
         snapshot.select().from(priceObservations),
+        snapshot.select().from(priceChangeCandidates),
         snapshot.select().from(priceChangeEvents),
         snapshot.select().from(collectionErrors),
       ]),
@@ -77,6 +80,7 @@ export async function syncPostgresqlData(
     await targetConnection.database.transaction(async (target) => {
       await target.delete(collectionErrors);
       await target.delete(priceChangeEvents);
+      await target.delete(priceChangeCandidates);
       await target.delete(priceObservations);
       await target.delete(collectionRuns);
       await target.delete(sources);
@@ -233,6 +237,25 @@ export async function syncPostgresqlData(
           });
       }
 
+      for (const batch of batches(changeCandidateRows)) {
+        await target
+          .insert(priceChangeCandidates)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: priceChangeCandidates.id,
+            set: {
+              planId: excluded("plan_id"),
+              sourceId: excluded("source_id"),
+              storefrontKey: excluded("storefront_key"),
+              previousObservationId: excluded("previous_observation_id"),
+              fingerprint: excluded("fingerprint"),
+              lastCollectionRunId: excluded("last_collection_run_id"),
+              firstSeenAt: excluded("first_seen_at"),
+              lastSeenAt: excluded("last_seen_at"),
+            },
+          });
+      }
+
       for (const batch of batches(changeEventRows)) {
         await target
           .insert(priceChangeEvents)
@@ -282,6 +305,7 @@ export async function syncPostgresqlData(
     collectionRuns: collectionRunRows.length,
     fxRates: fxRateRows.length,
     priceObservations: observationRows.length,
+    priceChangeCandidates: changeCandidateRows.length,
     priceChangeEvents: changeEventRows.length,
     collectionErrors: collectionErrorRows.length,
   };
