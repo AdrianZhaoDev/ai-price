@@ -89,12 +89,11 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   await expect(
     page.getByRole("heading", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
-  const kimiButton = page.getByRole("button", {
-    name: "Kimi API",
+  const deepSeekButton = page.getByRole("button", {
+    name: "DeepSeek",
     exact: true,
   });
-  await kimiButton.click();
-  await expect(kimiButton).toHaveAttribute("aria-pressed", "true");
+  await expect(deepSeekButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".status-chip")).toHaveCount(0);
 
   const apiRows = page.locator(".price-list > .price-row");
