@@ -68,6 +68,7 @@ describe("API ranking", () => {
     ]);
     expect(entries.some((entry) => entry.modelName === "A-old")).toBe(false);
     expect(entries[0]).toMatchObject({
+      modelSlug: "b-new",
       cachedInput: { amountMinor: 30 },
       input: { amountMinor: 100 },
       output: { amountMinor: 600 },

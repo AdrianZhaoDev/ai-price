@@ -3,6 +3,7 @@
 import { ProviderMark } from "@/components/icons/provider-mark";
 import {
   apiRankingEntries,
+  type ApiRankingEntry,
   type ApiRankingMetric,
 } from "@/lib/pricing/api-ranking";
 import { formatOfferPrice } from "@/lib/pricing/format";
@@ -11,6 +12,13 @@ import { useMemo, useState } from "react";
 
 type ApiPriceRankingProps = {
   providers: ProviderCatalogItem[];
+  onSelectEntry: (selection: ApiRankingSelection) => void;
+};
+
+export type ApiRankingSelection = {
+  providerId: string;
+  modelSlug: string;
+  offerId: string;
 };
 
 const metrics: Array<{ id: ApiRankingMetric; label: string }> = [
@@ -23,7 +31,26 @@ function compactPrice(offer: PriceOffer | undefined) {
   return offer ? formatOfferPrice(offer) : "—";
 }
 
-export function ApiPriceRanking({ providers }: ApiPriceRankingProps) {
+function selectedOffer(
+  entry: ApiRankingEntry,
+  metric: ApiRankingMetric,
+): PriceOffer | undefined {
+  return (
+    (metric === "cached_input"
+      ? entry.cachedInput
+      : metric === "input"
+        ? entry.input
+        : entry.output) ??
+    entry.input ??
+    entry.cachedInput ??
+    entry.output
+  );
+}
+
+export function ApiPriceRanking({
+  providers,
+  onSelectEntry,
+}: ApiPriceRankingProps) {
   const [metric, setMetric] = useState<ApiRankingMetric>("input");
   const entries = useMemo(
     () => apiRankingEntries(providers, metric),
@@ -62,34 +89,57 @@ export function ApiPriceRanking({ providers }: ApiPriceRankingProps) {
       </div>
 
       <ol className="api-ranking-list">
-        {entries.map((entry, index) => (
-          <li key={entry.id}>
-            <span className="api-ranking-number">{index + 1}</span>
-            <div className="api-ranking-model">
-              <ProviderMark
-                providerId={entry.providerId}
-                color={entry.providerColor}
-                size={24}
-              />
-              <span>
-                <strong>{entry.modelName}</strong>
-                <small>{entry.providerName}</small>
-              </span>
-            </div>
-            <span
-              data-label="缓存输入"
-              data-highlight={metric === "cached_input"}
-            >
-              {compactPrice(entry.cachedInput)}
-            </span>
-            <span data-label="非缓存输入" data-highlight={metric === "input"}>
-              {compactPrice(entry.input)}
-            </span>
-            <span data-label="输出" data-highlight={metric === "output"}>
-              {compactPrice(entry.output)}
-            </span>
-          </li>
-        ))}
+        {entries.map((entry, index) => {
+          const offer = selectedOffer(entry, metric);
+          return (
+            <li key={entry.id}>
+              <button
+                type="button"
+                className="api-ranking-entry"
+                data-provider-id={entry.providerId}
+                data-model-slug={entry.modelSlug}
+                data-offer-id={offer?.id}
+                aria-label={`查看 ${entry.providerName} ${entry.modelName} 价格`}
+                onClick={() => {
+                  if (!offer) return;
+                  onSelectEntry({
+                    providerId: entry.providerId,
+                    modelSlug: entry.modelSlug,
+                    offerId: offer.id,
+                  });
+                }}
+              >
+                <span className="api-ranking-number">{index + 1}</span>
+                <span className="api-ranking-model">
+                  <ProviderMark
+                    providerId={entry.providerId}
+                    color={entry.providerColor}
+                    size={24}
+                  />
+                  <span>
+                    <strong>{entry.modelName}</strong>
+                    <small>{entry.providerName}</small>
+                  </span>
+                </span>
+                <span
+                  data-label="缓存输入"
+                  data-highlight={metric === "cached_input"}
+                >
+                  {compactPrice(entry.cachedInput)}
+                </span>
+                <span
+                  data-label="非缓存输入"
+                  data-highlight={metric === "input"}
+                >
+                  {compactPrice(entry.input)}
+                </span>
+                <span data-label="输出" data-highlight={metric === "output"}>
+                  {compactPrice(entry.output)}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       {entries.length === 0 ? (

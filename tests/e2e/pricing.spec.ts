@@ -95,6 +95,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   });
   await kimiButton.click();
   await expect(kimiButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".status-chip")).toHaveCount(0);
 
   const apiRows = page.locator(".price-list > .price-row");
   if ((await apiRows.count()) > 0) {
@@ -105,6 +106,35 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   } else {
     await expect(page.locator(".price-summary")).toContainText("0 个价格项目");
   }
+
+  const siliconFlowButton = page.getByRole("button", {
+    name: "硅基流动",
+    exact: true,
+  });
+  await siliconFlowButton.click();
+  await expect(page.locator(".price-list > .price-row")).toHaveCount(10);
+  const showAllButton = page.getByRole("button", { name: /全部/ });
+  await expect(showAllButton).toHaveAttribute("aria-expanded", "false");
+  await showAllButton.click();
+  expect(
+    await page.locator(".price-list > .price-row").count(),
+  ).toBeGreaterThan(10);
+
+  const firstRankingEntry = page.locator(".api-ranking-entry").first();
+  const targetProviderId =
+    await firstRankingEntry.getAttribute("data-provider-id");
+  const targetOfferId = await firstRankingEntry.getAttribute("data-offer-id");
+  expect(targetProviderId).toBeTruthy();
+  expect(targetOfferId).toBeTruthy();
+  await firstRankingEntry.click();
+  await expect(
+    page.locator(`.provider-button[data-provider-id="${targetProviderId}"]`),
+  ).toHaveAttribute("aria-pressed", "true");
+  const targetRow = page.locator(
+    `.price-row[data-offer-id="${targetOfferId}"]`,
+  );
+  await expect(targetRow).toHaveAttribute("data-highlighted", "true");
+  await expect(targetRow).toBeInViewport();
 });
 
 test("mobile navigation and sheet remain usable", async ({

@@ -11,6 +11,7 @@ export type ApiRankingEntry = {
   providerId: string;
   providerName: string;
   providerColor: string;
+  modelSlug: string;
   modelName: string;
   modelOrder: number;
   cachedInput?: PriceOffer;
@@ -98,6 +99,7 @@ export function apiRankingEntries(
         providerId: provider.id,
         providerName: provider.label,
         providerColor: provider.color,
+        modelSlug,
         modelName: model.name,
         modelOrder: model.order,
         cachedInput: metricOffer(model.offers, "cached_input"),

@@ -1,7 +1,10 @@
 "use client";
 
 import { ProviderMark } from "@/components/icons/provider-mark";
-import { ApiPriceRanking } from "@/components/api-price-ranking";
+import {
+  ApiPriceRanking,
+  type ApiRankingSelection,
+} from "@/components/api-price-ranking";
 import { SubscriptionSheet } from "@/components/subscription-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -14,7 +17,6 @@ import {
   lowestThreeRanks,
   plansByMinimumPrice,
   sortOffersByCny,
-  statusLabel,
 } from "@/lib/pricing/format";
 import type {
   ModeDefinition,
@@ -34,13 +36,23 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PricingExplorerProps = {
   modes: ModeDefinition[];
   providers: ProviderCatalogItem[];
   contactEmail: string;
 };
+
+const API_INITIAL_VISIBLE_COUNT = 10;
+
+type PendingApiTarget = ApiRankingSelection & {
+  requestId: number;
+};
+
+function hasDisplayableOffers(provider: ProviderCatalogItem): boolean {
+  return displayableOffers(provider.offers).length > 0;
+}
 
 function sortProvidersByRank(providers: ProviderCatalogItem[]) {
   return [...providers].sort(
@@ -66,21 +78,40 @@ export function PricingExplorer({
   const [selectedProviderId, setSelectedProviderId] = useState("chatgpt");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(() => {
     const initialProvider =
-      providers.find((provider) => provider.id === "chatgpt") ??
+      providers.find(
+        (provider) =>
+          provider.id === "chatgpt" && hasDisplayableOffers(provider),
+      ) ??
       sortProvidersByRank(
-        providers.filter((provider) => provider.mode === "global"),
+        providers.filter(
+          (provider) =>
+            provider.mode === "global" && hasDisplayableOffers(provider),
+        ),
       )[0];
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [apiVisibleLimit, setApiVisibleLimit] = useState(80);
+  const [expandedApiProviderIds, setExpandedApiProviderIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [pendingApiTarget, setPendingApiTarget] =
+    useState<PendingApiTarget | null>(null);
+  const priceRowRefs = useRef(new Map<string, HTMLDivElement>());
+  const highlightedRowRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const rankingRequestIdRef = useRef(0);
 
   const modeProviders = useMemo(
     () =>
       sortProvidersByRank(
-        providers.filter((provider) => provider.mode === activeMode),
+        providers.filter(
+          (provider) =>
+            provider.mode === activeMode && hasDisplayableOffers(provider),
+        ),
       ),
     [activeMode, providers],
   );
@@ -104,8 +135,8 @@ export function PricingExplorer({
     sortDirection,
   );
   const visibleOffers =
-    activeMode === "api"
-      ? sortedOffers.slice(0, apiVisibleLimit)
+    activeMode === "api" && !expandedApiProviderIds.has(selectedProvider.id)
+      ? sortedOffers.slice(0, API_INITIAL_VISIBLE_COUNT)
       : sortedOffers;
 
   const lowestOffer = lowestComparableOffer(sortedOffers);
@@ -122,21 +153,130 @@ export function PricingExplorer({
 
   function changeMode(mode: PriceMode) {
     const firstProvider = sortProvidersByRank(
-      providers.filter((provider) => provider.mode === mode),
+      providers.filter(
+        (provider) => provider.mode === mode && hasDisplayableOffers(provider),
+      ),
     )[0];
     if (!firstProvider) return;
     setActiveMode(mode);
     setSelectedProviderId(firstProvider.id);
     setSelectedPlanId(defaultPlanId(firstProvider));
-    setApiVisibleLimit(80);
     setMobileMenuOpen(false);
   }
 
   function selectProvider(provider: ProviderCatalogItem) {
     setSelectedProviderId(provider.id);
     setSelectedPlanId(defaultPlanId(provider));
-    setApiVisibleLimit(80);
   }
+
+  function selectRankingEntry(selection: ApiRankingSelection) {
+    const provider = modeProviders.find(
+      (item) => item.id === selection.providerId,
+    );
+    if (!provider) return;
+
+    const targetOffers = sortOffersByCny(
+      displayableOffers(provider.offers),
+      sortDirection,
+    );
+    const targetIndex = targetOffers.findIndex(
+      (offer) =>
+        offer.id === selection.offerId ||
+        offer.modelSlug === selection.modelSlug,
+    );
+    if (targetIndex >= API_INITIAL_VISIBLE_COUNT) {
+      setExpandedApiProviderIds((current) => {
+        const next = new Set(current);
+        next.add(provider.id);
+        return next;
+      });
+    }
+
+    rankingRequestIdRef.current += 1;
+    setSelectedProviderId(provider.id);
+    setSelectedPlanId(defaultPlanId(provider));
+    highlightedRowRef.current?.removeAttribute("data-highlighted");
+    highlightedRowRef.current = null;
+    setPendingApiTarget({
+      ...selection,
+      requestId: rankingRequestIdRef.current,
+    });
+  }
+
+  useEffect(() => {
+    if (
+      !pendingApiTarget ||
+      selectedProvider.id !== pendingApiTarget.providerId
+    ) {
+      return;
+    }
+
+    const targetOffers = sortOffersByCny(
+      displayableOffers(selectedProvider.offers),
+      sortDirection,
+    );
+    const targetOffer =
+      targetOffers.find((offer) => offer.id === pendingApiTarget.offerId) ??
+      targetOffers.find(
+        (offer) => offer.modelSlug === pendingApiTarget.modelSlug,
+      );
+
+    let revealDelay: ReturnType<typeof setTimeout> | null = null;
+    let animationFrame = 0;
+    let attempts = 0;
+    let cancelled = false;
+    const revealTarget = () => {
+      if (cancelled) return;
+      if (!targetOffer) {
+        setPendingApiTarget(null);
+        return;
+      }
+      const row = priceRowRefs.current.get(targetOffer.id);
+      if (!row && attempts < 30) {
+        attempts += 1;
+        animationFrame = requestAnimationFrame(revealTarget);
+        return;
+      }
+      if (!row) {
+        setPendingApiTarget(null);
+        return;
+      }
+
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.setAttribute("data-highlighted", "true");
+      highlightedRowRef.current = row;
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+      highlightTimeoutRef.current = setTimeout(() => {
+        row.removeAttribute("data-highlighted");
+        if (highlightedRowRef.current === row) {
+          highlightedRowRef.current = null;
+        }
+        setPendingApiTarget(null);
+        highlightTimeoutRef.current = null;
+      }, 3000);
+    };
+
+    revealDelay = setTimeout(() => {
+      animationFrame = requestAnimationFrame(revealTarget);
+    }, 240);
+    return () => {
+      cancelled = true;
+      if (revealDelay) clearTimeout(revealDelay);
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [pendingApiTarget, selectedProvider, sortDirection]);
+
+  useEffect(
+    () => () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+      highlightedRowRef.current?.removeAttribute("data-highlighted");
+    },
+    [],
+  );
 
   const selectedPlan = availablePlans.find(
     (plan) => plan.id === selectedPlanId,
@@ -295,6 +435,7 @@ export function PricingExplorer({
                   key={provider.id}
                   type="button"
                   className="provider-button pressable"
+                  data-provider-id={provider.id}
                   data-active={active}
                   onClick={() => selectProvider(provider)}
                   aria-pressed={active}
@@ -354,12 +495,6 @@ export function PricingExplorer({
                     <div>
                       <div className="provider-name-line">
                         <h2>{selectedProvider.name}</h2>
-                        <span
-                          className="status-chip"
-                          data-status={selectedProvider.status}
-                        >
-                          {statusLabel(selectedProvider.status)}
-                        </span>
                       </div>
                       <p>{selectedProvider.description}</p>
                     </div>
@@ -583,6 +718,15 @@ export function PricingExplorer({
                         role="row"
                         key={offer.id}
                         data-rank={rank}
+                        data-offer-id={offer.id}
+                        data-model-slug={offer.modelSlug}
+                        ref={(node) => {
+                          if (node) {
+                            priceRowRefs.current.set(offer.id, node);
+                          } else {
+                            priceRowRefs.current.delete(offer.id);
+                          }
+                        }}
                         initial={false}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
@@ -653,13 +797,28 @@ export function PricingExplorer({
                 </div>
 
                 {activeMode === "api" &&
-                visibleOffers.length < sortedOffers.length ? (
+                sortedOffers.length > API_INITIAL_VISIBLE_COUNT ? (
                   <button
                     type="button"
                     className="load-more-prices pressable"
-                    onClick={() => setApiVisibleLimit((value) => value + 80)}
+                    aria-expanded={expandedApiProviderIds.has(
+                      selectedProvider.id,
+                    )}
+                    onClick={() =>
+                      setExpandedApiProviderIds((current) => {
+                        const next = new Set(current);
+                        if (next.has(selectedProvider.id)) {
+                          next.delete(selectedProvider.id);
+                        } else {
+                          next.add(selectedProvider.id);
+                        }
+                        return next;
+                      })
+                    }
                   >
-                    再显示 80 项
+                    {expandedApiProviderIds.has(selectedProvider.id)
+                      ? "收起"
+                      : "全部"}
                     <span>
                       已显示 {visibleOffers.length} / {sortedOffers.length}
                     </span>
@@ -677,7 +836,10 @@ export function PricingExplorer({
             </AnimatePresence>
           </section>
           {activeMode === "api" ? (
-            <ApiPriceRanking providers={providers} />
+            <ApiPriceRanking
+              providers={modeProviders}
+              onSelectEntry={selectRankingEntry}
+            />
           ) : null}
         </div>
       </main>

@@ -582,29 +582,44 @@ input:focus-visible {
 }
 
 .api-ranking-list li {
+  border-top: 1px solid var(--separator);
+}
+
+.api-ranking-entry {
   display: grid;
+  width: 100%;
   grid-template-columns: 28px minmax(156px, 1fr) repeat(3, 72px);
   gap: 8px;
   align-items: center;
   min-height: 76px;
-  border-top: 1px solid var(--separator);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ink-secondary);
+  cursor: pointer;
+  font: inherit;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: right;
   transition: background-color 160ms ease;
 }
 
-.api-ranking-list li:hover {
+.api-ranking-entry:hover,
+.api-ranking-entry:focus-visible {
   background: color-mix(in srgb, var(--tint-soft) 42%, transparent);
 }
 
-.api-ranking-list li > span[data-highlight="true"] {
+.api-ranking-entry:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
+}
+
+.api-ranking-entry > span[data-highlight="true"] {
   color: var(--positive);
   font-weight: 750;
 }
 
-.api-ranking-list li > span[data-label] {
+.api-ranking-entry > span[data-label] {
   white-space: nowrap;
 }
 
@@ -730,29 +745,6 @@ input:focus-visible {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--positive-soft);
-  color: var(--positive);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.status-chip[data-status="pending"] {
-  background: var(--warning-soft);
-  color: var(--warning);
-}
-
-.status-chip[data-status="stale"],
-.status-chip[data-status="unpublished"] {
-  background: var(--negative-soft);
-  color: var(--negative);
 }
 
 .provider-actions {
@@ -983,6 +975,32 @@ input:focus-visible {
 .price-row {
   min-height: 76px;
   border-top: 1px solid var(--separator);
+}
+
+.price-row[data-highlighted="true"] {
+  position: relative;
+  z-index: 1;
+  animation: price-row-target-pulse 750ms ease-in-out 4;
+  outline: 2px solid color-mix(in srgb, var(--tint) 72%, transparent);
+  outline-offset: -2px;
+}
+
+@keyframes price-row-target-pulse {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: color-mix(in srgb, var(--tint) 15%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-row[data-highlighted="true"] {
+    animation: none;
+    background-color: color-mix(in srgb, var(--tint) 12%, transparent);
+  }
 }
 
 .global-price-row {
