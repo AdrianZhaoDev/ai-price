@@ -1,5 +1,7 @@
 import type { BillingPeriod, PriceOffer, PriceStatus } from "./types";
 
+export const API_INITIAL_VISIBLE_COUNT = 10;
+
 const periodLabels: Record<BillingPeriod, string> = {
   week: "/周",
   month: "/月",
@@ -140,6 +142,13 @@ export function displayableOffers(offers: PriceOffer[]): PriceOffer[] {
         monthlyNames.has(offer.planName.trim().toLocaleLowerCase())
       ),
   );
+}
+
+export function visibleApiOffers(
+  offers: PriceOffer[],
+  expanded: boolean,
+): PriceOffer[] {
+  return expanded ? offers : offers.slice(0, API_INITIAL_VISIBLE_COUNT);
 }
 
 export function sortOffersByCny(

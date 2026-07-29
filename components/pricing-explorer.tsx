@@ -9,6 +9,7 @@ import { SubscriptionSheet } from "@/components/subscription-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   compareCnyPrice,
+  API_INITIAL_VISIBLE_COUNT,
   formatFxRate,
   formatCny,
   formatOfferPrice,
@@ -17,6 +18,7 @@ import {
   lowestThreeRanks,
   plansByMinimumPrice,
   sortOffersByCny,
+  visibleApiOffers,
 } from "@/lib/pricing/format";
 import type {
   ModeDefinition,
@@ -43,8 +45,6 @@ type PricingExplorerProps = {
   providers: ProviderCatalogItem[];
   contactEmail: string;
 };
-
-const API_INITIAL_VISIBLE_COUNT = 10;
 
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
@@ -136,7 +136,7 @@ export function PricingExplorer({
   );
   const visibleOffers =
     activeMode === "api" && !expandedApiProviderIds.has(selectedProvider.id)
-      ? sortedOffers.slice(0, API_INITIAL_VISIBLE_COUNT)
+      ? visibleApiOffers(sortedOffers, false)
       : sortedOffers;
 
   const lowestOffer = lowestComparableOffer(sortedOffers);

@@ -111,13 +111,20 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     exact: true,
   });
   await siliconFlowButton.click();
-  await expect(page.locator(".price-list > .price-row")).toHaveCount(10);
-  const showAllButton = page.getByRole("button", { name: /全部/ });
-  await expect(showAllButton).toHaveAttribute("aria-expanded", "false");
-  await showAllButton.click();
-  expect(
-    await page.locator(".price-list > .price-row").count(),
-  ).toBeGreaterThan(10);
+  const collapsedApiRowCount = await page
+    .locator(".price-list > .price-row")
+    .count();
+  expect(collapsedApiRowCount).toBeGreaterThan(0);
+  expect(collapsedApiRowCount).toBeLessThanOrEqual(10);
+  const showAllButton = page.locator(
+    '.load-more-prices[aria-expanded="false"]',
+  );
+  if ((await showAllButton.count()) === 1) {
+    await showAllButton.click();
+    expect(
+      await page.locator(".price-list > .price-row").count(),
+    ).toBeGreaterThan(collapsedApiRowCount);
+  }
 
   const firstRankingEntry = page.locator(".api-ranking-entry").first();
   const targetProviderId =

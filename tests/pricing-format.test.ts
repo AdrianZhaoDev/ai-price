@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   displayableOffers,
   compareCnyPrice,
+  API_INITIAL_VISIBLE_COUNT,
   formatCny,
   formatFxRate,
   formatOfferPrice,
@@ -12,6 +13,7 @@ import {
   plansByMinimumPrice,
   sortOffersByCny,
   statusLabel,
+  visibleApiOffers,
 } from "@/lib/pricing/format";
 import type { PriceOffer } from "@/lib/pricing/types";
 
@@ -127,6 +129,17 @@ describe("price formatting", () => {
       ["mid", 2],
       ["high", 3],
     ]);
+  });
+
+  it("limits collapsed API lists to ten offers and expands all", () => {
+    const offers = Array.from(
+      { length: API_INITIAL_VISIBLE_COUNT + 2 },
+      (_, index) => ({ ...offer, id: `api-${index}` }),
+    );
+    expect(visibleApiOffers(offers, false)).toHaveLength(
+      API_INITIAL_VISIBLE_COUNT,
+    );
+    expect(visibleApiOffers(offers, true)).toHaveLength(offers.length);
   });
 
   it("orders plans from cheap to expensive using each plan's global minimum", () => {
