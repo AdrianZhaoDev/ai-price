@@ -30,10 +30,14 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 - 根域已配置空 MX、`v=spf1 -all` 与严格 DMARC，明确该域不接收或发送邮件；
 - 源站使用 Let's Encrypt ECDSA 证书，覆盖主域、`www`、`ai`；
 - HTML 保持 `DYNAMIC`，静态资源继续按文件哈希和源站缓存头处理；
+- SSL Labs 四个 Cloudflare IPv4/IPv6 边缘端点均为 A+，只支持 TLS 1.2/1.3；
+- `/_next/static/` 静态资源已验证首次 `MISS`、再次访问 `HIT`，并带一年
+  `immutable` 缓存；
+- DNSSEC 已在 Dynadot 和 Cloudflare 完整启用，`.com` 父区、1.1.1.1 与 8.8.8.8
+  均返回匹配的 DS，递归验证返回 `ad` 标志；
 - Ahrefs 站点指标接口当前返回 `Insufficient plan`，不能把它解释成指标为零。
 
-DNSSEC 已在 Cloudflare 开启，但在 Dynadot 写入 DS 前仍是“挂起”，此时不能写成
-“已生效”。待写入的公开 DS 参数是：
+2026-07-31 验证生效的公开 DS 参数是：
 
 ```text
 Key tag: 2371
@@ -42,8 +46,9 @@ Digest type: 2 (SHA-256)
 Digest: C250DDD4F1A0C15295631D355D938BDEE1AC8AB63D295F433DC584C5275E833A
 ```
 
-Dynadot 保存后等待父区传播，再用 `dig +short DS lowpriceradar.com` 和 DNSViz
-确认验证链完整。若 DS 参数与 Cloudflare 当前面板不一致，以面板最新值为准。
+后续检查必须同时确认 DS 值没有漂移，并用 `dig +dnssec lowpriceradar.com A
+@1.1.1.1` 检查响应 flags 中存在 `ad`。若 DS 参数与 Cloudflare 当前面板不一致，
+不得直接覆盖；先确认是否发生了正常密钥轮换。
 
 ## 3. 每次发布后的即时检查
 
@@ -67,6 +72,10 @@ curl -fsS -I https://lowpriceradar.com/api/admin/session
 - `/admin/`、`/api/`、`/subscription/` 包含 `no-store` 和 `X-Robots-Tag`；
 - 边缘响应包含 HSTS，且 `server: cloudflare`；
 - `www`、`ai`、HTTP 入口只有一次 301。
+
+移动浏览器的紧凑地址栏可能只显示域名而隐藏路径。看到站内 404 时，不得只凭截图
+判断首页宕机；先同时请求 `/`，再从 Nginx access log 核对实际请求路径。字面量
+`/*` 是无效路径，保持 404 比重定向到首页更符合 SEO，避免产生 soft 404。
 
 ## 4. 每周 SEO 观察
 
