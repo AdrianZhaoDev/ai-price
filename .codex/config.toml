@@ -1,0 +1,2 @@
+[mcp_servers.ahrefs]
+url = "https://api.ahrefs.com/mcp/mcp"
