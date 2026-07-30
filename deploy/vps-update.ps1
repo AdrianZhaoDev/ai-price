@@ -160,6 +160,7 @@ BACKUP_FILE="/var/backups/ai-price/ai_price_$(date -u +%Y%m%d%H%M%S%N).dump"
 sudo -u postgres pg_dump --format=custom --file="$BACKUP_FILE" ai_price
 echo "BACKUP_FILE=$BACKUP_FILE"
 '@
+  $backupCommand = $backupCommand.Replace("`r", "")
   ssh $SshAlias $backupCommand
   if ($LASTEXITCODE -ne 0) {
     throw "Production database backup failed."
@@ -198,6 +199,7 @@ curl -fsS -o /dev/null -w 'http-redirect=%{http_code}\n' \
 curl -sS -o /dev/null -w 'admin-errors=%{http_code}\n' \
   http://127.0.0.1:3100/admin/errors
 "@
+  $deployCommand = $deployCommand.Replace("`r", "")
   ssh $SshAlias $deployCommand
   if ($LASTEXITCODE -ne 0) {
     throw "Production deployment or verification failed."
