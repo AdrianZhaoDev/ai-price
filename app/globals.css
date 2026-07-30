@@ -114,6 +114,25 @@ input:focus-visible {
   overflow: clip;
 }
 
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 12px;
+  left: 12px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-floating);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .app-shell::before {
   position: fixed;
   z-index: -1;
@@ -206,6 +225,8 @@ input:focus-visible {
 }
 
 .nav-item {
+  display: flex;
+  align-items: center;
   min-height: 38px;
   padding: 0 17px;
   border: 0;
@@ -294,6 +315,41 @@ input:focus-visible {
   width: min(calc(100% - 40px), var(--content-width));
   margin: 0 auto;
   padding: 84px 0 72px;
+}
+
+.pricing-empty-state {
+  width: min(720px, calc(100% - 32px));
+  min-height: 70vh;
+  margin: 0 auto;
+  padding: 120px 0 80px;
+}
+
+.pricing-empty-state h1 {
+  margin: 12px 0;
+  font-size: clamp(36px, 7vw, 68px);
+  letter-spacing: -0.055em;
+}
+
+.pricing-empty-state > p:not(.eyebrow) {
+  max-width: 560px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.pricing-empty-state nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.pricing-empty-state nav a {
+  padding: 10px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .workspace-heading {

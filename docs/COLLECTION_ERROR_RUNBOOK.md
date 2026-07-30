@@ -5,7 +5,7 @@
 
 ## 1. 查看错误
 
-先打开 `http://107.173.87.110/admin/errors`，按错误类型、渠道和状态筛选并展开
+先打开 `https://lowpriceradar.com/admin/errors`，按错误类型、渠道和状态筛选并展开
 “完整错误日志”。再连接服务器：
 
 ```bash

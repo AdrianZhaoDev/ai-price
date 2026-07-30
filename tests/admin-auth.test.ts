@@ -37,9 +37,9 @@ describe("admin authentication tokens", () => {
       {
         method: "POST",
         headers: {
-          host: "107.173.87.110",
-          origin: "http://107.173.87.110",
-          "x-forwarded-proto": "http",
+          host: "lowpriceradar.com",
+          origin: "https://lowpriceradar.com",
+          "x-forwarded-proto": "https",
         },
       },
     );
@@ -47,9 +47,9 @@ describe("admin authentication tokens", () => {
 
     const crossOriginRequest = new Request(request, {
       headers: {
-        host: "107.173.87.110",
-        origin: "http://example.com",
-        "x-forwarded-proto": "http",
+        host: "lowpriceradar.com",
+        origin: "https://example.com",
+        "x-forwarded-proto": "https",
       },
     });
     expect(isSameOriginRequest(crossOriginRequest)).toBe(false);

@@ -1,7 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "隐私 · AI 价签",
+export const metadata: Metadata = {
+  title: "隐私说明",
+  description: "AI 价签价格通知所保存的数据、使用目的与退订方式。",
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {

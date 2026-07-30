@@ -1,7 +1,13 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "采集方法 · AI 价签",
+export const metadata: Metadata = {
+  title: "价格采集方法",
+  description:
+    "了解 AI 价签如何从官方页面采集、核验和更新 AI 订阅及 API 价格。",
+  alternates: {
+    canonical: "/methodology",
+  },
 };
 
 export default function MethodologyPage() {

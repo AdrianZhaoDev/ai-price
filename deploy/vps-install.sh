@@ -7,6 +7,8 @@ LOCK_FILE="${3:-/tmp/ai-price-package-lock.json}"
 APP_ROOT="/opt/ai-price"
 ENV_FILE="/etc/ai-price.env"
 SERVICE_USER="ai-price"
+PRIMARY_DOMAIN="lowpriceradar.com"
+CERTIFICATE_DIR="/etc/letsencrypt/live/${PRIMARY_DOMAIN}"
 
 install -d "${APP_ROOT}"
 exec 9>"${APP_ROOT}/.deploy.lock"
@@ -16,7 +18,8 @@ RELEASE_DIR="${APP_ROOT}/releases/${RELEASE_ID}"
 
 export DEBIAN_FRONTEND=noninteractive
 MISSING_PACKAGES=()
-for package_name in postgresql nginx ca-certificates; do
+for package_name in \
+  postgresql nginx ca-certificates certbot python3-certbot-nginx; do
   if ! dpkg-query -W -f='${Status}' "${package_name}" 2>/dev/null |
     grep -q "install ok installed"; then
     MISSING_PACKAGES+=("${package_name}")
@@ -67,7 +70,7 @@ DATA_SYNC_ENABLED=false
 DATA_SYNC_CHANNEL=neon
 DATA_SYNC_TARGET=neondb
 DATA_SYNC_TARGET_URL=
-APP_URL=http://${PUBLIC_IP}
+APP_URL=https://${PRIMARY_DOMAIN}
 CONTACT_EMAIL=price@example.com
 CRON_SECRET=${CRON_SECRET}
 EMAIL_TOKEN_SECRET=${EMAIL_TOKEN_SECRET}
@@ -99,6 +102,21 @@ for required_name in \
     exit 1
   fi
 done
+if [[ "${APP_URL}" != "https://${PRIMARY_DOMAIN}" ]]; then
+  echo "APP_URL must be https://${PRIMARY_DOMAIN} in ${ENV_FILE}." >&2
+  exit 1
+fi
+for certificate_file in fullchain.pem privkey.pem; do
+  if [[ ! -s "${CERTIFICATE_DIR}/${certificate_file}" ]]; then
+    echo "Missing ${CERTIFICATE_DIR}/${certificate_file}; provision the origin certificate first." >&2
+    exit 1
+  fi
+done
+if ! openssl x509 -checkend 1209600 \
+  -noout -in "${CERTIFICATE_DIR}/fullchain.pem"; then
+  echo "The origin certificate expires in less than 14 days." >&2
+  exit 1
+fi
 
 systemctl enable --now postgresql
 
@@ -236,11 +254,75 @@ Unit=ai-price-collect.service
 WantedBy=timers.target
 EOF
 
+install -d -o root -g root -m 0755 /var/www/html/.well-known/acme-challenge
+
 cat >/etc/nginx/sites-available/ai-price <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+
+    return 444;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name lowpriceradar.com www.lowpriceradar.com ai.lowpriceradar.com;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://lowpriceradar.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2 default_server;
+    listen [::]:443 ssl http2 default_server;
+    server_name _;
+
+    ssl_reject_handshake on;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name lowpriceradar.com;
+
+    ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lowpriceradar.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    server_tokens off;
+
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location ~ ^/(?:admin|api|subscription)(?:/|$) {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "private, no-store, max-age=0" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+    }
 
     client_max_body_size 1m;
 
@@ -251,7 +333,32 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_read_timeout 60s;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name www.lowpriceradar.com ai.lowpriceradar.com;
+
+    ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lowpriceradar.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    server_tokens off;
+
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://lowpriceradar.com$request_uri;
     }
 }
 EOF
@@ -261,13 +368,17 @@ ln -sfn /etc/nginx/sites-available/ai-price /etc/nginx/sites-enabled/ai-price
 nginx -t
 
 systemctl daemon-reload
-systemctl enable --now ai-price.service ai-price-collect.timer nginx
+systemctl enable --now \
+  ai-price.service ai-price-collect.timer nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
 
 sleep 3
 curl -fsS --max-time 15 http://127.0.0.1:3100/ >/dev/null
-curl -fsS --max-time 15 -H "Host: ${PUBLIC_IP}" http://127.0.0.1/ >/dev/null
+curl -fsS --max-time 15 -o /dev/null \
+  -H "Host: ${PRIMARY_DOMAIN}" http://127.0.0.1/
+curl -fsS --max-time 15 --resolve "${PRIMARY_DOMAIN}:443:127.0.0.1" \
+  "https://${PRIMARY_DOMAIN}/" >/dev/null
 
 OBSERVATION_COUNT="$(
   runuser -u postgres -- psql -d ai_price -Atc \
@@ -281,5 +392,5 @@ else
   echo "INITIAL_COLLECTION_FAILED=0"
 fi
 
-echo "DEPLOYED_URL=http://${PUBLIC_IP}"
+echo "DEPLOYED_URL=https://${PRIMARY_DOMAIN}"
 echo "RELEASE_DIR=${RELEASE_DIR}"

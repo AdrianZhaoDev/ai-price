@@ -3,6 +3,7 @@ param(
   [string]$Repository = "AdrianZhaoDev/ai-price",
   [string]$SshAlias = "american-vps",
   [string]$PublicIp = "107.173.87.110",
+  [string]$PublicDomain = "lowpriceradar.com",
   [long]$RunId = 0
 )
 
@@ -187,8 +188,13 @@ chmod 700 /tmp/ai-price-vps-install.sh
   $PublicIp \
   /tmp/ai-price.tar.gz \
   /tmp/ai-price-package-lock.json
-systemctl is-active ai-price.service nginx postgresql ai-price-collect.timer
-curl -fsS -o /dev/null -w 'public=%{http_code}\n' http://$PublicIp/
+systemctl is-active \
+  ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
+curl -fsS --resolve '$PublicDomain`:443:127.0.0.1' \
+  -o /dev/null -w 'origin-https=%{http_code}\n' https://$PublicDomain/
+curl -fsS -o /dev/null -w 'public=%{http_code}\n' https://$PublicDomain/
+curl -fsS -o /dev/null -w 'http-redirect=%{http_code}\n' \
+  http://$PublicDomain/
 curl -sS -o /dev/null -w 'admin-errors=%{http_code}\n' \
   http://127.0.0.1:3100/admin/errors
 "@
