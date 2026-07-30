@@ -427,7 +427,7 @@ openssl x509 -checkend 1209600 -noout \
 
 必须保持：
 
-- SSL/TLS：Full (strict)；
+- SSL/TLS：手动 Full (strict)，Automatic SSL/TLS 必须关闭；
 - Minimum TLS Version：1.2；
 - TLS 1.3、HTTP/2、HTTP/3、Brotli、Always Use HTTPS：启用；
 - DNSSEC：启用且注册商存在 DS；
