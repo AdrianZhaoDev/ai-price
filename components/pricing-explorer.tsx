@@ -20,6 +20,7 @@ import {
   sortOffersByCny,
   visibleApiOffers,
 } from "@/lib/pricing/format";
+import { modeHref } from "@/lib/seo";
 import type {
   ModeDefinition,
   PriceMode,
@@ -38,13 +39,25 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 type PricingExplorerProps = {
+  initialMode: PriceMode;
   modes: ModeDefinition[];
   providers: ProviderCatalogItem[];
   contactEmail: string;
 };
+
+const subscribeToHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerHydratedSnapshot = () => false;
 
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
@@ -70,28 +83,32 @@ function defaultPlanId(provider: ProviderCatalogItem): string | null {
 }
 
 export function PricingExplorer({
+  initialMode,
   modes,
   providers,
   contactEmail,
 }: PricingExplorerProps) {
-  const [activeMode, setActiveMode] = useState<PriceMode>("global");
-  const [selectedProviderId, setSelectedProviderId] = useState("chatgpt");
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(() => {
-    const initialProvider =
-      providers.find(
+  const initialProvider =
+    sortProvidersByRank(
+      providers.filter(
         (provider) =>
-          provider.id === "chatgpt" && hasDisplayableOffers(provider),
-      ) ??
-      sortProvidersByRank(
-        providers.filter(
-          (provider) =>
-            provider.mode === "global" && hasDisplayableOffers(provider),
-        ),
-      )[0];
+          provider.mode === initialMode && hasDisplayableOffers(provider),
+      ),
+    )[0] ?? providers.find((provider) => hasDisplayableOffers(provider));
+  const activeMode = initialMode;
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    initialProvider?.id ?? "",
+  );
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(() => {
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydratedSnapshot,
+  );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [expandedApiProviderIds, setExpandedApiProviderIds] = useState<
     Set<string>
@@ -150,19 +167,6 @@ export function PricingExplorer({
         hour12: false,
       }).format(new Date(selectedProvider.lastCheckedAt))
     : "等待首次采集";
-
-  function changeMode(mode: PriceMode) {
-    const firstProvider = sortProvidersByRank(
-      providers.filter(
-        (provider) => provider.mode === mode && hasDisplayableOffers(provider),
-      ),
-    )[0];
-    if (!firstProvider) return;
-    setActiveMode(mode);
-    setSelectedProviderId(firstProvider.id);
-    setSelectedPlanId(defaultPlanId(firstProvider));
-    setMobileMenuOpen(false);
-  }
 
   function selectProvider(provider: ProviderCatalogItem) {
     setSelectedProviderId(provider.id);
@@ -287,12 +291,15 @@ export function PricingExplorer({
       : selectedProvider.name;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-hydrated={hydrated}>
+      <a className="skip-link" href="#main-content">
+        跳至主要内容
+      </a>
       <header
         className="site-header"
         aria-hidden={sheetOpen ? true : undefined}
       >
-        <a href="#main-content" className="brand" aria-label="AI 价签首页">
+        <Link href="/" className="brand" aria-label="AI 价签首页">
           <span className="brand-mark" aria-hidden="true">
             <span />
             <span />
@@ -301,20 +308,19 @@ export function PricingExplorer({
             <strong>AI 价签</strong>
             <small>官方价格参考</small>
           </span>
-        </a>
+        </Link>
 
         <nav className="desktop-nav" aria-label="价格模式">
           {modes.map((mode) => (
-            <button
+            <a
               key={mode.id}
-              type="button"
+              href={modeHref(mode.id)}
               className="nav-item pressable"
               data-mode={mode.id}
               aria-current={activeMode === mode.id ? "page" : undefined}
-              onClick={() => changeMode(mode.id)}
             >
               {mode.shortLabel}
-            </button>
+            </a>
           ))}
         </nav>
 
@@ -345,16 +351,16 @@ export function PricingExplorer({
               transition={{ duration: 0.18 }}
             >
               {modes.map((mode) => (
-                <button
+                <a
                   key={mode.id}
-                  type="button"
+                  href={modeHref(mode.id)}
                   className="mobile-menu-item"
                   aria-current={activeMode === mode.id ? "page" : undefined}
-                  onClick={() => changeMode(mode.id)}
+                  onClick={() => setMobileMenuOpen(false)}
                 >
                   <span>{mode.label}</span>
                   {activeMode === mode.id ? <CheckCircle2 size={17} /> : null}
-                </button>
+                </a>
               ))}
             </motion.nav>
           ) : null}

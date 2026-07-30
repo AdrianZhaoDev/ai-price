@@ -7,23 +7,25 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 
 ## 1. 固定生产信息
 
-| 项目           | 值                                    |
-| -------------- | ------------------------------------- |
-| SSH            | `ssh american-vps`                    |
-| 公网地址       | `http://107.173.87.110`               |
-| 应用根目录     | `/opt/ai-price`                       |
-| 当前版本软链接 | `/opt/ai-price/current`               |
-| 版本目录       | `/opt/ai-price/releases/<UTC 时间戳>` |
-| 环境变量       | `/etc/ai-price.env`                   |
-| Web 服务       | `ai-price.service`                    |
-| 采集服务       | `ai-price-collect.service`            |
-| 采集 timer     | `ai-price-collect.timer`              |
-| 应用监听       | `127.0.0.1:3100`                      |
-| Nginx          | 公网 80 端口                          |
-| PostgreSQL     | `127.0.0.1:5432`，数据库 `ai_price`   |
-| 当前数据库模式 | 本地读取、本地写入、Neon 异步同步     |
-| 采集出站代理   | WARP Proxy `127.0.0.1:40000`          |
-| 特殊约束       | v2ray 正在占用公网 443                |
+| 项目           | 值                                        |
+| -------------- | ----------------------------------------- |
+| SSH            | `ssh american-vps`                        |
+| 公网地址       | `https://lowpriceradar.com`               |
+| 源站 IP        | `107.173.87.110`（不作为公开访问入口）    |
+| 应用根目录     | `/opt/ai-price`                           |
+| 当前版本软链接 | `/opt/ai-price/current`                   |
+| 版本目录       | `/opt/ai-price/releases/<UTC 时间戳>`     |
+| 环境变量       | `/etc/ai-price.env`                       |
+| Web 服务       | `ai-price.service`                        |
+| 采集服务       | `ai-price-collect.service`                |
+| 采集 timer     | `ai-price-collect.timer`                  |
+| 应用监听       | `127.0.0.1:3100`                          |
+| Nginx          | 公网 80/443 端口                          |
+| 源站证书       | `/etc/letsencrypt/live/lowpriceradar.com` |
+| PostgreSQL     | `127.0.0.1:5432`，数据库 `ai_price`       |
+| 当前数据库模式 | 本地读取、本地写入、Neon 异步同步         |
+| 采集出站代理   | WARP Proxy `127.0.0.1:40000`              |
+| Cloudflare SSL | Full (strict)                             |
 
 ## 2. 强制规则
 
@@ -31,7 +33,8 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 - 不得覆盖或输出 `/etc/ai-price.env`。
 - 不得把 SMTP、数据库或 token 密钥写入仓库、日志或回复。
 - 不得删除 PostgreSQL 数据。
-- 不得修改 v2ray 或占用 443，除非用户明确授权。
+- Nginx 必须保有 80/443；不得恢复旧 v2ray 服务或让其他服务抢占 443。
+- 不得删除 `/etc/letsencrypt`、覆盖证书私钥或停用 `certbot.timer`。
 - 必须用新 release 发布，再原子切换 `current`。
 - VPS 必须执行 `npx next build --webpack`。
 - VPS 不得用 `npm run build`；它是 vinext/Cloudflare 构建。
@@ -115,11 +118,19 @@ ssh american-vps
 
 ```bash
 readlink -f /opt/ai-price/current
-systemctl is-active ai-price.service nginx postgresql ai-price-collect.timer
+systemctl is-active \
+  ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
 curl -fsS -o /dev/null -w "app=%{http_code}\n" http://127.0.0.1:3100/
-curl -fsS -o /dev/null -w "public=%{http_code}\n" http://107.173.87.110/
+curl -fsS --resolve lowpriceradar.com:443:127.0.0.1 \
+  -o /dev/null -w "origin-https=%{http_code}\n" \
+  https://lowpriceradar.com/
+curl -fsS -o /dev/null -w "public=%{http_code}\n" https://lowpriceradar.com/
+curl -sS -o /dev/null -w "http=%{http_code} redirect=%{redirect_url}\n" \
+  http://lowpriceradar.com/
 curl -sS -o /dev/null -w "admin-errors=%{http_code}\n" \
   http://127.0.0.1:3100/admin/errors
+openssl x509 -checkend 1209600 -noout \
+  -in /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'observations=' || count(*) FROM price_observations"
 sudo -u postgres psql -d ai_price -Atc \
@@ -140,8 +151,9 @@ sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
 '
 ```
 
-验收条件：四个服务均为 `active`，公网为 `200`，错误页未登录时重定向，数据库
-记录大于 0，timer 有下次运行时间，Web 日志无持续重启或连接错误。
+验收条件：五个服务/timer 均为 `active`，源站 HTTPS 和公网均为 `200`，HTTP
+一跳 `301` 到主站 HTTPS，错误页未登录时重定向，数据库记录大于 0，timer 有
+下次运行时间，证书剩余至少 14 天，Web 日志无持续重启或连接错误。
 
 ### 3.4 GitHub 不可用时的手工回退
 
@@ -316,6 +328,8 @@ rm -rf -- "$OLD_RELEASE"
 systemctl status ai-price.service --no-pager
 journalctl -u ai-price.service -n 200 --no-pager
 curl -v http://127.0.0.1:3100/
+curl -v --resolve lowpriceradar.com:443:127.0.0.1 \
+  https://lowpriceradar.com/
 nginx -t
 ```
 
@@ -355,6 +369,95 @@ journalctl --disk-usage
 
 ## 9. 域名与 HTTPS
 
-域名接入时需要修改 DNS、Nginx `server_name` 和 `APP_URL`，并签发证书。
+生产主域名为 `https://lowpriceradar.com`。DNS 和边缘 HTTPS 由 Cloudflare
+提供，Cloudflare 必须使用 Full (strict) 连接源站。Nginx 使用 Let's Encrypt
+证书监听 443；80、`www.lowpriceradar.com` 和 `ai.lowpriceradar.com` 均以 301
+一跳重定向到主域名并保留路径和查询参数。
 
-当前 443 被 v2ray 占用。未制定共存方案前，不得让 Nginx 或 Certbot 抢占 443。
+旧 v2ray 服务已于 2026-07-30 经授权退役，443 永久归 Nginx 使用。退役前配置的
+root-only 备份位于 `/var/backups/retired-services/`；正常发布不得恢复旧服务。
+
+### 9.1 首次签发或灾难恢复
+
+正常发布只验证证书，不会重新签发。证书缺失时，先保持现有 HTTP Nginx 可用，再
+执行：
+
+```bash
+apt-get update
+apt-get install -y --no-install-recommends certbot python3-certbot-nginx
+certbot certonly --nginx --non-interactive --agree-tos \
+  --register-unsafely-without-email \
+  --cert-name lowpriceradar.com \
+  -d lowpriceradar.com \
+  -d www.lowpriceradar.com \
+  -d ai.lowpriceradar.com
+systemctl enable --now certbot.timer
+```
+
+签发后先验证源站，再把 Cloudflare 切到 Full (strict)：
+
+```bash
+nginx -t
+curl --resolve lowpriceradar.com:443:127.0.0.1 \
+  https://lowpriceradar.com/
+openssl x509 -noout -subject -issuer -dates \
+  -in /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem
+```
+
+不得先切 Full (strict) 再签发证书，否则会造成 526/回源失败。
+
+### 9.2 续期
+
+Nginx 在 HTTP 和 HTTPS 都保留 `/.well-known/acme-challenge/`。证书续期配置使用
+webroot `/var/www/html`，以兼容 Cloudflare 的 HTTPS 重定向。
+
+```bash
+certbot reconfigure --cert-name lowpriceradar.com \
+  --webroot --webroot-path /var/www/html --non-interactive
+systemctl status certbot.timer --no-pager
+certbot renew --dry-run
+openssl x509 -checkend 1209600 -noout \
+  -in /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem
+```
+
+`reconfigure` 必须在正式 Nginx 配置已加载、三个域名的 HTTP ACME challenge 均能
+公网访问后执行；失败时它不会替换现有续期配置，应先修复 challenge 路径再重试。
+
+### 9.3 Cloudflare 基线
+
+必须保持：
+
+- SSL/TLS：Full (strict)；
+- Minimum TLS Version：1.2；
+- TLS 1.3、HTTP/2、HTTP/3、Brotli、Always Use HTTPS：启用；
+- DNSSEC：启用且注册商存在 DS；
+- HSTS：`max-age=15552000; includeSubDomains`，暂不加入 preload；
+- Early Hints、Crawler Hints：启用；Speed Brain、Rocket Loader、0-RTT：保持关闭；
+- HTML 默认不在边缘强制缓存；只对带内容哈希的 `/_next/static/` 和明确静态资源
+  使用长缓存；
+- `/admin/`、`/api/`、`/subscription/` 必须 `private, no-store`；
+- 源站 80/443 只允许 Cloudflare 官方 IP 段，SSH 规则必须保留。
+
+详细的 SEO、边缘缓存、安全头和趋势观察流程见
+[`SEO_CLOUDFLARE_MONITORING.md`](SEO_CLOUDFLARE_MONITORING.md)。
+
+### 9.4 源站防火墙
+
+UFW 只允许 Cloudflare 官方 IPv4/IPv6 段访问 80/443，SSH 继续使用独立的
+`22/tcp LIMIT` 规则。官方清单：
+
+- `https://www.cloudflare.com/ips-v4`
+- `https://www.cloudflare.com/ips-v6`
+
+每月及 Cloudflare 公告 IP 变更后执行：
+
+```bash
+ufw status numbered
+curl -fsS https://www.cloudflare.com/ips-v4
+curl -fsS https://www.cloudflare.com/ips-v6
+```
+
+把官方新增网段先加入 80/443 allow 规则，确认公网 HTTPS 正常后，才删除已退出
+清单的旧网段。不得先删除全部 Web 规则，不得删除 SSH 规则，也不得重新加入
+`80/tcp ALLOW Anywhere` 或 `443/tcp ALLOW Anywhere`。完成后从 Cloudflare 公网
+访问应为 200，而从非 Cloudflare 地址直连源站 IP 的 80/443 应超时。

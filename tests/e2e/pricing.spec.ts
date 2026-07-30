@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+async function waitForPricingHydration(page: import("@playwright/test").Page) {
+  await expect(page.locator('.app-shell[data-hydrated="true"]')).toBeVisible();
+}
+
 test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
@@ -13,7 +17,9 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
       .locator(".provider-rail-global .provider-button")
       .allTextContents(),
   ).toEqual(["ChatGPT", "Claude / Code", "Gemini", "Grok"]);
-  await page.getByRole("button", { name: "国内订阅" }).click();
+  await waitForPricingHydration(page);
+  await page.getByRole("link", { name: "国内订阅", exact: true }).click();
+  await expect(page).toHaveURL(/\/china-ai-subscriptions$/);
   await expect(
     page.getByRole("heading", { name: "国内 AI 会员，直接看官方价" }),
   ).toBeVisible();
@@ -23,6 +29,7 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   await expect(
     page.locator(".provider-rail .provider-button").first(),
   ).toContainText("智谱资源包");
+  await waitForPricingHydration(page);
   await page.getByRole("button", { name: "MiniMax" }).click();
   await expect(page.getByRole("heading", { name: "MiniMax" })).toBeVisible();
 
@@ -32,6 +39,7 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
 
 test("opens the price alert sheet", async ({ page }) => {
   await page.goto("/");
+  await waitForPricingHydration(page);
   await page.getByRole("button", { name: "关注价格" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByLabel("邮箱")).toBeVisible();
@@ -45,6 +53,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
 }) => {
   test.skip(isMobile, "Desktop price table assertions.");
   await page.goto("/");
+  await waitForPricingHydration(page);
 
   await expect(
     page.locator(".plan-button").filter({ hasText: "ChatGPT Plus" }),
@@ -83,12 +92,12 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   ).map((value) => Number(value.replace(/[^\d.]/g, "")));
   expect(descending).toEqual([...descending].sort((a, b) => b - a));
 
-  await page
-    .getByRole("button", { name: "API 价格排行榜", exact: true })
-    .click();
+  await page.getByRole("link", { name: "API 价格排行榜", exact: true }).click();
+  await expect(page).toHaveURL(/\/api-pricing$/);
   await expect(
     page.getByRole("heading", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
+  await waitForPricingHydration(page);
   const deepSeekButton = page.getByRole("button", {
     name: "DeepSeek",
     exact: true,
@@ -149,17 +158,20 @@ test("mobile navigation and sheet remain usable", async ({
 }) => {
   test.skip(!isMobile, "Mobile-only navigation.");
   await page.goto("/");
+  await waitForPricingHydration(page);
   await expect(page.locator(".mobile-global-details").first()).toBeVisible();
   await page.getByRole("button", { name: "打开价格模式菜单" }).click();
   await page
     .getByRole("navigation", { name: "移动端价格模式" })
-    .getByRole("button", { name: /API 价格排行榜/ })
+    .getByRole("link", { name: /API 价格排行榜/ })
     .click();
+  await expect(page).toHaveURL(/\/api-pricing$/);
   await expect(
     page.getByRole("heading", {
       name: "模型调用成本，按官方单位列清楚",
     }),
   ).toBeVisible();
+  await waitForPricingHydration(page);
   await page.getByRole("button", { name: "关注价格" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 });

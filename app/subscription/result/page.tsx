@@ -1,5 +1,14 @@
 import { CheckCircle2, CircleX, MailCheck } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "订阅状态",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 type ResultPageProps = {
   searchParams: Promise<{ status?: string }>;

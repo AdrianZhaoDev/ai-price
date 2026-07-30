@@ -3,7 +3,7 @@
 ## VPS 生产环境更新规则
 
 本项目的生产环境位于 SSH 别名 `american-vps` 对应的 VPS，当前通过
-`http://107.173.87.110` 提供服务。
+`https://lowpriceradar.com` 提供服务。
 
 任何代理或维护者执行生产环境部署、代码更新、环境变量修改、SMTP 配置、数据库
 迁移、定时采集调整、Nginx 修改、域名接入、HTTPS 配置、回滚或故障排查之前，
@@ -41,8 +41,8 @@
   `npm run build` 作为 VPS 生产构建。
 - 不得把 `/etc/ai-price.env`、SMTP 密码、邮箱授权码、数据库密码或其他生产密钥
   写入仓库、日志、提交信息或对话回复。
-- 更新时必须保留 PostgreSQL 数据、`/etc/ai-price.env`、现有 v2ray 服务及其占用
-  的 443 端口，除非用户明确授权对应变更。
+- 更新时必须保留 PostgreSQL 数据、`/etc/ai-price.env`、Let's Encrypt 证书和
+  Certbot 自动续期配置，除非用户明确授权对应变更。
 - 数据库迁移前必须按文档创建备份；可能不向后兼容的迁移必须先制定数据库回滚
   方案。
 - 发布完成后必须检查 Web、Nginx、PostgreSQL、采集 timer、公网 HTTP、数据库

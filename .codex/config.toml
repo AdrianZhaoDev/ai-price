@@ -1,0 +1,5 @@
+[mcp_servers.ahrefs]
+url = "https://api.ahrefs.com/mcp/mcp"
+
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
