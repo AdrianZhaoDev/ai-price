@@ -90,6 +90,9 @@ else
   NEW_ENVIRONMENT=0
 fi
 
+chown root:"${SERVICE_USER}" "${ENV_FILE}"
+chmod 0640 "${ENV_FILE}"
+
 set -a
 # shellcheck disable=SC1090
 source "${ENV_FILE}"

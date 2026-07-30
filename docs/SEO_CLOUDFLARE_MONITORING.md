@@ -22,7 +22,8 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 
 2026-07-30 已完成：
 
-- Cloudflare Full (strict)、Minimum TLS 1.2、TLS 1.3、HTTP/3、Brotli；
+- Cloudflare 手动 Full (strict)（自动模式关闭）、Minimum TLS 1.2、TLS 1.3、
+  HTTP/3、Brotli；
 - HSTS 6 个月并包含子域，未启用 preload；
 - Early Hints、Crawler Hints 已启用；
 - Speed Brain、Rocket Loader、0-RTT 保持关闭，避免 beta 预取、脚本改写和请求重放风险；

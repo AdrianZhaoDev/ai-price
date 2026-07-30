@@ -191,13 +191,22 @@ chmod 700 /tmp/ai-price-vps-install.sh
   /tmp/ai-price-package-lock.json
 systemctl is-active \
   ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
-curl -fsS --resolve '$PublicDomain`:443:127.0.0.1' \
-  -o /dev/null -w 'origin-https=%{http_code}\n' https://$PublicDomain/
-curl -fsS -o /dev/null -w 'public=%{http_code}\n' https://$PublicDomain/
-curl -fsS -o /dev/null -w 'http-redirect=%{http_code}\n' \
-  http://$PublicDomain/
-curl -sS -o /dev/null -w 'admin-errors=%{http_code}\n' \
-  http://127.0.0.1:3100/admin/errors
+origin_status=`$(curl -sS --resolve '$PublicDomain`:443:127.0.0.1' \
+  -o /dev/null -w '%{http_code}' https://$PublicDomain/)
+public_status=`$(curl -sS -o /dev/null -w '%{http_code}' \
+  https://$PublicDomain/)
+http_status=`$(curl -sS -o /dev/null -w '%{http_code}' \
+  http://$PublicDomain/)
+admin_status=`$(curl -sS -o /dev/null -w '%{http_code}' \
+  http://127.0.0.1:3100/admin/errors)
+printf 'origin-https=%s\n' "`$origin_status"
+printf 'public=%s\n' "`$public_status"
+printf 'http-redirect=%s\n' "`$http_status"
+printf 'admin-errors=%s\n' "`$admin_status"
+[[ "`$origin_status" == "200" ]]
+[[ "`$public_status" == "200" ]]
+[[ "`$http_status" == "301" ]]
+[[ "`$admin_status" == "307" ]]
 "@
   $deployCommand = $deployCommand.Replace("`r", "")
   ssh $SshAlias $deployCommand
