@@ -299,6 +299,26 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
             }),
           ),
       ).toBe(true);
+      expect(
+        await page.locator(".desktop-nav").evaluate((navigation) => {
+          const items = [...navigation.querySelectorAll(".nav-item")];
+          return (
+            navigation.scrollWidth <= navigation.clientWidth &&
+            items.length === 3 &&
+            items.every((item) => {
+              const style = getComputedStyle(item);
+              return (
+                item.scrollWidth <= item.clientWidth &&
+                item.getBoundingClientRect().height >= 48 &&
+                Number.parseFloat(style.fontSize) >= 12
+              );
+            })
+          );
+        }),
+      ).toBe(true);
+      expect(
+        await page.locator(".desktop-nav .nav-item").allTextContents(),
+      ).toEqual(["全球区价", "国内订阅", "API 价格排行榜"]);
     }
   }
 
