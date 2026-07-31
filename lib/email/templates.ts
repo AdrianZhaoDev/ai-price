@@ -1,6 +1,5 @@
-type ConfirmationTemplateInput = {
+type SubscriptionCreatedTemplateInput = {
   scopeLabel: string;
-  confirmUrl: string;
   unsubscribeUrl: string;
 };
 
@@ -71,26 +70,23 @@ function safeHttpUrl(value: string): string {
   }
 }
 
-export function confirmationEmail({
+export function subscriptionCreatedEmail({
   scopeLabel,
-  confirmUrl,
   unsubscribeUrl,
-}: ConfirmationTemplateInput) {
+}: SubscriptionCreatedTemplateInput) {
   const safeScopeLabel = escapeHtml(scopeLabel);
-  const safeConfirmUrl = safeHttpUrl(confirmUrl);
   const safeUnsubscribeUrl = safeHttpUrl(unsubscribeUrl);
   const html = shell(`
-    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:700;">确认价格关注</p>
-    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">关注 ${safeScopeLabel}</h1>
-    <p style="margin:0 0 22px;color:#5f5f65;font-size:14px;line-height:1.7;">点击下面的按钮确认邮箱。之后仅在价格或套餐发生变化时通知你。</p>
-    <a href="${safeConfirmUrl}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:650;">确认订阅</a>
-    <p style="margin:22px 0 0;color:#85858c;font-size:11px;line-height:1.6;">如果不是你发起的请求，可以忽略本邮件或 <a href="${safeUnsubscribeUrl}" style="color:#0066cc;">取消请求</a>。</p>
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:700;">价格关注已生效</p>
+    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">已关注 ${safeScopeLabel}</h1>
+    <p style="margin:0;color:#5f5f65;font-size:14px;line-height:1.7;">订阅已经成功。之后仅在价格或套餐发生变化时通知你，无需再点击确认。</p>
+    <p style="margin:22px 0 0;color:#85858c;font-size:11px;line-height:1.6;">不再需要这项通知？<a href="${safeUnsubscribeUrl}" style="color:#0066cc;">取消订阅</a></p>
   `);
 
   return {
-    subject: `确认关注 ${scopeLabel} 的价格`,
+    subject: `已成功关注 ${scopeLabel} 的价格`,
     html,
-    text: `确认关注 ${scopeLabel} 的价格：${confirmUrl}\n\n如果不是你发起的请求：${unsubscribeUrl}`,
+    text: `您已成功关注 ${scopeLabel} 的价格。价格或套餐发生变化时，我们会发送邮件。\n\n取消订阅：${unsubscribeUrl}`,
   };
 }
 

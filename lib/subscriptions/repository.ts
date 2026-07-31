@@ -13,18 +13,24 @@ import {
 } from "@/lib/security/tokens";
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 
-type PendingSubscriptionInput = {
+type ActiveSubscriptionInput = {
   email: string;
   providerSlug: string;
   planSlug: string | null;
 };
 
-type PendingSubscriptionResult = {
-  confirmationToken: string;
-  unsubscribeToken: string;
-  subscriptionId: string;
-  email: string;
-};
+type ActiveSubscriptionResult =
+  | {
+      alreadySubscribed: true;
+      subscriptionId: string;
+      email: string;
+    }
+  | {
+      alreadySubscribed: false;
+      unsubscribeToken: string;
+      subscriptionId: string;
+      email: string;
+    };
 
 type MemoryToken = {
   subscriptionId: string;
@@ -75,74 +81,74 @@ function memoryScopeKey(
 }
 
 async function createMemorySubscription(
-  input: PendingSubscriptionInput,
-): Promise<PendingSubscriptionResult> {
+  input: ActiveSubscriptionInput,
+): Promise<ActiveSubscriptionResult> {
   const planSlug = input.planSlug ?? "*";
   const key = memoryScopeKey(input.email, input.providerSlug, planSlug);
   const existing = memorySubscriptions.get(key);
   const subscriptionId = existing?.id ?? crypto.randomUUID();
-  const confirmationToken = createOpaqueToken();
-  const unsubscribeToken = createOpaqueToken();
+  const alreadySubscribed = existing?.status === "active";
 
   memorySubscriptions.set(key, {
     id: subscriptionId,
     email: normalizeEmail(input.email),
     providerSlug: input.providerSlug,
     planSlug,
-    status: existing?.status === "active" ? "active" : "pending",
+    status: "active",
   });
-  memoryTokens.set(hashToken(confirmationToken, emailTokenSecret()), {
-    subscriptionId,
-    purpose: "confirm_subscription",
-    expiresAt: addHours(new Date(), 24).getTime(),
-    consumed: false,
-  });
-  memoryTokens.set(hashToken(unsubscribeToken, emailTokenSecret()), {
-    subscriptionId,
-    purpose: "unsubscribe",
-    expiresAt: addHours(new Date(), 24 * 365).getTime(),
-    consumed: false,
-  });
+  const unsubscribeToken = alreadySubscribed ? undefined : createOpaqueToken();
+  if (unsubscribeToken) {
+    memoryTokens.set(hashToken(unsubscribeToken, emailTokenSecret()), {
+      subscriptionId,
+      purpose: "unsubscribe",
+      expiresAt: addHours(new Date(), 24 * 365).getTime(),
+      consumed: false,
+    });
+  }
 
-  return {
-    confirmationToken,
-    unsubscribeToken,
-    subscriptionId,
-    email: normalizeEmail(input.email),
-  };
+  return alreadySubscribed
+    ? {
+        alreadySubscribed: true,
+        subscriptionId,
+        email: normalizeEmail(input.email),
+      }
+    : {
+        alreadySubscribed: false,
+        unsubscribeToken: unsubscribeToken!,
+        subscriptionId,
+        email: normalizeEmail(input.email),
+      };
 }
 
-export async function createPendingSubscription(
-  input: PendingSubscriptionInput,
-): Promise<PendingSubscriptionResult> {
+export async function createActiveSubscription(
+  input: ActiveSubscriptionInput,
+): Promise<ActiveSubscriptionResult> {
   if (!isDatabaseConfigured()) {
     return createMemorySubscription(input);
   }
 
   const db = getDatabase();
+  const now = new Date();
   const email = normalizeEmail(input.email);
   const emailDigest = hashEmail(email);
   const planSlug = input.planSlug ?? "*";
-  const confirmationToken = createOpaqueToken();
-  const unsubscribeToken = createOpaqueToken();
-  const secret = emailTokenSecret();
 
   return db.transaction(async (tx) => {
-    let [subscriber] = await tx
-      .select()
-      .from(subscribers)
-      .where(eq(subscribers.emailHash, emailDigest))
-      .limit(1);
-
-    if (!subscriber) {
-      [subscriber] = await tx
-        .insert(subscribers)
-        .values({
+    const [subscriber] = await tx
+      .insert(subscribers)
+      .values({
+        emailNormalized: email,
+        emailHash: emailDigest,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: subscribers.emailHash,
+        set: {
           emailNormalized: email,
-          emailHash: emailDigest,
-        })
-        .returning();
-    }
+          updatedAt: now,
+        },
+      })
+      .returning();
 
     let [subscription] = await tx
       .select()
@@ -154,17 +160,26 @@ export async function createPendingSubscription(
           eq(subscriptions.planSlug, planSlug),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
+
+    const alreadySubscribed = subscription?.status === "active";
+    if (alreadySubscribed) {
+      return {
+        alreadySubscribed: true,
+        subscriptionId: subscription.id,
+        email,
+      };
+    }
 
     if (subscription) {
-      const alreadyActive = subscription.status === "active";
       [subscription] = await tx
         .update(subscriptions)
         .set({
-          status: alreadyActive ? "active" : "pending",
-          confirmedAt: alreadyActive ? subscription.confirmedAt : null,
+          status: "active",
+          confirmedAt: now,
           unsubscribedAt: null,
-          updatedAt: new Date(),
+          updatedAt: now,
         })
         .where(eq(subscriptions.id, subscription.id))
         .returning();
@@ -175,27 +190,22 @@ export async function createPendingSubscription(
           subscriberId: subscriber.id,
           providerSlug: input.providerSlug,
           planSlug,
+          status: "active",
+          confirmedAt: now,
         })
         .returning();
     }
 
-    await tx.insert(confirmationTokens).values([
-      {
-        subscriptionId: subscription.id,
-        purpose: "confirm_subscription",
-        tokenHash: hashToken(confirmationToken, secret),
-        expiresAt: addHours(new Date(), 24),
-      },
-      {
-        subscriptionId: subscription.id,
-        purpose: "unsubscribe",
-        tokenHash: hashToken(unsubscribeToken, secret),
-        expiresAt: addHours(new Date(), 24 * 365),
-      },
-    ]);
+    const unsubscribeToken = createOpaqueToken();
+    await tx.insert(confirmationTokens).values({
+      subscriptionId: subscription.id,
+      purpose: "unsubscribe",
+      tokenHash: hashToken(unsubscribeToken, emailTokenSecret()),
+      expiresAt: addHours(now, 24 * 365),
+    });
 
     return {
-      confirmationToken,
+      alreadySubscribed: false,
       unsubscribeToken,
       subscriptionId: subscription.id,
       email,
@@ -223,6 +233,12 @@ async function consumeMemoryToken(
   if (!subscription) return false;
 
   token.consumed = true;
+  if (
+    purpose === "confirm_subscription" &&
+    subscription.status === "unsubscribed"
+  ) {
+    return false;
+  }
   subscription.status =
     purpose === "confirm_subscription" ? "active" : "unsubscribed";
   return true;
@@ -249,14 +265,25 @@ export async function confirmSubscription(rawToken: string): Promise<boolean> {
           gt(confirmationTokens.expiresAt, now),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!token) return false;
+
+    const [subscription] = await tx
+      .select({ status: subscriptions.status })
+      .from(subscriptions)
+      .where(eq(subscriptions.id, token.subscriptionId))
+      .limit(1)
+      .for("update");
 
     await tx
       .update(confirmationTokens)
       .set({ consumedAt: now })
       .where(eq(confirmationTokens.id, token.id));
+    if (!subscription || subscription.status === "unsubscribed") {
+      return false;
+    }
     await tx
       .update(subscriptions)
       .set({
@@ -292,7 +319,8 @@ export async function unsubscribe(rawToken: string): Promise<boolean> {
           gt(confirmationTokens.expiresAt, now),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!token) return false;
 

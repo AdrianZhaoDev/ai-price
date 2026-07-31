@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   confirmSubscription,
-  createPendingSubscription,
+  createActiveSubscription,
   createUnsubscribeToken,
   listActivePriceSubscribers,
   resetMemorySubscriptionsForTests,
@@ -16,45 +16,59 @@ describe("memory subscription repository", () => {
     resetMemorySubscriptionsForTests();
   });
 
-  it("confirms, lists and unsubscribes a scoped subscriber", async () => {
-    const pending = await createPendingSubscription({
+  it("activates, deduplicates and unsubscribes a scoped subscriber", async () => {
+    const created = await createActiveSubscription({
       email: " User@Example.com ",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-plus-monthly",
     });
-    expect(pending.email).toBe("user@example.com");
-    expect(await confirmSubscription(pending.confirmationToken)).toBe(true);
-    expect(await confirmSubscription(pending.confirmationToken)).toBe(false);
+    expect(created.email).toBe("user@example.com");
+    expect(created.alreadySubscribed).toBe(false);
+    if (created.alreadySubscribed)
+      throw new Error("Expected a new subscription.");
+    expect(created.unsubscribeToken).toBeDefined();
     expect(
       await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
     ).toHaveLength(1);
-    await createPendingSubscription({
+    const duplicate = await createActiveSubscription({
       email: "user@example.com",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-plus-monthly",
     });
+    expect(duplicate.alreadySubscribed).toBe(true);
     expect(
       await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
     ).toHaveLength(1);
 
-    const token = await createUnsubscribeToken(pending.subscriptionId);
+    const token = await createUnsubscribeToken(created.subscriptionId);
     expect(await unsubscribe(token)).toBe(true);
     expect(
       await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
     ).toHaveLength(0);
+
+    const reactivated = await createActiveSubscription({
+      email: "user@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-plus-monthly",
+    });
+    expect(reactivated.alreadySubscribed).toBe(false);
+    expect(
+      await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
+    ).toHaveLength(1);
   });
 
   it("rejects wrong tokens and supports provider-wide subscriptions", async () => {
-    const pending = await createPendingSubscription({
+    const created = await createActiveSubscription({
       email: "user@example.com",
       providerSlug: "kimi-membership",
       planSlug: null,
     });
     expect(await confirmSubscription("wrong")).toBe(false);
-    await confirmSubscription(pending.confirmationToken);
+    if (created.alreadySubscribed)
+      throw new Error("Expected a new subscription.");
     expect(
       await listActivePriceSubscribers("kimi-membership", "any-plan"),
     ).toHaveLength(1);
-    expect(await unsubscribe(pending.unsubscribeToken)).toBe(true);
+    expect(await unsubscribe(created.unsubscribeToken)).toBe(true);
   });
 });

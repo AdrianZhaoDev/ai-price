@@ -1,8 +1,13 @@
 import { providerCatalog } from "@/lib/data/catalog";
-import { hashEmail } from "@/lib/security/tokens";
-import { checkRateLimit } from "@/lib/security/rate-limit";
-import { requestPriceSubscription } from "@/lib/subscriptions/service";
-import { NextRequest, NextResponse } from "next/server";
+import {
+  checkSubscriptionRateLimit,
+  type SubscriptionRateLimitResult,
+} from "@/lib/security/subscription-rate-limit";
+import {
+  requestPriceSubscription,
+  sendSubscriptionCreatedEmail,
+} from "@/lib/subscriptions/service";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const requestSchema = z.object({
@@ -11,21 +16,31 @@ const requestSchema = z.object({
   planId: z.string().min(1).max(120).nullable().optional(),
 });
 
-export async function POST(request: NextRequest) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() || "unknown";
-  const rateLimit = checkRateLimit(`subscribe:${ip}`, 5, 10 * 60 * 1000);
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "unknown"
+  );
+}
 
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { message: "请求过于频繁，请稍后再试。" },
-      {
-        status: 429,
-        headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
-      },
-    );
+function rateLimitMessage(
+  rateLimit: Exclude<SubscriptionRateLimitResult, { allowed: true }>,
+): string {
+  switch (rateLimit.reason) {
+    case "same_scope_different_email":
+      return `同一关注使用不同邮箱时需间隔 60 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
+    case "different_scope_different_email":
+      return `同时更换关注和邮箱时需间隔 120 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
+    case "different_scope_same_email":
+      return `同一邮箱更换关注时需间隔 10 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
+    case "ip_daily":
+      return "同一 IP 24 小时内最多提交 10 次订阅，请稍后再试。";
   }
+}
 
+export async function POST(request: NextRequest) {
   let body: unknown;
   try {
     body = await request.json();
@@ -41,23 +56,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const emailRateLimit = checkRateLimit(
-    `subscribe:email:${hashEmail(parsed.data.email)}`,
-    3,
-    60 * 60 * 1000,
-  );
-  if (!emailRateLimit.allowed) {
-    return NextResponse.json(
-      { message: "该邮箱的确认邮件发送过于频繁，请稍后再试。" },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(emailRateLimit.retryAfterSeconds),
-        },
-      },
-    );
-  }
-
   const provider = providerCatalog.find(
     (candidate) => candidate.id === parsed.data.providerId,
   );
@@ -69,15 +67,52 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const rateLimit = await checkSubscriptionRateLimit({
+      ipAddress: clientIp(request),
+      email: parsed.data.email,
+      providerSlug: parsed.data.providerId,
+      planSlug: parsed.data.planId ?? null,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { message: rateLimitMessage(rateLimit) },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+          },
+        },
+      );
+    }
+
     const result = await requestPriceSubscription({
       email: parsed.data.email,
       providerId: parsed.data.providerId,
       planId: parsed.data.planId ?? null,
     });
+    if (result.status === "already_subscribed") {
+      return NextResponse.json({
+        status: result.status,
+        message: "您已订阅，请勿重复订阅。",
+      });
+    }
+
+    after(async () => {
+      try {
+        await sendSubscriptionCreatedEmail(result.emailTask);
+      } catch (error) {
+        console.error("Subscription email delivery failed.", {
+          subscriptionId: result.emailTask.subscriptionId,
+          providerId: parsed.data.providerId,
+          planId: parsed.data.planId ?? null,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    });
 
     return NextResponse.json({
-      message: "确认邮件已经发送，请检查收件箱。",
-      ...result,
+      status: result.status,
+      message: "您已订阅成功！",
     });
   } catch (error) {
     console.error("Subscription request failed.", {

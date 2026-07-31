@@ -12,7 +12,11 @@ export function normalizeEmail(email: string): string {
 }
 
 export function hashEmail(email: string): string {
-  return createHash("sha256").update(normalizeEmail(email)).digest("hex");
+  return hashValue(normalizeEmail(email));
+}
+
+export function hashValue(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 export function createOpaqueToken(): string {

@@ -57,8 +57,8 @@ test("submits a real subscription payload without an autofill honeypot", async (
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        message: "确认邮件已经发送，请检查收件箱。",
-        previewConfirmUrl: "/api/subscriptions/confirm?token=local-preview",
+        status: "subscribed",
+        message: "您已订阅成功！",
       }),
     });
   });
@@ -67,17 +67,43 @@ test("submits a real subscription payload without an autofill honeypot", async (
   await waitForPricingHydration(page);
   await page.getByRole("button", { name: "关注价格" }).click();
   await page.getByLabel("邮箱").fill("reader@example.com");
-  await page.getByRole("button", { name: "发送确认邮件" }).click();
+  await page.getByRole("button", { name: "立即订阅" }).click();
 
-  await expect(page.getByRole("heading", { name: "还差一步" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "本地测试：打开确认链接" }),
+    page.getByRole("heading", { name: "您已订阅成功！" }),
   ).toBeVisible();
+  await expect(page.getByText("无需点击确认")).toBeVisible();
   expect(requestPayload).toMatchObject({
     email: "reader@example.com",
     providerId: "chatgpt",
   });
   expect(requestPayload).not.toHaveProperty("website");
+});
+
+test("shows an already-subscribed notice for an identical subscription", async ({
+  page,
+}) => {
+  await page.route("**/api/subscriptions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "already_subscribed",
+        message: "您已订阅，请勿重复订阅。",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "您已订阅，请勿重复订阅。" }),
+  ).toBeVisible();
+  await expect(page.getByText("无需再次提交")).toBeVisible();
 });
 
 test("shows ranked RMB prices without duplicate or status-only plans", async ({
