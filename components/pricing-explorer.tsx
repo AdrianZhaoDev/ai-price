@@ -547,11 +547,7 @@ export function PricingExplorer({
               aria-current={activeMode === mode.id ? "page" : undefined}
               aria-label={mode.shortLabel}
             >
-              <span
-                className={mode.id === "api" ? "nav-label-wide" : undefined}
-              >
-                {mode.shortLabel}
-              </span>
+              {mode.shortLabel}
               {mode.id === "api" ? (
                 <span className="nav-label-compact" aria-hidden="true">
                   API 榜单

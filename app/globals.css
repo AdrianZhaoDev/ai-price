@@ -1808,15 +1808,13 @@ input:focus-visible {
 
   .nav-item[data-mode="api"] {
     line-height: 1;
+    font-size: 0;
     white-space: nowrap;
-  }
-
-  .nav-item[data-mode="api"] .nav-label-wide {
-    display: none;
   }
 
   .nav-label-compact {
     display: inline;
+    font-size: clamp(12px, 3.4vw, 13px);
   }
 
   .nav-item[aria-current="page"] {
