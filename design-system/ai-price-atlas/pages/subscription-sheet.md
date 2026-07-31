@@ -17,4 +17,4 @@ Collect one email address and the selected product or plan without interrupting 
 
 - Solid or strongly frosted surface; never stack translucent layers.
 - One email field, one scope summary, one primary action.
-- Confirmation and privacy copy limited to one concise sentence each.
+- Success and privacy copy limited to one concise sentence each.

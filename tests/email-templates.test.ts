@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   adminAlertEmail,
-  confirmationEmail,
   escapeHtml,
   priceChangeEmail,
+  subscriptionCreatedEmail,
 } from "@/lib/email/templates";
 
 describe("email templates", () => {
@@ -11,21 +11,20 @@ describe("email templates", () => {
     expect(escapeHtml(`<tag a="1">&'</tag>`)).toBe(
       "&lt;tag a=&quot;1&quot;&gt;&amp;&#39;&lt;/tag&gt;",
     );
-    const message = confirmationEmail({
+    const message = subscriptionCreatedEmail({
       scopeLabel: "<script>alert(1)</script>",
-      confirmUrl: "javascript:alert(1)",
       unsubscribeUrl: "https://example.com/unsubscribe",
     });
     expect(message.html).not.toContain("<script>");
-    expect(message.html).toContain('href="#"');
+    expect(message.html).toContain("取消订阅");
+    expect(message.html).not.toContain("确认订阅");
     expect(message.subject).toContain("<script>");
     expect(
-      confirmationEmail({
+      subscriptionCreatedEmail({
         scopeLabel: "Plan",
-        confirmUrl: "not a url",
         unsubscribeUrl: "ftp://example.com/file",
       }).html.match(/href="#"/g),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it("renders price changes and admin alerts", () => {

@@ -11,19 +11,18 @@ import {
   hashToken,
   normalizeEmail,
 } from "@/lib/security/tokens";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 
-type PendingSubscriptionInput = {
+type ActiveSubscriptionInput = {
   email: string;
   providerSlug: string;
   planSlug: string | null;
 };
 
-type PendingSubscriptionResult = {
-  confirmationToken: string;
-  unsubscribeToken: string;
+type ActiveSubscriptionResult = {
+  alreadySubscribed: boolean;
+  emailNotificationPending: boolean;
   subscriptionId: string;
-  email: string;
 };
 
 type MemoryToken = {
@@ -39,6 +38,11 @@ type MemorySubscription = {
   providerSlug: string;
   planSlug: string;
   status: "pending" | "active" | "unsubscribed";
+  successEmailPending: boolean;
+  successEmailAttempts: number;
+  successEmailNextAttemptAt: number | null;
+  successEmailLockedAt: number | null;
+  successEmailSentAt: number | null;
 };
 
 const globalMemory = globalThis as typeof globalThis & {
@@ -75,74 +79,74 @@ function memoryScopeKey(
 }
 
 async function createMemorySubscription(
-  input: PendingSubscriptionInput,
-): Promise<PendingSubscriptionResult> {
+  input: ActiveSubscriptionInput,
+): Promise<ActiveSubscriptionResult> {
   const planSlug = input.planSlug ?? "*";
   const key = memoryScopeKey(input.email, input.providerSlug, planSlug);
   const existing = memorySubscriptions.get(key);
   const subscriptionId = existing?.id ?? crypto.randomUUID();
-  const confirmationToken = createOpaqueToken();
-  const unsubscribeToken = createOpaqueToken();
+  const alreadySubscribed = existing?.status === "active";
+  const emailNotificationPending = alreadySubscribed
+    ? (existing.successEmailPending ?? false)
+    : true;
 
   memorySubscriptions.set(key, {
     id: subscriptionId,
     email: normalizeEmail(input.email),
     providerSlug: input.providerSlug,
     planSlug,
-    status: existing?.status === "active" ? "active" : "pending",
-  });
-  memoryTokens.set(hashToken(confirmationToken, emailTokenSecret()), {
-    subscriptionId,
-    purpose: "confirm_subscription",
-    expiresAt: addHours(new Date(), 24).getTime(),
-    consumed: false,
-  });
-  memoryTokens.set(hashToken(unsubscribeToken, emailTokenSecret()), {
-    subscriptionId,
-    purpose: "unsubscribe",
-    expiresAt: addHours(new Date(), 24 * 365).getTime(),
-    consumed: false,
+    status: "active",
+    successEmailPending: emailNotificationPending,
+    successEmailAttempts: alreadySubscribed
+      ? (existing.successEmailAttempts ?? 0)
+      : 0,
+    successEmailNextAttemptAt: alreadySubscribed
+      ? (existing.successEmailNextAttemptAt ?? null)
+      : Date.now(),
+    successEmailLockedAt: alreadySubscribed
+      ? (existing.successEmailLockedAt ?? null)
+      : null,
+    successEmailSentAt: alreadySubscribed
+      ? (existing.successEmailSentAt ?? null)
+      : null,
   });
 
   return {
-    confirmationToken,
-    unsubscribeToken,
+    alreadySubscribed,
+    emailNotificationPending,
     subscriptionId,
-    email: normalizeEmail(input.email),
   };
 }
 
-export async function createPendingSubscription(
-  input: PendingSubscriptionInput,
-): Promise<PendingSubscriptionResult> {
+export async function createActiveSubscription(
+  input: ActiveSubscriptionInput,
+): Promise<ActiveSubscriptionResult> {
   if (!isDatabaseConfigured()) {
     return createMemorySubscription(input);
   }
 
   const db = getDatabase();
+  const now = new Date();
   const email = normalizeEmail(input.email);
   const emailDigest = hashEmail(email);
   const planSlug = input.planSlug ?? "*";
-  const confirmationToken = createOpaqueToken();
-  const unsubscribeToken = createOpaqueToken();
-  const secret = emailTokenSecret();
 
   return db.transaction(async (tx) => {
-    let [subscriber] = await tx
-      .select()
-      .from(subscribers)
-      .where(eq(subscribers.emailHash, emailDigest))
-      .limit(1);
-
-    if (!subscriber) {
-      [subscriber] = await tx
-        .insert(subscribers)
-        .values({
+    const [subscriber] = await tx
+      .insert(subscribers)
+      .values({
+        emailNormalized: email,
+        emailHash: emailDigest,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: subscribers.emailHash,
+        set: {
           emailNormalized: email,
-          emailHash: emailDigest,
-        })
-        .returning();
-    }
+          updatedAt: now,
+        },
+      })
+      .returning();
 
     let [subscription] = await tx
       .select()
@@ -154,17 +158,31 @@ export async function createPendingSubscription(
           eq(subscriptions.planSlug, planSlug),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
+
+    const alreadySubscribed = subscription?.status === "active";
+    if (alreadySubscribed) {
+      return {
+        alreadySubscribed: true,
+        emailNotificationPending: subscription.successEmailPending,
+        subscriptionId: subscription.id,
+      };
+    }
 
     if (subscription) {
-      const alreadyActive = subscription.status === "active";
       [subscription] = await tx
         .update(subscriptions)
         .set({
-          status: alreadyActive ? "active" : "pending",
-          confirmedAt: alreadyActive ? subscription.confirmedAt : null,
+          status: "active",
+          confirmedAt: now,
           unsubscribedAt: null,
-          updatedAt: new Date(),
+          successEmailPending: true,
+          successEmailAttempts: 0,
+          successEmailNextAttemptAt: now,
+          successEmailLockedAt: null,
+          successEmailSentAt: null,
+          updatedAt: now,
         })
         .where(eq(subscriptions.id, subscription.id))
         .returning();
@@ -175,32 +193,203 @@ export async function createPendingSubscription(
           subscriberId: subscriber.id,
           providerSlug: input.providerSlug,
           planSlug,
+          status: "active",
+          confirmedAt: now,
+          successEmailPending: true,
+          successEmailAttempts: 0,
+          successEmailNextAttemptAt: now,
         })
         .returning();
     }
 
-    await tx.insert(confirmationTokens).values([
-      {
-        subscriptionId: subscription.id,
-        purpose: "confirm_subscription",
-        tokenHash: hashToken(confirmationToken, secret),
-        expiresAt: addHours(new Date(), 24),
-      },
-      {
-        subscriptionId: subscription.id,
-        purpose: "unsubscribe",
-        tokenHash: hashToken(unsubscribeToken, secret),
-        expiresAt: addHours(new Date(), 24 * 365),
-      },
-    ]);
-
     return {
-      confirmationToken,
-      unsubscribeToken,
+      alreadySubscribed: false,
+      emailNotificationPending: true,
       subscriptionId: subscription.id,
-      email,
     };
   });
+}
+
+const SUCCESS_EMAIL_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+
+export type SubscriptionEmailClaim = {
+  subscriptionId: string;
+  email: string;
+  providerSlug: string;
+  planSlug: string;
+  attempt: number;
+};
+
+function canClaimSuccessEmail(
+  subscription: MemorySubscription,
+  nowMs: number,
+): boolean {
+  return (
+    subscription.status === "active" &&
+    subscription.successEmailPending &&
+    (subscription.successEmailNextAttemptAt === null ||
+      subscription.successEmailNextAttemptAt <= nowMs) &&
+    (subscription.successEmailLockedAt === null ||
+      subscription.successEmailLockedAt <=
+        nowMs - SUCCESS_EMAIL_CLAIM_TIMEOUT_MS)
+  );
+}
+
+export async function claimSubscriptionCreatedEmail(
+  subscriptionId: string,
+  now = new Date(),
+): Promise<SubscriptionEmailClaim | null> {
+  if (!isDatabaseConfigured()) {
+    const subscription = [...memorySubscriptions.values()].find(
+      (candidate) => candidate.id === subscriptionId,
+    );
+    if (!subscription || !canClaimSuccessEmail(subscription, now.getTime())) {
+      return null;
+    }
+    subscription.successEmailAttempts += 1;
+    subscription.successEmailLockedAt = now.getTime();
+    return {
+      subscriptionId,
+      email: subscription.email,
+      providerSlug: subscription.providerSlug,
+      planSlug: subscription.planSlug,
+      attempt: subscription.successEmailAttempts,
+    };
+  }
+
+  const staleBefore = new Date(now.getTime() - SUCCESS_EMAIL_CLAIM_TIMEOUT_MS);
+  const [claimed] = await getDatabase()
+    .update(subscriptions)
+    .set({
+      successEmailAttempts: sql`${subscriptions.successEmailAttempts} + 1`,
+      successEmailLockedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(subscriptions.id, subscriptionId),
+        eq(subscriptions.status, "active"),
+        eq(subscriptions.successEmailPending, true),
+        or(
+          isNull(subscriptions.successEmailNextAttemptAt),
+          lte(subscriptions.successEmailNextAttemptAt, now),
+        ),
+        or(
+          isNull(subscriptions.successEmailLockedAt),
+          lte(subscriptions.successEmailLockedAt, staleBefore),
+        ),
+      ),
+    )
+    .returning({
+      id: subscriptions.id,
+      providerSlug: subscriptions.providerSlug,
+      planSlug: subscriptions.planSlug,
+      attempt: subscriptions.successEmailAttempts,
+      subscriberId: subscriptions.subscriberId,
+    });
+  if (!claimed) return null;
+
+  const [subscriber] = await getDatabase()
+    .select({ email: subscribers.emailNormalized })
+    .from(subscribers)
+    .where(eq(subscribers.id, claimed.subscriberId))
+    .limit(1);
+  if (!subscriber) return null;
+
+  return {
+    subscriptionId: claimed.id,
+    email: subscriber.email,
+    providerSlug: claimed.providerSlug,
+    planSlug: claimed.planSlug ?? "*",
+    attempt: claimed.attempt,
+  };
+}
+
+export async function settleSubscriptionCreatedEmail(
+  subscriptionId: string,
+  input: { status: "sent" | "failed"; attempt: number },
+  now = new Date(),
+): Promise<void> {
+  const retryDelayMinutes = Math.min(60, 2 ** Math.max(0, input.attempt - 1));
+  const nextAttemptAt =
+    input.status === "failed"
+      ? new Date(now.getTime() + retryDelayMinutes * 60 * 1000)
+      : null;
+
+  if (!isDatabaseConfigured()) {
+    const subscription = [...memorySubscriptions.values()].find(
+      (candidate) => candidate.id === subscriptionId,
+    );
+    if (
+      !subscription ||
+      !subscription.successEmailPending ||
+      subscription.successEmailAttempts !== input.attempt
+    ) {
+      return;
+    }
+    subscription.successEmailPending = input.status === "failed";
+    subscription.successEmailLockedAt = null;
+    subscription.successEmailNextAttemptAt = nextAttemptAt?.getTime() ?? null;
+    subscription.successEmailSentAt =
+      input.status === "sent" ? now.getTime() : null;
+    return;
+  }
+
+  await getDatabase()
+    .update(subscriptions)
+    .set({
+      successEmailPending: input.status === "failed",
+      successEmailLockedAt: null,
+      successEmailNextAttemptAt: nextAttemptAt,
+      successEmailSentAt: input.status === "sent" ? now : null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(subscriptions.id, subscriptionId),
+        eq(subscriptions.successEmailPending, true),
+        eq(subscriptions.successEmailAttempts, input.attempt),
+      ),
+    );
+}
+
+export async function listPendingSubscriptionEmailIds(
+  limit = 20,
+  now = new Date(),
+): Promise<string[]> {
+  if (!isDatabaseConfigured()) {
+    return [...memorySubscriptions.values()]
+      .filter((subscription) =>
+        canClaimSuccessEmail(subscription, now.getTime()),
+      )
+      .slice(0, limit)
+      .map((subscription) => subscription.id);
+  }
+
+  const staleBefore = new Date(now.getTime() - SUCCESS_EMAIL_CLAIM_TIMEOUT_MS);
+  const rows = await getDatabase()
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.status, "active"),
+        eq(subscriptions.successEmailPending, true),
+        or(
+          isNull(subscriptions.successEmailNextAttemptAt),
+          lte(subscriptions.successEmailNextAttemptAt, now),
+        ),
+        or(
+          isNull(subscriptions.successEmailLockedAt),
+          lte(subscriptions.successEmailLockedAt, staleBefore),
+        ),
+      ),
+    )
+    .orderBy(
+      asc(subscriptions.successEmailNextAttemptAt),
+      asc(subscriptions.createdAt),
+    )
+    .limit(limit);
+  return rows.map((row) => row.id);
 }
 
 async function consumeMemoryToken(
@@ -223,8 +412,19 @@ async function consumeMemoryToken(
   if (!subscription) return false;
 
   token.consumed = true;
+  if (
+    purpose === "confirm_subscription" &&
+    subscription.status === "unsubscribed"
+  ) {
+    return false;
+  }
   subscription.status =
     purpose === "confirm_subscription" ? "active" : "unsubscribed";
+  if (purpose === "unsubscribe") {
+    subscription.successEmailPending = false;
+    subscription.successEmailLockedAt = null;
+    subscription.successEmailNextAttemptAt = null;
+  }
   return true;
 }
 
@@ -249,14 +449,25 @@ export async function confirmSubscription(rawToken: string): Promise<boolean> {
           gt(confirmationTokens.expiresAt, now),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!token) return false;
+
+    const [subscription] = await tx
+      .select({ status: subscriptions.status })
+      .from(subscriptions)
+      .where(eq(subscriptions.id, token.subscriptionId))
+      .limit(1)
+      .for("update");
 
     await tx
       .update(confirmationTokens)
       .set({ consumedAt: now })
       .where(eq(confirmationTokens.id, token.id));
+    if (!subscription || subscription.status === "unsubscribed") {
+      return false;
+    }
     await tx
       .update(subscriptions)
       .set({
@@ -292,7 +503,8 @@ export async function unsubscribe(rawToken: string): Promise<boolean> {
           gt(confirmationTokens.expiresAt, now),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!token) return false;
 
@@ -305,6 +517,9 @@ export async function unsubscribe(rawToken: string): Promise<boolean> {
       .set({
         status: "unsubscribed",
         unsubscribedAt: now,
+        successEmailPending: false,
+        successEmailNextAttemptAt: null,
+        successEmailLockedAt: null,
         updatedAt: now,
       })
       .where(eq(subscriptions.id, token.subscriptionId));

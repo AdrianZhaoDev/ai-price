@@ -260,7 +260,7 @@ RANK   REGION        OFFICIAL PRICE       CNY REFERENCE       STATUS
 - Escape、backdrop、关闭按钮均可关闭。
 - Tab 焦点循环，关闭后返回触发按钮。
 - submitting 禁止重复提交。
-- success 原位提示查收确认邮件。
+- success 原位提示订阅已立即生效，通知邮件在后台发送。
 - error 使用 `role="alert"`。
 - success 使用 `role="status"`。
 
@@ -387,7 +387,7 @@ Reduced motion：
 - `verified / stale / pending / unpublished`。
 - 官方来源、最后核验时间。
 - 全球模式按产品 + 套餐订阅，其他模式按产品订阅。
-- 双重确认、退订和结果状态。
+- 订阅默认生效、后台成功通知邮件、退订和结果状态。
 - 明暗主题及现有存储键。
 - 方法、隐私、数据纠错入口。
 

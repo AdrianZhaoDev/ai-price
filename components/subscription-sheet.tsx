@@ -13,6 +13,7 @@ type SubscriptionSheetProps = {
 };
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
+type SubscriptionResultStatus = "subscribed" | "already_subscribed";
 
 export function SubscriptionSheet({
   open,
@@ -23,14 +24,16 @@ export function SubscriptionSheet({
 }: SubscriptionSheetProps) {
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
-  const [previewConfirmUrl, setPreviewConfirmUrl] = useState("");
+  const [resultStatus, setResultStatus] =
+    useState<SubscriptionResultStatus>("subscribed");
   const dialogRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const lastSuccessfulSubscriptionRef = useRef("");
 
   const closeSheet = useCallback(() => {
     setState("idle");
     setMessage("");
-    setPreviewConfirmUrl("");
+    setResultStatus("subscribed");
     onClose();
   }, [onClose]);
 
@@ -82,11 +85,22 @@ export function SubscriptionSheet({
     event.preventDefault();
     setState("submitting");
     setMessage("");
-    setPreviewConfirmUrl("");
+    setResultStatus("subscribed");
 
     const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    const subscriptionKey = `${email}:${providerId}:${planId || "*"}`;
+    if (lastSuccessfulSubscriptionRef.current === subscriptionKey) {
+      setState("success");
+      setMessage("您已订阅，请勿重复订阅。");
+      setResultStatus("already_subscribed");
+      return;
+    }
+
     const payload = {
-      email: form.get("email"),
+      email,
       providerId,
       planId: planId || null,
     };
@@ -99,7 +113,7 @@ export function SubscriptionSheet({
       });
       const result = (await response.json()) as {
         message?: string;
-        previewConfirmUrl?: string;
+        status?: SubscriptionResultStatus;
       };
 
       if (!response.ok) {
@@ -107,8 +121,9 @@ export function SubscriptionSheet({
       }
 
       setState("success");
-      setMessage(result.message || "确认邮件已经发送，请检查收件箱。");
-      setPreviewConfirmUrl(result.previewConfirmUrl ?? "");
+      setMessage(result.message || "您已订阅成功！");
+      setResultStatus("subscribed");
+      lastSuccessfulSubscriptionRef.current = subscriptionKey;
     } catch (error) {
       setState("error");
       setMessage(
@@ -164,13 +179,12 @@ export function SubscriptionSheet({
                 <div className="success-mark" aria-hidden="true">
                   <Check size={22} />
                 </div>
-                <h2 id="subscription-title">还差一步</h2>
-                <p>{message}</p>
-                {previewConfirmUrl ? (
-                  <a className="preview-confirm-link" href={previewConfirmUrl}>
-                    本地测试：打开确认链接
-                  </a>
-                ) : null}
+                <h2 id="subscription-title">{message}</h2>
+                <p>
+                  {resultStatus === "already_subscribed"
+                    ? "无需再次提交；价格或套餐变化时我们会发送邮件。"
+                    : "订阅成功通知邮件将在后台发送，无需点击确认。"}
+                </p>
                 <button
                   type="button"
                   className="primary-button pressable"
@@ -184,7 +198,7 @@ export function SubscriptionSheet({
                 <div className="sheet-copy">
                   <p className="eyebrow">价格变动通知</p>
                   <h2 id="subscription-title">关注 {scopeLabel}</h2>
-                  <p>价格或套餐发生变化时发送邮件。确认订阅前不会推送通知。</p>
+                  <p>提交后立即生效，仅在价格或套餐发生变化时发送邮件。</p>
                 </div>
 
                 <form onSubmit={onSubmit} className="subscription-form">
@@ -216,7 +230,7 @@ export function SubscriptionSheet({
                     className="primary-button pressable"
                     disabled={state === "submitting"}
                   >
-                    {state === "submitting" ? "正在创建…" : "发送确认邮件"}
+                    {state === "submitting" ? "正在订阅…" : "立即订阅"}
                   </button>
                   <p className="form-note">
                     可随时退订，我们不会发送营销邮件。

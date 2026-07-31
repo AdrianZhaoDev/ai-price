@@ -384,9 +384,24 @@ export const subscriptions = pgTable(
       .notNull(),
     providerSlug: text("provider_slug").notNull(),
     planSlug: text("plan_slug"),
-    status: subscriptionStatusEnum("status").default("pending").notNull(),
+    status: subscriptionStatusEnum("status").default("active").notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    successEmailPending: boolean("success_email_pending")
+      .default(false)
+      .notNull(),
+    successEmailAttempts: integer("success_email_attempts")
+      .default(0)
+      .notNull(),
+    successEmailNextAttemptAt: timestamp("success_email_next_attempt_at", {
+      withTimezone: true,
+    }),
+    successEmailLockedAt: timestamp("success_email_locked_at", {
+      withTimezone: true,
+    }),
+    successEmailSentAt: timestamp("success_email_sent_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -404,6 +419,37 @@ export const subscriptions = pgTable(
       table.status,
       table.providerSlug,
       table.planSlug,
+    ),
+    index("subscriptions_success_email_pending_idx").on(
+      table.successEmailPending,
+      table.successEmailNextAttemptAt,
+    ),
+  ],
+);
+
+export const subscriptionAttempts = pgTable(
+  "subscription_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ipHash: text("ip_hash").notNull(),
+    emailHash: text("email_hash").notNull(),
+    providerSlug: text("provider_slug").notNull(),
+    planSlug: text("plan_slug").notNull(),
+    accepted: boolean("accepted").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("subscription_attempts_created_idx").on(table.createdAt),
+    index("subscription_attempts_ip_created_idx").on(
+      table.ipHash,
+      table.createdAt,
+    ),
+    index("subscription_attempts_ip_accepted_created_idx").on(
+      table.ipHash,
+      table.accepted,
+      table.createdAt,
     ),
   ],
 );

@@ -1,15 +1,29 @@
 import { providerCatalog } from "@/lib/data/catalog";
-import { requestPriceSubscription } from "@/lib/subscriptions/service";
+import {
+  deliverPendingSubscriptionCreatedEmails,
+  requestPriceSubscription,
+  sendSubscriptionCreatedEmail,
+} from "@/lib/subscriptions/service";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  createPendingSubscription: vi.fn(),
+  claimSubscriptionCreatedEmail: vi.fn(),
+  createActiveSubscription: vi.fn(),
+  createUnsubscribeToken: vi.fn(),
+  listPendingSubscriptionEmailIds: vi.fn(),
   loadProviderCatalog: vi.fn(),
+  reserveEmailDelivery: vi.fn(),
+  settleSubscriptionCreatedEmail: vi.fn(),
+  settleEmailDelivery: vi.fn(),
   sendMail: vi.fn(),
 }));
 
 vi.mock("@/lib/subscriptions/repository", () => ({
-  createPendingSubscription: mocks.createPendingSubscription,
+  claimSubscriptionCreatedEmail: mocks.claimSubscriptionCreatedEmail,
+  createActiveSubscription: mocks.createActiveSubscription,
+  createUnsubscribeToken: mocks.createUnsubscribeToken,
+  listPendingSubscriptionEmailIds: mocks.listPendingSubscriptionEmailIds,
+  settleSubscriptionCreatedEmail: mocks.settleSubscriptionCreatedEmail,
 }));
 
 vi.mock("@/lib/pricing/repository", () => ({
@@ -20,18 +34,32 @@ vi.mock("@/lib/email/transport", () => ({
   getEmailTransport: () => ({ sendMail: mocks.sendMail }),
 }));
 
+vi.mock("@/lib/email/delivery", () => ({
+  reserveEmailDelivery: mocks.reserveEmailDelivery,
+  settleEmailDelivery: mocks.settleEmailDelivery,
+}));
+
 describe("subscription service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("APP_URL", "http://localhost:3000");
     vi.stubEnv("SMTP_FROM", "AI Price Atlas <dev@localhost>");
-    mocks.createPendingSubscription.mockResolvedValue({
-      confirmationToken: "confirm-token",
-      unsubscribeToken: "unsubscribe-token",
+    mocks.createActiveSubscription.mockResolvedValue({
+      alreadySubscribed: false,
+      emailNotificationPending: true,
+      subscriptionId: "subscription-id",
+    });
+    mocks.claimSubscriptionCreatedEmail.mockResolvedValue({
       subscriptionId: "subscription-id",
       email: "reader@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-go-monthly",
+      attempt: 1,
     });
+    mocks.createUnsubscribeToken.mockResolvedValue("unsubscribe-token");
+    mocks.listPendingSubscriptionEmailIds.mockResolvedValue([]);
+    mocks.reserveEmailDelivery.mockResolvedValue("delivery-id");
     mocks.sendMail.mockResolvedValue({ messageId: "test-message" });
   });
 
@@ -64,15 +92,48 @@ describe("subscription service", () => {
     });
 
     expect(mocks.loadProviderCatalog).toHaveBeenCalledWith("global", "chatgpt");
-    expect(mocks.createPendingSubscription).toHaveBeenCalledWith({
+    expect(mocks.createActiveSubscription).toHaveBeenCalledWith({
       email: "reader@example.com",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-go-monthly",
     });
+    expect(result).toEqual({ notificationId: "subscription-id" });
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+
+    await sendSubscriptionCreatedEmail(result.notificationId!);
     expect(mocks.sendMail).toHaveBeenCalledOnce();
-    expect(result.previewConfirmUrl).toContain(
-      "/api/subscriptions/confirm?token=confirm-token",
+    expect(mocks.sendMail.mock.calls[0][0].html).toContain(
+      "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token",
     );
+    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
+      status: "sent",
+      providerMessageId: "test-message",
+    });
+    expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
+      "subscription-id",
+      { status: "sent", attempt: 1 },
+    );
+  });
+
+  it("does not expose whether an identical active subscription exists", async () => {
+    const staticProvider = providerCatalog.find(
+      (provider) => provider.id === "chatgpt",
+    );
+    mocks.loadProviderCatalog.mockResolvedValue([staticProvider]);
+    mocks.createActiveSubscription.mockResolvedValue({
+      alreadySubscribed: true,
+      emailNotificationPending: false,
+      subscriptionId: "subscription-id",
+    });
+
+    await expect(
+      requestPriceSubscription({
+        email: "reader@example.com",
+        providerId: "chatgpt",
+        planId: null,
+      }),
+    ).resolves.toEqual({ notificationId: undefined });
+    expect(mocks.sendMail).not.toHaveBeenCalled();
   });
 
   it("still rejects an unknown provider before writing or sending", async () => {
@@ -84,7 +145,7 @@ describe("subscription service", () => {
       }),
     ).rejects.toThrow("未找到要关注的产品。");
 
-    expect(mocks.createPendingSubscription).not.toHaveBeenCalled();
+    expect(mocks.createActiveSubscription).not.toHaveBeenCalled();
     expect(mocks.sendMail).not.toHaveBeenCalled();
   });
 
@@ -103,7 +164,36 @@ describe("subscription service", () => {
       }),
     ).rejects.toThrow("该套餐不属于所选产品。");
 
-    expect(mocks.createPendingSubscription).not.toHaveBeenCalled();
+    expect(mocks.createActiveSubscription).not.toHaveBeenCalled();
     expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("records a background email failure without changing subscription success", async () => {
+    mocks.sendMail.mockRejectedValueOnce(new Error("SMTP timeout"));
+
+    await expect(
+      sendSubscriptionCreatedEmail("subscription-id"),
+    ).rejects.toThrow("SMTP timeout");
+    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
+      status: "failed",
+      error: "SMTP timeout",
+    });
+    expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
+      "subscription-id",
+      { status: "failed", attempt: 1 },
+    );
+  });
+
+  it("retries persisted pending notifications in the background worker", async () => {
+    mocks.listPendingSubscriptionEmailIds.mockResolvedValueOnce([
+      "subscription-id",
+    ]);
+
+    await expect(deliverPendingSubscriptionCreatedEmails()).resolves.toEqual({
+      attempted: 1,
+      sent: 1,
+      failed: 0,
+    });
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
   });
 });

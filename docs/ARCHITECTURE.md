@@ -23,7 +23,8 @@
 - Server Components 默认。
 - 读取数据库中的最后有效价格。
 - 对公开页面使用缓存和增量再验证。
-- 提供订阅、确认、退订 API。
+- 提供订阅、退订及历史确认链接兼容 API。
+- 订阅事务提交即响应；成功通知使用订阅行上的持久化待发送状态在响应后投递。
 - 不持有第三方登录态，不执行长时间抓取。
 
 ### Collector
@@ -34,6 +35,7 @@
 - 解析失败不覆盖最后有效记录。
 - 指数退避重试三次后发送管理员邮件。
 - 每轮生成 `collection_run` 与来源级状态。
+- 每轮开始前重试到期的订阅成功通知，兜底处理 Web 进程中断或 SMTP 瞬时失败。
 
 ### Database
 
@@ -67,6 +69,7 @@
 - `collection_errors`
 - `subscribers`
 - `subscriptions`
+- `subscription_attempts`
 - `confirmation_tokens`
 - `price_change_events`
 - `price_change_candidates`
@@ -138,8 +141,10 @@ interface PriceSourceAdapter {
 
 ## 安全
 
-- 订阅确认 token 只保存哈希。
-- 所有公开写 API 做限流和蜜罐校验。
+- 退订及历史确认 token 只保存哈希。
+- 订阅限流只保存 IP 与邮箱哈希，并通过 PostgreSQL 事务锁保证并发请求一致。
+- 新订阅和重复订阅使用相同公开响应，避免通过 API 枚举邮箱关注状态。
+- 所有公开写 API 做限流和输入校验。
 - 邮件地址标准化后加密或最小化存储。
 - SMTP 密钥只存在服务端环境变量。
 - 管理员重试入口使用 `CRON_SECRET` 或管理员认证。

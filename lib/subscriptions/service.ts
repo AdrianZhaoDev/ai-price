@@ -1,9 +1,20 @@
-import { confirmationEmail } from "@/lib/email/templates";
+import {
+  reserveEmailDelivery,
+  settleEmailDelivery,
+} from "@/lib/email/delivery";
+import { subscriptionCreatedEmail } from "@/lib/email/templates";
 import { getEmailTransport } from "@/lib/email/transport";
 import { providerCatalog } from "@/lib/data/catalog";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
 import { hashEmail } from "@/lib/security/tokens";
-import { createPendingSubscription } from "./repository";
+import {
+  claimSubscriptionCreatedEmail,
+  createActiveSubscription,
+  createUnsubscribeToken,
+  listPendingSubscriptionEmailIds,
+  settleSubscriptionCreatedEmail,
+} from "./repository";
+import { getApplicationBaseUrl } from "./urls";
 import { z } from "zod";
 
 type RequestSubscriptionInput = {
@@ -12,9 +23,13 @@ type RequestSubscriptionInput = {
   planId: string | null;
 };
 
+export type RequestSubscriptionResult = {
+  notificationId?: string;
+};
+
 export async function requestPriceSubscription(
   input: RequestSubscriptionInput,
-): Promise<{ previewConfirmUrl?: string }> {
+): Promise<RequestSubscriptionResult> {
   const email = z.email("请输入有效邮箱。").max(254).parse(input.email);
   const catalogProvider = providerCatalog.find(
     (candidate) => candidate.id === input.providerId,
@@ -36,44 +51,113 @@ export async function requestPriceSubscription(
     throw new Error("该套餐不属于所选产品。");
   }
 
-  const pending = await createPendingSubscription({
+  const subscription = await createActiveSubscription({
     email,
     providerSlug: input.providerId,
     planSlug: input.planId,
   });
-  if (!process.env.APP_URL && process.env.NODE_ENV === "production") {
-    throw new Error("APP_URL is required in production.");
+
+  return {
+    notificationId: subscription.emailNotificationPending
+      ? subscription.subscriptionId
+      : undefined,
+  };
+}
+
+export async function sendSubscriptionCreatedEmail(
+  subscriptionId: string,
+): Promise<boolean> {
+  const claim = await claimSubscriptionCreatedEmail(subscriptionId);
+  if (!claim) return false;
+
+  let deliveryId: string | null = null;
+
+  try {
+    const catalogProvider = providerCatalog.find(
+      (candidate) => candidate.id === claim.providerSlug,
+    );
+    const [liveProvider] = catalogProvider
+      ? await loadProviderCatalog(catalogProvider.mode, claim.providerSlug)
+      : [];
+    const provider = liveProvider ?? catalogProvider;
+    const selectedPlan = provider?.offers.find(
+      (offer) => offer.planId === claim.planSlug,
+    );
+    const scopeLabel =
+      provider && selectedPlan
+        ? `${provider.name} · ${selectedPlan.planName}`
+        : (provider?.name ?? claim.providerSlug);
+
+    const unsubscribeToken = await createUnsubscribeToken(claim.subscriptionId);
+    const unsubscribeUrl = new URL(
+      "/api/subscriptions/unsubscribe",
+      getApplicationBaseUrl(),
+    );
+    unsubscribeUrl.searchParams.set("token", unsubscribeToken);
+
+    deliveryId = await reserveEmailDelivery({
+      type: "subscription_created",
+      recipient: claim.email,
+      dedupeKey: `subscription-created:${claim.subscriptionId}:attempt:${claim.attempt}`,
+    });
+    if (!deliveryId) {
+      throw new Error("Subscription email delivery attempt was not reserved.");
+    }
+
+    const result = await getEmailTransport().sendMail({
+      from: process.env.SMTP_FROM ?? "AI Price Atlas <dev@localhost>",
+      to: claim.email,
+      ...subscriptionCreatedEmail({
+        scopeLabel,
+        unsubscribeUrl: unsubscribeUrl.toString(),
+      }),
+      headers: {
+        "X-Entity-Ref-ID": hashEmail(`${claim.subscriptionId}:${claim.email}`),
+      },
+    });
+    await settleEmailDelivery(deliveryId, {
+      status: "sent",
+      providerMessageId: result.messageId,
+    });
+    await settleSubscriptionCreatedEmail(claim.subscriptionId, {
+      status: "sent",
+      attempt: claim.attempt,
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (deliveryId) {
+      await settleEmailDelivery(deliveryId, {
+        status: "failed",
+        error: message,
+      });
+    }
+    await settleSubscriptionCreatedEmail(claim.subscriptionId, {
+      status: "failed",
+      attempt: claim.attempt,
+    });
+    throw error;
   }
-  const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const confirmUrl = new URL("/api/subscriptions/confirm", baseUrl);
-  confirmUrl.searchParams.set("token", pending.confirmationToken);
-  const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", baseUrl);
-  unsubscribeUrl.searchParams.set("token", pending.unsubscribeToken);
+}
 
-  const selectedPlan = provider.offers.find(
-    (offer) => offer.planId === input.planId,
-  );
-  const scopeLabel = selectedPlan
-    ? `${provider.name} · ${selectedPlan.planName}`
-    : provider.name;
-  const message = confirmationEmail({
-    scopeLabel,
-    confirmUrl: confirmUrl.toString(),
-    unsubscribeUrl: unsubscribeUrl.toString(),
-  });
+export async function deliverPendingSubscriptionCreatedEmails(
+  limit = 20,
+): Promise<{ attempted: number; sent: number; failed: number }> {
+  const subscriptionIds = await listPendingSubscriptionEmailIds(limit);
+  let sent = 0;
+  let failed = 0;
 
-  await getEmailTransport().sendMail({
-    from: process.env.SMTP_FROM ?? "AI Price Atlas <dev@localhost>",
-    to: pending.email,
-    ...message,
-    headers: {
-      "X-Entity-Ref-ID": hashEmail(
-        `${pending.subscriptionId}:${pending.email}`,
-      ),
-    },
-  });
+  for (const subscriptionId of subscriptionIds) {
+    try {
+      if (await sendSubscriptionCreatedEmail(subscriptionId)) sent += 1;
+    } catch {
+      failed += 1;
+    }
+  }
 
-  return process.env.NODE_ENV === "production"
-    ? {}
-    : { previewConfirmUrl: confirmUrl.toString() };
+  return {
+    attempted: subscriptionIds.length,
+    sent,
+    failed,
+  };
 }
