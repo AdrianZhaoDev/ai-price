@@ -7,22 +7,25 @@ async function waitForPricingHydration(page: import("@playwright/test").Page) {
 test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", {
-      name: "同一份订阅，不同的地区价格",
-    }),
-  ).toBeVisible();
+  await waitForPricingHydration(page);
+  await expect(page.locator("h1.sr-only")).toHaveText(
+    "同一份订阅，不同的地区价格",
+  );
+  await expect(page.locator(".workspace-heading")).toHaveCount(0);
+  await expect(page.locator(".section-meta .freshness-block")).toBeVisible();
+  await expect(page.locator(".official-source-count")).toContainText(
+    "个官方来源",
+  );
   expect(
     await page
       .locator(".provider-rail-global .provider-button")
       .allTextContents(),
   ).toEqual(["ChatGPT", "Claude / Code", "Gemini", "Grok"]);
-  await waitForPricingHydration(page);
   await page.getByRole("link", { name: "国内订阅", exact: true }).click();
   await expect(page).toHaveURL(/\/china-ai-subscriptions$/);
-  await expect(
-    page.getByRole("heading", { name: "国内 AI 会员，直接看官方价" }),
-  ).toBeVisible();
+  await expect(page.locator("h1.sr-only")).toHaveText(
+    "国内 AI 会员，直接看官方价",
+  );
   await expect(
     page.getByRole("heading", { name: "智谱 GLM 资源包" }),
   ).toBeVisible();
@@ -35,6 +38,70 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
 
   await page.getByRole("button", { name: "切换深色主题" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
+});
+
+test("pricing navigation uses one clear active state and marks API as hot", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Desktop navigation is covered separately.");
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  const navigation = page.getByRole("navigation", { name: "价格模式" });
+  const links = navigation.locator(".nav-item");
+  const hotBadge = navigation.locator(".nav-hot-badge");
+
+  await expect(links).toHaveCount(3);
+  await expect(hotBadge).toHaveCount(1);
+  await expect(hotBadge).toBeVisible();
+  await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(navigation.locator('[data-mode="api"]')).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+
+  const readNavStyles = () =>
+    navigation.locator(".nav-item").evaluateAll((items) =>
+      items.map((item) => {
+        const style = getComputedStyle(item);
+        return {
+          backgroundColor: style.backgroundColor,
+          color: style.color,
+          active: item.getAttribute("aria-current") === "page",
+        };
+      }),
+    );
+
+  const atelierStyles = await readNavStyles();
+  const atelierActive = atelierStyles.find((item) => item.active);
+  expect(atelierActive).toMatchObject({
+    backgroundColor: "rgb(0, 102, 204)",
+    color: "rgb(255, 255, 255)",
+  });
+  expect(
+    atelierStyles
+      .filter((item) => !item.active)
+      .map((item) => item.backgroundColor),
+  ).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
+
+  await page.getByRole("button", { name: "切换深色主题" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
+  const midnightStyles = await readNavStyles();
+  const midnightActive = midnightStyles.find((item) => item.active);
+  expect(midnightActive).toMatchObject({
+    backgroundColor: "rgb(0, 102, 204)",
+    color: "rgb(255, 255, 255)",
+  });
+
+  await navigation
+    .getByRole("link", { name: "API 价格排行榜", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/api-pricing$/);
+  await expect(navigation.locator('[data-mode="api"]')).toHaveCSS(
+    "background-color",
+    "rgb(0, 102, 204)",
+  );
+  await expect(navigation.locator(".nav-hot-badge")).toBeVisible();
 });
 
 test("opens the price alert sheet", async ({ page }) => {
@@ -251,11 +318,9 @@ test("mobile navigation and sheet remain usable", async ({
     .getByRole("link", { name: "API 价格排行榜", exact: true })
     .click();
   await expect(page).toHaveURL(/\/api-pricing$/);
-  await expect(
-    page.getByRole("heading", {
-      name: "模型调用成本，按官方单位列清楚",
-    }),
-  ).toBeVisible();
+  await expect(page.locator("h1.sr-only")).toHaveText(
+    "模型调用成本，按官方单位列清楚",
+  );
   await waitForPricingHydration(page);
   const firstRankingEntry = page
     .locator(".api-ranking-mobile .api-ranking-entry")
@@ -354,7 +419,15 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
         }),
       ).toBe(true);
       expect(
-        await page.locator(".desktop-nav .nav-item").allTextContents(),
+        await page.locator(".desktop-nav .nav-item").evaluateAll((items) =>
+          items.map((item) =>
+            [...item.childNodes]
+              .filter((node) => node.nodeType === Node.TEXT_NODE)
+              .map((node) => node.textContent ?? "")
+              .join("")
+              .trim(),
+          ),
+        ),
       ).toEqual(["全球区价", "国内订阅", "API 价格排行榜"]);
     }
   }

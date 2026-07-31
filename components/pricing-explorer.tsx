@@ -439,6 +439,11 @@ export function PricingExplorer({
               aria-current={activeMode === mode.id ? "page" : undefined}
             >
               {mode.shortLabel}
+              {mode.id === "api" ? (
+                <span className="nav-hot-badge" aria-hidden="true">
+                  Hot
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>
@@ -456,57 +461,13 @@ export function PricingExplorer({
         className="main-content"
         aria-hidden={sheetOpen ? true : undefined}
       >
-        <section
-          className="workspace-heading"
-          aria-labelledby="workspace-title"
-        >
-          <div>
-            <p className="eyebrow">
-              <span className="eyebrow-line" />
-              {modes.find((mode) => mode.id === activeMode)?.label}
-            </p>
-            <h1
-              id="workspace-title"
-              aria-label={
-                activeMode === "global"
-                  ? "同一份订阅，不同的地区价格"
-                  : activeMode === "china-subscription"
-                    ? "国内 AI 会员，直接看官方价"
-                    : "模型调用成本，按官方单位列清楚"
-              }
-            >
-              {activeMode === "global" ? (
-                <>
-                  同一份订阅，
-                  <br />
-                  不同的地区价格
-                </>
-              ) : activeMode === "china-subscription" ? (
-                <>
-                  国内 AI 会员，
-                  <br />
-                  直接看官方价
-                </>
-              ) : (
-                <>
-                  模型调用成本，
-                  <br />
-                  按官方单位列清楚
-                </>
-              )}
-            </h1>
-            <p className="workspace-description">
-              {modes.find((mode) => mode.id === activeMode)?.description}
-            </p>
-          </div>
-          <div className="freshness-block">
-            <Clock3 size={16} aria-hidden="true" />
-            <span>
-              最近核验
-              <strong>{lastCheckedAt}</strong>
-            </span>
-          </div>
-        </section>
+        <h1 className="sr-only" id="workspace-title">
+          {activeMode === "global"
+            ? "同一份订阅，不同的地区价格"
+            : activeMode === "china-subscription"
+              ? "国内 AI 会员，直接看官方价"
+              : "模型调用成本，按官方单位列清楚"}
+        </h1>
 
         {activeMode === "api" ? (
           <div className="api-ranking-mobile">
@@ -522,7 +483,18 @@ export function PricingExplorer({
             <h2 id="provider-title">
               {activeMode === "api" ? "选择模型平台" : "选择产品"}
             </h2>
-            <span>{modeProviders.length} 个官方来源</span>
+            <div className="section-meta">
+              <div className="freshness-block">
+                <Clock3 size={16} aria-hidden="true" />
+                <span>
+                  最近核验
+                  <strong>{lastCheckedAt}</strong>
+                </span>
+              </div>
+              <span className="official-source-count">
+                {modeProviders.length} 个官方来源
+              </span>
+            </div>
           </div>
           <div
             className={`provider-rail ${activeMode === "global" ? "provider-rail-global" : ""}`}
