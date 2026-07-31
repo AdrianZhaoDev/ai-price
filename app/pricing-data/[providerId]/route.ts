@@ -2,7 +2,7 @@ import { providerCatalog } from "@/lib/data/catalog";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
 import { NextResponse } from "next/server";
 
-export const revalidate = 900;
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
@@ -39,8 +39,7 @@ export async function GET(
     { provider },
     {
       headers: {
-        "Cache-Control":
-          "public, max-age=0, s-maxage=900, stale-while-revalidate=86400",
+        "Cache-Control": "private, no-store, max-age=0",
         "X-Robots-Tag": "noindex, nofollow",
       },
     },

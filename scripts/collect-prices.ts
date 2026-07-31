@@ -2,6 +2,7 @@ import { config } from "dotenv";
 import { createCollectorRegistry } from "@/lib/collectors/registry";
 import { runCollectors } from "@/lib/collectors/runner";
 import { closeDatabase, isDatabaseConfigured } from "@/lib/db/client";
+import { refreshPricingCacheAfterCollection } from "@/lib/pricing/cache-refresh";
 import { dataSyncErrorMessage, runConfiguredDataSync } from "@/lib/sync";
 
 config({ path: [".env.local", ".env"] });
@@ -50,6 +51,20 @@ async function main() {
     }
   } catch (error) {
     console.error(`Data sync failed: ${dataSyncErrorMessage(error)}`);
+    process.exitCode = 1;
+  }
+
+  try {
+    const cacheRefresh = await refreshPricingCacheAfterCollection();
+    if (cacheRefresh.refreshed) {
+      console.log("Pricing page caches revalidated and prewarmed.");
+    }
+  } catch (error) {
+    console.error(
+      `Pricing cache refresh failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
     process.exitCode = 1;
   }
 

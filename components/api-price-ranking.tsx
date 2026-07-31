@@ -8,7 +8,7 @@ import {
 } from "@/lib/pricing/api-ranking";
 import { formatOfferPrice } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 type ApiPriceRankingProps = {
   providers: ProviderCatalogItem[];
@@ -51,6 +51,7 @@ export function ApiPriceRanking({
   providers,
   onSelectEntry,
 }: ApiPriceRankingProps) {
+  const titleId = useId();
   const [metric, setMetric] = useState<ApiRankingMetric>("input");
   const entries = useMemo(
     () => apiRankingEntries(providers, metric),
@@ -58,11 +59,11 @@ export function ApiPriceRanking({
   );
 
   return (
-    <aside className="api-ranking" aria-labelledby="api-ranking-title">
+    <aside className="api-ranking" aria-labelledby={titleId}>
       <div className="api-ranking-heading">
         <div>
           <p className="api-ranking-kicker">/百万 tokens</p>
-          <h2 id="api-ranking-title">API 价格排行榜</h2>
+          <h2 id={titleId}>API 价格排行榜</h2>
         </div>
         <span>{entries.length} 个模型</span>
       </div>

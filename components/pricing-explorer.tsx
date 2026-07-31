@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -52,6 +53,7 @@ type PricingExplorerProps = {
   providers: ProviderCatalogItem[];
   deferredProviderIds?: string[];
   contactEmail: string;
+  dataVersion: string | null;
 };
 
 const subscribeToHydration = () => () => {};
@@ -89,7 +91,9 @@ export function PricingExplorer({
   providers,
   deferredProviderIds = [],
   contactEmail,
+  dataVersion,
 }: PricingExplorerProps) {
+  const router = useRouter();
   const initialProvider =
     sortProvidersByRank(
       providers.filter(
@@ -356,6 +360,46 @@ export function PricingExplorer({
     [],
   );
 
+  useEffect(() => {
+    for (const mode of modes) {
+      if (mode.id === activeMode) continue;
+      router.prefetch(modeHref(mode.id));
+    }
+  }, [activeMode, modes, router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const checkVersion = async () => {
+      try {
+        const response = await fetch(
+          `/api/pricing/version?mode=${encodeURIComponent(activeMode)}`,
+          { cache: "no-store" },
+        );
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            version?: string | null;
+          };
+          if (!cancelled && (payload.version ?? null) !== dataVersion) {
+            router.refresh();
+          }
+        }
+      } catch {
+        // A transient version check must not interrupt price browsing.
+      }
+      if (!cancelled) {
+        timer = setTimeout(checkVersion, 30_000);
+      }
+    };
+
+    timer = setTimeout(checkVersion, 30_000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeMode, dataVersion, router]);
+
   const selectedPlan = availablePlans.find(
     (plan) => plan.id === selectedPlanId,
   );
@@ -386,15 +430,16 @@ export function PricingExplorer({
 
         <nav className="desktop-nav" aria-label="价格模式">
           {modes.map((mode) => (
-            <a
+            <Link
               key={mode.id}
               href={modeHref(mode.id)}
+              prefetch
               className="nav-item pressable"
               data-mode={mode.id}
               aria-current={activeMode === mode.id ? "page" : undefined}
             >
               {mode.shortLabel}
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -462,6 +507,15 @@ export function PricingExplorer({
             </span>
           </div>
         </section>
+
+        {activeMode === "api" ? (
+          <div className="api-ranking-mobile">
+            <ApiPriceRanking
+              providers={modeProviders}
+              onSelectEntry={(selection) => void selectRankingEntry(selection)}
+            />
+          </div>
+        ) : null}
 
         <section className="provider-section" aria-labelledby="provider-title">
           <div className="section-label-row">
@@ -885,10 +939,14 @@ export function PricingExplorer({
             </AnimatePresence>
           </section>
           {activeMode === "api" ? (
-            <ApiPriceRanking
-              providers={modeProviders}
-              onSelectEntry={(selection) => void selectRankingEntry(selection)}
-            />
+            <div className="api-ranking-desktop">
+              <ApiPriceRanking
+                providers={modeProviders}
+                onSelectEntry={(selection) =>
+                  void selectRankingEntry(selection)
+                }
+              />
+            </div>
           ) : null}
         </div>
       </main>

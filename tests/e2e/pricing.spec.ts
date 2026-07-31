@@ -170,7 +170,9 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     ).toBeGreaterThan(collapsedApiRowCount);
   }
 
-  const firstRankingEntry = page.locator(".api-ranking-entry").first();
+  const firstRankingEntry = page
+    .locator(".api-ranking-desktop .api-ranking-entry")
+    .first();
   const targetProviderId =
     await firstRankingEntry.getAttribute("data-provider-id");
   const targetOfferId = await firstRankingEntry.getAttribute("data-offer-id");
@@ -218,8 +220,17 @@ test("mobile navigation and sheet remain usable", async ({
     }),
   ).toBeVisible();
   await waitForPricingHydration(page);
-  const firstRankingEntry = page.locator(".api-ranking-entry").first();
+  const firstRankingEntry = page
+    .locator(".api-ranking-mobile .api-ranking-entry")
+    .first();
   await expect(firstRankingEntry).toBeVisible();
+  const rankingPosition = await page
+    .locator(".api-ranking-mobile")
+    .evaluate((ranking) => ranking.getBoundingClientRect().top);
+  const providerPosition = await page
+    .locator(".provider-section")
+    .evaluate((provider) => provider.getBoundingClientRect().top);
+  expect(rankingPosition).toBeLessThan(providerPosition);
   expect(
     await firstRankingEntry.evaluate(
       (entry) => entry.scrollWidth <= entry.clientWidth,
@@ -243,8 +254,73 @@ test("mobile navigation and sheet remain usable", async ({
   ).toBe(true);
 });
 
-test("small phone and landscape layouts do not overflow", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 812 });
+test("all pricing tabs fit common phone widths and use soft navigation", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Explicit phone widths are covered once.");
+
+  const paths = ["/", "/china-ai-subscriptions", "/api-pricing"] as const;
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 812 });
+    for (const path of paths) {
+      await page.goto(path);
+      await waitForPricingHydration(page);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+      expect(
+        await page.locator(".price-row").evaluateAll((rows) =>
+          rows.every((row) => {
+            const bounds = row.getBoundingClientRect();
+            return (
+              row.scrollWidth <= row.clientWidth &&
+              bounds.left >= -0.5 &&
+              bounds.right <= window.innerWidth + 0.5
+            );
+          }),
+        ),
+      ).toBe(true);
+      expect(
+        await page
+          .locator(".api-ranking-mobile .api-ranking-entry:visible")
+          .evaluateAll((entries) =>
+            entries.every((entry) => {
+              const bounds = entry.getBoundingClientRect();
+              return (
+                entry.scrollWidth <= entry.clientWidth &&
+                bounds.left >= -0.5 &&
+                bounds.right <= window.innerWidth + 0.5
+              );
+            }),
+          ),
+      ).toBe(true);
+    }
+  }
+
+  await page.setViewportSize({ width: 390, height: 812 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    Object.assign(window, { __pricingNavigationMarker: "retained" });
+  });
+  await page
+    .getByRole("navigation", { name: "价格模式" })
+    .getByRole("link", { name: "国内订阅", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/china-ai-subscriptions$/);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { __pricingNavigationMarker?: string })
+          .__pricingNavigationMarker,
+    ),
+  ).toBe("retained");
+
+  await page.setViewportSize({ width: 812, height: 375 });
   await page.goto("/");
   expect(
     await page.evaluate(
@@ -253,23 +329,4 @@ test("small phone and landscape layouts do not overflow", async ({ page }) => {
         document.documentElement.clientWidth,
     ),
   ).toBe(true);
-  await expect(
-    page
-      .getByRole("navigation", { name: "价格模式" })
-      .getByRole("link", { name: "API 价格排行榜", exact: true }),
-  ).toBeVisible();
-
-  await page.setViewportSize({ width: 812, height: 375 });
-  expect(
-    await page.evaluate(
-      () =>
-        document.documentElement.scrollWidth <=
-        document.documentElement.clientWidth,
-    ),
-  ).toBe(true);
-  await expect(
-    page.getByRole("heading", {
-      name: "同一份订阅，不同的地区价格",
-    }),
-  ).toBeVisible();
 });

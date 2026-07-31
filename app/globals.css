@@ -510,6 +510,7 @@ input:focus-visible {
 }
 
 .price-workspace {
+  min-width: 0;
   min-height: 550px;
   padding: 32px 34px 30px;
   border: 1px solid var(--separator);
@@ -530,6 +531,14 @@ input:focus-visible {
 
 .pricing-layout-api .price-workspace {
   padding-inline: 26px;
+}
+
+.api-ranking-mobile {
+  display: none;
+}
+
+.api-ranking-desktop {
+  display: contents;
 }
 
 .api-ranking {
@@ -677,6 +686,9 @@ input:focus-visible {
 }
 
 .api-ranking-entry > span[data-label] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1651,6 +1663,25 @@ input:focus-visible {
     padding: 0;
   }
 
+  .api-ranking-mobile {
+    display: block;
+    margin-bottom: 28px;
+  }
+
+  .api-ranking-desktop {
+    display: none;
+  }
+
+  .api-ranking-mobile .api-ranking {
+    position: static;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .api-ranking-mobile .api-ranking-list {
+    max-height: 620px;
+  }
+
   .provider-heading {
     align-items: flex-start;
   }
@@ -1807,9 +1838,12 @@ input:focus-visible {
 
   .api-ranking-entry > span[data-label] {
     display: grid;
+    min-width: 0;
     grid-row: 2;
     gap: 2px;
+    overflow: hidden;
     font-size: 12px;
+    text-overflow: ellipsis;
   }
 
   .api-ranking-entry > span[data-label]::before {
@@ -1869,7 +1903,10 @@ input:focus-visible {
 
   .price-summary p {
     display: grid;
+    min-width: 0;
+    max-width: 32%;
     justify-items: end;
+    text-align: right;
   }
 
   .price-summary strong {
@@ -1897,15 +1934,23 @@ input:focus-visible {
   }
 
   .official-price {
-    min-width: 126px;
+    width: min(126px, 42vw);
+    min-width: 0;
     justify-items: end;
     align-self: start;
     padding-top: 6px;
     text-align: right;
   }
 
+  .official-price strong,
+  .official-price small {
+    overflow: hidden;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .official-price strong {
-    max-width: 160px;
     font-size: 13px;
   }
 
@@ -1914,10 +1959,10 @@ input:focus-visible {
   }
 
   .price-list-global .price-row {
-    grid-template-columns: 28px minmax(82px, 1fr) minmax(118px, auto);
-    gap: 8px;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(112px, auto);
+    gap: 6px;
     min-height: 78px;
-    padding: 10px 9px;
+    padding: 10px 6px;
   }
 
   .price-list-global .price-row > *:nth-child(4),
@@ -1941,7 +1986,8 @@ input:focus-visible {
   }
 
   .price-list-global .official-price {
-    min-width: 118px;
+    width: auto;
+    min-width: 112px;
   }
 
   .mobile-global-details {
