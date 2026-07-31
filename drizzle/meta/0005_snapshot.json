@@ -183,12 +183,8 @@
           "name": "api_ranking_events_collection_run_id_collection_runs_id_fk",
           "tableFrom": "api_ranking_events",
           "tableTo": "collection_runs",
-          "columnsFrom": [
-            "collection_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -359,12 +355,8 @@
           "name": "api_ranking_state_collection_run_id_collection_runs_id_fk",
           "tableFrom": "api_ranking_state",
           "tableTo": "collection_runs",
-          "columnsFrom": [
-            "collection_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -471,12 +463,8 @@
           "name": "collection_errors_source_id_sources_id_fk",
           "tableFrom": "collection_errors",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -484,12 +472,8 @@
           "name": "collection_errors_collection_run_id_collection_runs_id_fk",
           "tableFrom": "collection_errors",
           "tableTo": "collection_runs",
-          "columnsFrom": [
-            "collection_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -690,12 +674,8 @@
           "name": "confirmation_tokens_subscription_id_subscriptions_id_fk",
           "tableFrom": "confirmation_tokens",
           "tableTo": "subscriptions",
-          "columnsFrom": [
-            "subscription_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["subscription_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1018,12 +998,8 @@
           "name": "plans_product_id_products_id_fk",
           "tableFrom": "plans",
           "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["product_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1146,12 +1122,8 @@
           "name": "price_change_candidates_plan_id_plans_id_fk",
           "tableFrom": "price_change_candidates",
           "tableTo": "plans",
-          "columnsFrom": [
-            "plan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1159,12 +1131,8 @@
           "name": "price_change_candidates_source_id_sources_id_fk",
           "tableFrom": "price_change_candidates",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1172,12 +1140,8 @@
           "name": "price_change_candidates_previous_observation_id_price_observations_id_fk",
           "tableFrom": "price_change_candidates",
           "tableTo": "price_observations",
-          "columnsFrom": [
-            "previous_observation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["previous_observation_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1185,12 +1149,8 @@
           "name": "price_change_candidates_last_collection_run_id_collection_runs_id_fk",
           "tableFrom": "price_change_candidates",
           "tableTo": "collection_runs",
-          "columnsFrom": [
-            "last_collection_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["last_collection_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1278,12 +1238,8 @@
           "name": "price_change_events_plan_id_plans_id_fk",
           "tableFrom": "price_change_events",
           "tableTo": "plans",
-          "columnsFrom": [
-            "plan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1291,12 +1247,8 @@
           "name": "price_change_events_previous_observation_id_price_observations_id_fk",
           "tableFrom": "price_change_events",
           "tableTo": "price_observations",
-          "columnsFrom": [
-            "previous_observation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["previous_observation_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1304,12 +1256,8 @@
           "name": "price_change_events_current_observation_id_price_observations_id_fk",
           "tableFrom": "price_change_events",
           "tableTo": "price_observations",
-          "columnsFrom": [
-            "current_observation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["current_observation_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1529,12 +1477,8 @@
           "name": "price_observations_plan_id_plans_id_fk",
           "tableFrom": "price_observations",
           "tableTo": "plans",
-          "columnsFrom": [
-            "plan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["plan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1542,12 +1486,8 @@
           "name": "price_observations_source_id_sources_id_fk",
           "tableFrom": "price_observations",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1555,12 +1495,8 @@
           "name": "price_observations_collection_run_id_collection_runs_id_fk",
           "tableFrom": "price_observations",
           "tableTo": "collection_runs",
-          "columnsFrom": [
-            "collection_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["collection_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1685,12 +1621,8 @@
           "name": "products_provider_id_providers_id_fk",
           "tableFrom": "products",
           "tableTo": "providers",
-          "columnsFrom": [
-            "provider_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["provider_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1925,12 +1857,8 @@
           "name": "sources_product_id_products_id_fk",
           "tableFrom": "sources",
           "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["product_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2303,12 +2231,8 @@
           "name": "subscriptions_subscriber_id_subscribers_id_fk",
           "tableFrom": "subscriptions",
           "tableTo": "subscribers",
-          "columnsFrom": [
-            "subscriber_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["subscriber_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2324,58 +2248,32 @@
     "public.collection_status": {
       "name": "collection_status",
       "schema": "public",
-      "values": [
-        "running",
-        "success",
-        "partial",
-        "failed"
-      ]
+      "values": ["running", "success", "partial", "failed"]
     },
     "public.price_mode": {
       "name": "price_mode",
       "schema": "public",
-      "values": [
-        "global",
-        "china_subscription",
-        "api"
-      ]
+      "values": ["global", "china_subscription", "api"]
     },
     "public.record_status": {
       "name": "record_status",
       "schema": "public",
-      "values": [
-        "verified",
-        "stale",
-        "pending",
-        "unpublished"
-      ]
+      "values": ["verified", "stale", "pending", "unpublished"]
     },
     "public.source_type": {
       "name": "source_type",
       "schema": "public",
-      "values": [
-        "app_store",
-        "official_web",
-        "official_api",
-        "manual_official"
-      ]
+      "values": ["app_store", "official_web", "official_api", "manual_official"]
     },
     "public.subscription_status": {
       "name": "subscription_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "active",
-        "unsubscribed"
-      ]
+      "values": ["pending", "active", "unsubscribed"]
     },
     "public.token_purpose": {
       "name": "token_purpose",
       "schema": "public",
-      "values": [
-        "confirm_subscription",
-        "unsubscribe"
-      ]
+      "values": ["confirm_subscription", "unsubscribe"]
     }
   },
   "schemas": {},
