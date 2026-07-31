@@ -231,6 +231,13 @@ test("uses stable model query links for API landing-page handoff", async ({
 }) => {
   await page.goto("/deepseek-price");
   const modelLink = page.locator(".landing-model-link").first();
+  if ((await modelLink.count()) === 0) {
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      /noindex,\s*follow/,
+    );
+    return;
+  }
   await expect(modelLink).toBeVisible();
   const href = await modelLink.getAttribute("href");
   expect(href).toMatch(
@@ -269,6 +276,18 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     "data-active",
     "true",
   );
+  const secondPlan = page.locator(".plan-button").nth(1);
+  const secondPlanId = await secondPlan.getAttribute("data-plan-id");
+  expect(secondPlanId).toBeTruthy();
+  await secondPlan.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("plan"))
+    .toBe(secondPlanId);
+  await page.reload();
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator(`.plan-button[data-plan-id="${secondPlanId}"]`),
+  ).toHaveAttribute("data-active", "true");
   await expect(page.getByText("App Store 上架状态")).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "状态" })).toHaveCount(0);
 

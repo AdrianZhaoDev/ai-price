@@ -98,6 +98,13 @@ function latestIso(values: Array<string | undefined>): string | undefined {
     .at(-1);
 }
 
+function earliestIso(values: Array<string | undefined>): string | undefined {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(0);
+}
+
 function maxIso(...values: Array<string | undefined>): string | undefined {
   return latestIso(values);
 }
@@ -295,13 +302,25 @@ function freshnessFor(
   return "stale";
 }
 
+function providerHasCurrentObservations(
+  provider: ProviderCatalogItem,
+  now: Date,
+): boolean {
+  if (!provider.lastCheckedAt) return false;
+  const checkedAt = new Date(provider.lastCheckedAt).getTime();
+  return (
+    Number.isFinite(checkedAt) && now.getTime() - checkedAt <= SEVEN_DAYS_MS
+  );
+}
+
 function pageQuality(
   page: LandingPageDefinition,
   providers: ProviderCatalogItem[],
+  sourceProviders: ProviderCatalogItem[],
   summary: LandingPageSummary,
   now: Date,
 ): LandingPageQuality {
-  const lastCheckedAt = latestIso(
+  const lastCheckedAt = earliestIso(
     providers.map((provider) => provider.lastCheckedAt),
   );
   const priceModifiedAt = latestIso(
@@ -313,20 +332,21 @@ function pageQuality(
     maxIso(priceModifiedAt, page.contentUpdatedAt) ?? page.contentUpdatedAt;
   const freshness = freshnessFor(lastCheckedAt, now);
   if (!lastCheckedAt) {
+    const sourceLastCheckedAt = latestIso(
+      sourceProviders.map((provider) => provider.lastCheckedAt),
+    );
+    const sourceAge = sourceLastCheckedAt
+      ? now.getTime() - new Date(sourceLastCheckedAt).getTime()
+      : Number.NaN;
     return {
       indexable: false,
-      reason: "no_checked_data",
-      freshness,
-      priceModifiedAt,
-      pageModifiedAt,
-    };
-  }
-  if (now.getTime() - new Date(lastCheckedAt).getTime() > SEVEN_DAYS_MS) {
-    return {
-      indexable: false,
-      reason: "expired",
-      freshness,
-      lastCheckedAt,
+      reason:
+        Number.isFinite(sourceAge) && sourceAge > SEVEN_DAYS_MS
+          ? "expired"
+          : "no_checked_data",
+      freshness:
+        Number.isFinite(sourceAge) && sourceAge > DAY_MS ? "stale" : freshness,
+      lastCheckedAt: sourceLastCheckedAt,
       priceModifiedAt,
       pageModifiedAt,
     };
@@ -382,24 +402,39 @@ export function buildLandingPageData(
   now = new Date(),
 ): LandingPageData {
   const globalProviders = selectProviders(page, "global", snapshot);
-  const subscriptionProviders = selectProviders(
+  const rawSubscriptionProviders = selectProviders(
     page,
     "china-subscription",
     snapshot,
   );
-  const apiProviders = selectProviders(page, "api", snapshot);
-  const providers = [
+  const rawApiProviders = selectProviders(page, "api", snapshot);
+  const sourceProviders = [
     ...globalProviders,
-    ...subscriptionProviders,
-    ...apiProviders,
+    ...rawSubscriptionProviders,
+    ...rawApiProviders,
   ];
+  const currentProviders = sourceProviders.filter((provider) =>
+    providerHasCurrentObservations(provider, now),
+  );
+  const currentProviderIds = new Set(
+    currentProviders.map((provider) => provider.id),
+  );
+  const currentGlobalProviders = globalProviders.filter((provider) =>
+    currentProviderIds.has(provider.id),
+  );
+  const subscriptionProviders = rawSubscriptionProviders.filter((provider) =>
+    currentProviderIds.has(provider.id),
+  );
+  const apiProviders = rawApiProviders.filter((provider) =>
+    currentProviderIds.has(provider.id),
+  );
   const groupedSubscriptions = subscriptionGroups(
-    [...globalProviders, ...subscriptionProviders],
+    [...currentGlobalProviders, ...subscriptionProviders],
     page,
   );
   const groupedApi = apiGroups(apiProviders);
   const stableModels = apiModelsForLandingPage(apiProviders);
-  const visibleOffers = providers.flatMap((provider) =>
+  const visibleOffers = currentProviders.flatMap((provider) =>
     offersForLandingPage(page, provider),
   );
   const summary: LandingPageSummary = {
@@ -417,11 +452,11 @@ export function buildLandingPageData(
 
   return {
     page,
-    globalProviders,
+    globalProviders: currentGlobalProviders,
     subscriptionProviders,
     apiProviders,
     summary,
-    quality: pageQuality(page, providers, summary, now),
+    quality: pageQuality(page, currentProviders, sourceProviders, summary, now),
   };
 }
 

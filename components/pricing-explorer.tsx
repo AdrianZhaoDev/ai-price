@@ -285,6 +285,18 @@ export function PricingExplorer({
     });
   }
 
+  function selectPlan(planId: string) {
+    setSelectedPlanId(planId);
+    if (activeMode !== "global") return;
+    const query = new URLSearchParams({
+      provider: selectedProvider.id,
+      plan: planId,
+    });
+    router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
+      scroll: false,
+    });
+  }
+
   async function selectRankingEntry(selection: ApiRankingSelection) {
     const provider = modeProviders.find(
       (item) => item.id === selection.providerId,
@@ -705,7 +717,8 @@ export function PricingExplorer({
                         className="plan-button pressable"
                         data-active={selectedPlanId === plan.id}
                         data-cheapest={index === 0}
-                        onClick={() => setSelectedPlanId(plan.id)}
+                        data-plan-id={plan.id}
+                        onClick={() => selectPlan(plan.id)}
                         aria-label={`${plan.name}，全球最低价 ${formatCny(plan.minimumCny)}`}
                       >
                         <span className="plan-name">{plan.name}</span>

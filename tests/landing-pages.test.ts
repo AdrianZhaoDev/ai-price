@@ -255,6 +255,77 @@ describe("SEO landing page registry", () => {
     ).toMatchObject({ indexable: false, reason: "expired" });
   });
 
+  it("uses the oldest displayed provider for freshness and excludes expired sections", () => {
+    const page = landingPageBySlug.get("glm-price")!;
+    const subscription = {
+      ...provider("glm-resource-package", "china-subscription", [
+        {
+          id: "glm-resource-monthly",
+          planId: "glm-resource-monthly",
+          planName: "智谱资源包",
+          amountMinor: 4900,
+          currency: "CNY",
+          displayPrice: "¥49",
+          billingPeriod: "month" as const,
+          observedAt: "2026-07-29T08:00:00.000Z",
+          status: "verified" as const,
+        },
+      ]),
+      lastCheckedAt: "2026-07-29T08:00:00.000Z",
+    };
+    const api = provider("glm-api", "api", [
+      {
+        id: "glm-4-input",
+        planId: "glm-4-input",
+        planName: "GLM-4 · 输入",
+        amountMinor: 100,
+        currency: "CNY",
+        displayPrice: "¥1",
+        billingPeriod: "usage",
+        unit: "/百万 tokens",
+        modelName: "GLM-4",
+        modelSlug: "glm-4",
+        priceType: "input",
+        observedAt: "2026-07-31T08:00:00.000Z",
+        status: "verified",
+      },
+    ]);
+    const now = new Date("2026-07-31T10:00:00.000Z");
+    const staleSection = buildLandingPageData(
+      page,
+      snapshot([subscription, api]),
+      now,
+    );
+
+    expect(staleSection.subscriptionProviders).toHaveLength(1);
+    expect(staleSection.apiProviders).toHaveLength(1);
+    expect(staleSection.quality).toMatchObject({
+      indexable: true,
+      freshness: "stale",
+      lastCheckedAt: "2026-07-29T08:00:00.000Z",
+    });
+
+    const expiredSection = buildLandingPageData(
+      page,
+      snapshot([
+        {
+          ...subscription,
+          lastCheckedAt: "2026-07-20T08:00:00.000Z",
+        },
+        api,
+      ]),
+      now,
+    );
+    expect(expiredSection.subscriptionProviders).toHaveLength(0);
+    expect(expiredSection.summary.subscriptionGroups).toHaveLength(0);
+    expect(expiredSection.apiProviders).toHaveLength(1);
+    expect(expiredSection.quality).toMatchObject({
+      indexable: true,
+      freshness: "fresh",
+      lastCheckedAt: "2026-07-31T08:00:00.000Z",
+    });
+  });
+
   it("requires stable API models while keeping non-token units out of token highlights", () => {
     const page = landingPageBySlug.get("teleai-price")!;
     const teleai = provider("teleai-api", "api", [

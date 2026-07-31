@@ -15,7 +15,7 @@ const CORE_PAGE_UPDATED_AT = {
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
 } as const;
 
-export const revalidate = 900;
+export const dynamic = "force-dynamic";
 
 export function buildSitemap(
   snapshot: LandingCatalogSnapshot,

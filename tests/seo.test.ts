@@ -1,6 +1,6 @@
 import manifest from "@/app/manifest";
 import robots from "@/app/robots";
-import { buildSitemap } from "@/app/sitemap";
+import { buildSitemap, dynamic as sitemapRendering } from "@/app/sitemap";
 import { providersForMode } from "@/lib/data/catalog";
 import {
   landingPagePath,
@@ -21,6 +21,10 @@ import nextConfig, {
 import { describe, expect, it } from "vitest";
 
 describe("SEO routes", () => {
+  it("renders the sitemap dynamically from the authoritative runtime cache", () => {
+    expect(sitemapRendering).toBe("force-dynamic");
+  });
+
   it("assigns a stable, distinct URL to every pricing mode", () => {
     expect(modeHref("global")).toBe("/");
     expect(modeHref("china-subscription")).toBe("/china-ai-subscriptions");
