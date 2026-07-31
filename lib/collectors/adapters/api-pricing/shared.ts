@@ -104,17 +104,37 @@ function markdownRow(line: string): string[] {
 export function markdownTables(markdown: string): OfficialTable[] {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const tables: OfficialTable[] = [];
-  let context = "";
+  let unitContext = "";
+  let sectionContext = "";
+  let proseContext = "";
+  let previousWasProse = false;
+  const capturesUnitContext = (value: string) =>
+    /\bprices?\b.*\bper\b|每.*(?:token|次|张|分钟|小时)/i.test(value);
   for (let index = 0; index < lines.length - 1; index += 1) {
     const heading = lines[index].match(/^\s{0,3}#{1,6}\s+(.+)$/);
     if (heading) {
-      context = markdownCell(heading[1]);
+      sectionContext = markdownCell(heading[1]);
+      if (capturesUnitContext(sectionContext)) {
+        unitContext = sectionContext;
+      }
+      proseContext = "";
+      previousWasProse = false;
       continue;
     }
     if (
       !lines[index].includes("|") ||
       !/^\s*\|?\s*:?-{3,}/.test(lines[index + 1])
     ) {
+      const prose = markdownCell(lines[index]);
+      if (prose) {
+        if (capturesUnitContext(prose)) {
+          unitContext = prose;
+        }
+        proseContext = previousWasProse ? `${proseContext} ${prose}` : prose;
+        previousWasProse = true;
+      } else {
+        previousWasProse = false;
+      }
       continue;
     }
     const rows = [markdownRow(lines[index])];
@@ -124,7 +144,13 @@ export function markdownTables(markdown: string): OfficialTable[] {
       if (row.some(Boolean)) rows.push(row);
       index += 1;
     }
-    tables.push({ context, rows });
+    tables.push({
+      context: [unitContext, sectionContext, proseContext]
+        .filter(Boolean)
+        .join(" "),
+      rows,
+    });
+    previousWasProse = false;
     index -= 1;
   }
   return tables;

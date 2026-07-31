@@ -1219,6 +1219,59 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "grok-api-pricing-official": 6,
 };
 
+const globalApiAdapterIds = new Set([
+  "openai-api-pricing-official",
+  "claude-api-pricing-official",
+  "gemini-api-pricing-official",
+  "grok-api-pricing-official",
+]);
+
+export function globalApiRankingHealthCheck(
+  offers: NormalizedOffer[],
+): SourceHealth {
+  const typesByModel = new Map<string, Set<string>>();
+  for (const offer of offers) {
+    if (
+      offer.rankingEligible === false ||
+      offer.unit !== "/百万 tokens" ||
+      !["cached_input", "input", "output"].includes(offer.priceType ?? "")
+    ) {
+      continue;
+    }
+    const model =
+      offer.modelSlug ??
+      offer.modelName ??
+      offer.canonicalPlanSlug ??
+      offer.rawPlanName;
+    const types = typesByModel.get(model) ?? new Set<string>();
+    types.add(offer.priceType!);
+    typesByModel.set(model, types);
+  }
+  const completeModels = [...typesByModel.entries()]
+    .filter(([, types]) =>
+      ["cached_input", "input", "output"].every((type) => types.has(type)),
+    )
+    .map(([model]) => model);
+  if (completeModels.length === 0) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message:
+        "Global API source produced no rankable cached-input/input/output model set.",
+      details: {
+        rankableTypesByModel: Object.fromEntries(
+          [...typesByModel].map(([model, types]) => [model, [...types].sort()]),
+        ),
+      },
+    };
+  }
+  return {
+    ok: true,
+    code: "OK",
+    message: `${completeModels.length} rankable global API models parsed.`,
+  };
+}
+
 export class OfficialPageAdapter implements PriceSourceAdapter {
   constructor(
     readonly id: string,
@@ -1258,10 +1311,14 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(
+    const baseHealth = officialPageHealthCheck(
       offers,
       minimumOffersByAdapterId[this.id] ?? 1,
     );
+    if (!baseHealth.ok || !globalApiAdapterIds.has(this.id)) {
+      return baseHealth;
+    }
+    return globalApiRankingHealthCheck(offers);
   }
 }
 
@@ -1629,7 +1686,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "openai-api-pricing-official",
     "openai-api",
     "https://developers.openai.com/api/docs/pricing",
-    "openai-api-v1",
+    "openai-api-v2",
     parseOpenAiApi,
     "https://developers.openai.com/api/docs/pricing.md",
     ["USD"],
@@ -1638,7 +1695,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "claude-api-pricing-official",
     "claude-api",
     "https://platform.claude.com/docs/en/about-claude/pricing",
-    "claude-api-v1",
+    "claude-api-v2",
     parseClaudeApi,
     "https://platform.claude.com/docs/en/about-claude/pricing",
     ["USD"],
@@ -1647,7 +1704,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "gemini-api-pricing-official",
     "gemini-api",
     "https://ai.google.dev/gemini-api/docs/pricing",
-    "gemini-api-v1",
+    "gemini-api-v2",
     parseGeminiApi,
     "https://ai.google.dev/gemini-api/docs/pricing",
     ["USD"],
@@ -1656,7 +1713,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "grok-api-pricing-official",
     "grok-api",
     "https://docs.x.ai/developers/pricing",
-    "grok-api-v1",
+    "grok-api-v2",
     parseGrokApi,
     "https://docs.x.ai/developers/pricing.md",
     ["USD"],

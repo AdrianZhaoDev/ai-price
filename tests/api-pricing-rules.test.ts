@@ -401,4 +401,24 @@ describe("maintainable API pricing rules", () => {
       rankingEligible: false,
     });
   });
+
+  it("does not reuse token-unit evidence across unrelated tables", () => {
+    const offers = parseOpenAiApi(
+      raw(`## Token pricing
+Prices per 1M tokens.
+| Model | Input | Cached input | Output |
+| --- | --- | --- | --- |
+| gpt-token | $2.00 | $0.20 | $12.00 |
+
+## Per-request tools
+Prices per request.
+| Model | Input | Cached input | Output |
+| --- | --- | --- | --- |
+| gpt-request | $0.01 | $0.01 | $0.02 |`),
+    );
+
+    expect(new Set(offers.map((offer) => offer.modelName))).toEqual(
+      new Set(["gpt-token"]),
+    );
+  });
 });

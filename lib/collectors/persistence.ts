@@ -1,4 +1,8 @@
-import { convertMinorToCny, type FxRate } from "@/lib/collectors/fx";
+import {
+  convertMinorToCny,
+  fxRateEffectiveAt,
+  type FxRate,
+} from "@/lib/collectors/fx";
 import type {
   NormalizedOffer,
   PriceSourceAdapter,
@@ -245,6 +249,7 @@ export async function recordSuccessfulCollection(input: {
     activePlanSlugs.add(plan.slug);
     activePlanIds.add(plan.id);
     const fxRate = input.fxRates.get(offer.currency.toUpperCase());
+    const fxRateEffectiveDate = fxRateEffectiveAt(fxRate);
     const convertedCny = convertMinorToCny(
       offer.amountMinor,
       offer.currency,
@@ -297,7 +302,7 @@ export async function recordSuccessfulCollection(input: {
             amountMinor: offer.amountMinor,
             convertedCny,
             fxRate: fxRate?.cnyPerUnit,
-            fxRateObservedAt: fxRate?.observedAt,
+            fxRateObservedAt: fxRateEffectiveDate,
             displayPrice: offer.displayPrice,
             billingPeriod: offer.billingPeriod,
             unit: offer.unit,
@@ -349,7 +354,7 @@ export async function recordSuccessfulCollection(input: {
             status: offer.status,
             convertedCny,
             fxRate: fxRate?.cnyPerUnit,
-            fxRateObservedAt: fxRate?.observedAt,
+            fxRateObservedAt: fxRateEffectiveDate,
           })
           .where(eq(priceObservations.id, previous.id));
         const [pendingEvent] = await tx

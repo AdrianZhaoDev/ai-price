@@ -847,11 +847,11 @@ function parseGlobalUsdTables(
 ): NormalizedOffer[] {
   const tokenUnitPattern =
     /1\s*m(?:illion)?\s*tokens?|million tokens?|mtok|(?:100\s*万|百万)(?:个)?\s*tokens?/i;
+  const nonTokenUnitPattern =
+    /per\s+(?:request|call|image|minute|hour)|\/\s*(?:request|call|image|minute|hour)|每(?:次|张|分钟|小时)/i;
   if (!tokenUnitPattern.test(raw.body)) {
     return [];
   }
-  const hasGlobalTokenStatement =
-    /prices?\s+per\s+1\s*m(?:illion)?\s*tokens?/i.test(raw.body);
   const orderFor = modelOrderer();
   const offers: NormalizedOffer[] = [];
   for (const table of pricingTables(raw.body)) {
@@ -865,6 +865,10 @@ function parseGlobalUsdTables(
     const headers = table.rows[headerIndex];
     const tableHasTokenUnit = headers.some((header) =>
       tokenUnitPattern.test(header),
+    );
+    const contextHasTokenUnit = tokenUnitPattern.test(table.context);
+    const tableHasNonTokenUnit = [...headers, table.context].some((value) =>
+      nonTokenUnitPattern.test(value),
     );
     const modelIndex = headers.findIndex((cell) => /model|模型/i.test(cell));
     const seenTypes = new Map<string, number>();
@@ -893,10 +897,11 @@ function parseGlobalUsdTables(
       for (const column of columns) {
         const cell = row[column.index] ?? "";
         if (!/\$|usd|美元/i.test(cell)) continue;
+        if (tableHasNonTokenUnit || nonTokenUnitPattern.test(cell)) continue;
         if (
           !tokenUnitPattern.test(cell) &&
           !tableHasTokenUnit &&
-          !hasGlobalTokenStatement
+          !contextHasTokenUnit
         ) {
           continue;
         }

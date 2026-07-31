@@ -664,7 +664,7 @@ export function PricingExplorer({
                       当前最低参考
                       <strong className="lowest-price">
                         {activeMode === "api"
-                          ? formatCny(lowestOffer.convertedCny)
+                          ? formatApiCny(lowestOffer.convertedCny)
                           : formatCny(lowestOffer.convertedCny)}
                       </strong>
                     </p>
