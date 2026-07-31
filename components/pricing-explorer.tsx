@@ -39,13 +39,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PricingExplorerProps = {
   initialMode: PriceMode;
@@ -55,10 +49,6 @@ type PricingExplorerProps = {
   contactEmail: string;
   dataVersion: string | null;
 };
-
-const subscribeToHydration = () => () => {};
-const getHydratedSnapshot = () => true;
-const getServerHydratedSnapshot = () => false;
 
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
@@ -119,11 +109,7 @@ export function PricingExplorer({
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
-  const hydrated = useSyncExternalStore(
-    subscribeToHydration,
-    getHydratedSnapshot,
-    getServerHydratedSnapshot,
-  );
+  const [hydrated, setHydrated] = useState(false);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [expandedProviderIds, setExpandedProviderIds] = useState<Set<string>>(
     () => new Set(),
@@ -137,6 +123,10 @@ export function PricingExplorer({
   );
   const rankingRequestIdRef = useRef(0);
   const providerSelectionIdRef = useRef(0);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const modeProviders = useMemo(
     () =>
@@ -437,8 +427,18 @@ export function PricingExplorer({
               className="nav-item pressable"
               data-mode={mode.id}
               aria-current={activeMode === mode.id ? "page" : undefined}
+              aria-label={mode.shortLabel}
             >
-              {mode.shortLabel}
+              <span
+                className={mode.id === "api" ? "nav-label-wide" : undefined}
+              >
+                {mode.shortLabel}
+              </span>
+              {mode.id === "api" ? (
+                <span className="nav-label-compact" aria-hidden="true">
+                  API 榜单
+                </span>
+              ) : null}
               {mode.id === "api" ? (
                 <span className="nav-hot-badge" aria-hidden="true">
                   Hot

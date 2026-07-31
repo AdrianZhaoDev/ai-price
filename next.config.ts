@@ -22,7 +22,7 @@ export const privateRouteHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", "localhost", "192.168.8.114"],
   outputFileTracingRoot: process.cwd(),
   async headers() {
     return [
