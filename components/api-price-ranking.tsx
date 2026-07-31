@@ -108,15 +108,15 @@ export function ApiPriceRanking({
 
   useEffect(() => {
     if (!focusRequest) return;
-    const entry =
-      entries.find(
-        (candidate) =>
-          candidate.providerId === focusRequest.providerId &&
-          candidate.modelSlug === focusRequest.modelSlug,
-      ) ??
-      entries.find(
-        (candidate) => candidate.providerId === focusRequest.providerId,
-      );
+    const entry = focusRequest.modelSlug
+      ? entries.find(
+          (candidate) =>
+            candidate.providerId === focusRequest.providerId &&
+            candidate.modelSlug === focusRequest.modelSlug,
+        )
+      : entries.find(
+          (candidate) => candidate.providerId === focusRequest.providerId,
+        );
     if (!entry) return;
     const node = entryRefs.current.get(entry.id);
     if (!node || node.offsetParent === null) return;
