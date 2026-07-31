@@ -639,6 +639,20 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     ).toBeGreaterThan(collapsedApiRowCount);
   }
 
+  const geminiButton = page.locator(
+    '.provider-button[data-provider-id="gemini-api"]',
+  );
+  await geminiButton.click();
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="gemini-api"]',
+    ),
+  ).toBeInViewport();
+  await expect(page.locator(".provider-large-mark svg path")).toHaveAttribute(
+    "fill",
+    "#756AF6",
+  );
+
   const firstRankingEntry = page
     .locator(
       '.api-ranking-desktop .api-ranking-entry[data-provider-id="openai-api"]',
@@ -664,6 +678,15 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     .first();
   await expect(targetRow).toBeVisible();
   await expect(targetRow).toBeInViewport();
+
+  const targetRowModelSlug = await targetRow.getAttribute("data-model-slug");
+  expect(targetRowModelSlug).toBeTruthy();
+  await targetRow.click();
+  const highlightedRankingEntry = page.locator(
+    `.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="${targetProviderId}"][data-model-slug="${targetRowModelSlug}"]`,
+  );
+  await expect(highlightedRankingEntry).toBeVisible();
+  await expect(highlightedRankingEntry).toBeInViewport();
 
   await expect(page.getByRole("heading", { name: "OpenAI API" })).toBeVisible();
   const openAiRow = page.locator(".price-list > .price-row").first();

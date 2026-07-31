@@ -6,6 +6,13 @@ import type {
 
 export type ApiRankingMetric = "cached_input" | "input" | "output";
 
+const expandedGlobalApiProviders = new Set([
+  "openai-api",
+  "claude-api",
+  "gemini-api",
+  "grok-api",
+]);
+
 export type ApiRankingEntry = {
   id: string;
   providerId: string;
@@ -129,12 +136,13 @@ export function apiRankingEntries(
       }
     }
 
+    const modelLimit = expandedGlobalApiProviders.has(provider.id) ? 10 : 2;
     const latestModels = [...models.entries()]
       .sort(
         ([, a], [, b]) =>
           a.order - b.order || a.name.localeCompare(b.name, "zh-CN"),
       )
-      .slice(0, 2);
+      .slice(0, modelLimit);
     for (const [modelSlug, model] of latestModels) {
       entries.push({
         id: `${provider.id}-${modelSlug}`,

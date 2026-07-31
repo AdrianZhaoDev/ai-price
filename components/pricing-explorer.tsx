@@ -4,6 +4,7 @@ import { ProviderMark } from "@/components/icons/provider-mark";
 import { ChangeBadge } from "@/components/change-badge";
 import {
   ApiPriceRanking,
+  type ApiRankingFocusRequest,
   type ApiRankingSelection,
 } from "@/components/api-price-ranking";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -29,9 +30,11 @@ import type {
   ModeDefinition,
   PriceChangeSummary,
   PriceMode,
+  PriceOffer,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
 import { useVersionRefresh } from "@/lib/pricing/use-version-refresh";
+import type { ApiRankingMetric } from "@/lib/pricing/api-ranking";
 import {
   ArrowUpRight,
   ArrowDownUp,
@@ -82,6 +85,16 @@ const getServerHydratedSnapshot = () => false;
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
 };
+
+function rankingMetricForOffer(
+  offer: PriceOffer,
+): ApiRankingMetric | undefined {
+  return offer.priceType === "cached_input" ||
+    offer.priceType === "input" ||
+    offer.priceType === "output"
+    ? offer.priceType
+    : undefined;
+}
 
 const GLOBAL_INITIAL_VISIBLE_COUNT = 24;
 
@@ -205,12 +218,15 @@ export function PricingExplorer({
   );
   const [pendingApiTarget, setPendingApiTarget] =
     useState<PendingApiTarget | null>(null);
-  const priceRowRefs = useRef(new Map<string, HTMLDivElement>());
-  const highlightedRowRef = useRef<HTMLDivElement | null>(null);
+  const [rankingFocusRequest, setRankingFocusRequest] =
+    useState<ApiRankingFocusRequest | null>(null);
+  const priceRowRefs = useRef(new Map<string, HTMLElement>());
+  const highlightedRowRef = useRef<HTMLElement | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const rankingRequestIdRef = useRef(0);
+  const rankingFocusRequestIdRef = useRef(0);
   const providerSelectionIdRef = useRef(0);
   const initialQueryAppliedRef = useRef(false);
   const providerLoadPromisesRef = useRef(
@@ -381,6 +397,12 @@ export function PricingExplorer({
     if (selectionId !== providerSelectionIdRef.current) return;
     setSelectedProviderId(loadedProvider.id);
     setSelectedPlanId(defaultPlanId(loadedProvider));
+    if (activeMode === "api") {
+      setRankingFocusRequest({
+        providerId: loadedProvider.id,
+        requestId: ++rankingFocusRequestIdRef.current,
+      });
+    }
     const query = new URLSearchParams({ provider: loadedProvider.id });
     if (activeMode === "global") {
       const planId = defaultPlanId(loadedProvider);
@@ -388,6 +410,17 @@ export function PricingExplorer({
     }
     router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
       scroll: false,
+    });
+  }
+
+  function focusRankingForOffer(offer: PriceOffer) {
+    if (activeMode !== "api") return;
+    setRankingFocusRequest({
+      providerId: selectedProvider.id,
+      modelSlug: offer.modelSlug,
+      offerId: offer.id,
+      metric: rankingMetricForOffer(offer),
+      requestId: ++rankingFocusRequestIdRef.current,
     });
   }
 
@@ -676,6 +709,7 @@ export function PricingExplorer({
               onSubscribe={() => {
                 openSubscriptionSheet("api_ranking");
               }}
+              focusRequest={rankingFocusRequest}
               onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
           </div>
@@ -875,10 +909,13 @@ export function PricingExplorer({
 
                 <div
                   className={`price-list ${activeMode === "global" ? "price-list-global" : ""}`}
-                  role="table"
+                  role={activeMode === "api" ? undefined : "table"}
                   aria-label="官方价格"
                 >
-                  <div className="price-list-header" role="row">
+                  <div
+                    className="price-list-header"
+                    role={activeMode === "api" ? undefined : "row"}
+                  >
                     {activeMode === "global" ? (
                       <>
                         <span role="columnheader">序号</span>
@@ -891,11 +928,25 @@ export function PricingExplorer({
                       </>
                     ) : (
                       <>
-                        <span role="columnheader">方案 / 模型</span>
-                        <span role="columnheader">
+                        <span
+                          role={
+                            activeMode === "api" ? undefined : "columnheader"
+                          }
+                        >
+                          方案 / 模型
+                        </span>
+                        <span
+                          role={
+                            activeMode === "api" ? undefined : "columnheader"
+                          }
+                        >
                           {activeMode === "api" ? "人民币价格" : "官方价格"}
                         </span>
-                        <span role="columnheader">
+                        <span
+                          role={
+                            activeMode === "api" ? undefined : "columnheader"
+                          }
+                        >
                           {activeMode === "api" ? "计费单位" : "人民币参考"}
                         </span>
                       </>
@@ -1012,29 +1063,12 @@ export function PricingExplorer({
                       );
                     }
 
-                    return (
-                      <motion.div
-                        className="price-row"
-                        role="row"
-                        key={offer.id}
-                        data-rank={rank}
-                        data-offer-id={offer.id}
-                        data-model-slug={offer.modelSlug}
-                        ref={(node) => {
-                          if (node) {
-                            priceRowRefs.current.set(offer.id, node);
-                          } else {
-                            priceRowRefs.current.delete(offer.id);
-                          }
-                        }}
-                        initial={false}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.2,
-                          delay: Math.min(index, 15) * 0.02,
-                        }}
-                      >
-                        <div className="price-identity" role="cell">
+                    const priceCells = (
+                      <>
+                        <div
+                          className="price-identity"
+                          role={activeMode === "api" ? undefined : "cell"}
+                        >
                           <span>
                             <strong>
                               {rank ? (
@@ -1057,7 +1091,7 @@ export function PricingExplorer({
                         </div>
                         <div
                           className="official-price"
-                          role="cell"
+                          role={activeMode === "api" ? undefined : "cell"}
                           data-rank={rank}
                         >
                           <strong>
@@ -1108,7 +1142,7 @@ export function PricingExplorer({
                         </div>
                         <div
                           className="converted-price"
-                          role="cell"
+                          role={activeMode === "api" ? undefined : "cell"}
                           data-rank={rank}
                         >
                           {activeMode === "api" ? (
@@ -1117,6 +1151,55 @@ export function PricingExplorer({
                             <strong>{formatCny(offer.convertedCny)}</strong>
                           )}
                         </div>
+                      </>
+                    );
+
+                    const rowMotion = {
+                      initial: false as const,
+                      animate: { opacity: 1, y: 0 },
+                      transition: {
+                        duration: 0.2,
+                        delay: Math.min(index, 15) * 0.02,
+                      },
+                    };
+
+                    if (activeMode === "api") {
+                      return (
+                        <motion.button
+                          type="button"
+                          className="price-row"
+                          key={offer.id}
+                          data-rank={rank}
+                          data-offer-id={offer.id}
+                          data-model-slug={offer.modelSlug}
+                          data-clickable="true"
+                          aria-label={`在排行榜中查看 ${offer.planName}`}
+                          onClick={() => focusRankingForOffer(offer)}
+                          ref={(node) => {
+                            if (node) {
+                              priceRowRefs.current.set(offer.id, node);
+                            } else {
+                              priceRowRefs.current.delete(offer.id);
+                            }
+                          }}
+                          {...rowMotion}
+                        >
+                          {priceCells}
+                        </motion.button>
+                      );
+                    }
+
+                    return (
+                      <motion.div
+                        className="price-row"
+                        role="row"
+                        key={offer.id}
+                        data-rank={rank}
+                        data-offer-id={offer.id}
+                        data-model-slug={offer.modelSlug}
+                        {...rowMotion}
+                      >
+                        {priceCells}
                       </motion.div>
                     );
                   })}
@@ -1174,6 +1257,7 @@ export function PricingExplorer({
                 onSubscribe={() => {
                   openSubscriptionSheet("api_ranking");
                 }}
+                focusRequest={rankingFocusRequest}
                 onSelectEntry={(selection) =>
                   void selectRankingEntry(selection)
                 }

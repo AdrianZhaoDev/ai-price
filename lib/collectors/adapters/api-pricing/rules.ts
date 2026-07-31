@@ -787,6 +787,74 @@ type GlobalApiProvider = {
   parserVersion: string;
 };
 
+const globalApiModelNames: Record<string, Array<[RegExp, string]>> = {
+  "openai-api": [
+    [/^gpt-5\.6-sol$/i, "gpt-5.6-sol"],
+    [/^gpt-5\.6-terra$/i, "gpt-5.6-terra"],
+    [/^gpt-5\.6-luna$/i, "gpt-5.6-luna"],
+    [/^gpt-5\.5-pro$/i, "gpt-5.5-pro"],
+    [/^gpt-5\.5$/i, "gpt-5.5"],
+  ],
+  "claude-api": [
+    [/^Claude Fable 5\b/i, "Claude Fable 5"],
+    [/^Claude Opus 5\b/i, "Claude Opus 5"],
+    [/^Claude Opus 4\.8\b/i, "Claude Opus 4.8"],
+    [/^Claude Opus 4\.7\b/i, "Claude Opus 4.7"],
+    [/^Claude Opus 4\.6\b/i, "Claude Opus 4.6"],
+    [/^Claude Sonnet 5(?:\b|through|starting)/i, "Claude Sonnet 5"],
+    [/^Claude Sonnet 4\.6\b/i, "Claude Sonnet 4.6"],
+    [/^Claude Haiku 4\.5\b/i, "Claude Haiku 4.5"],
+  ],
+  "gemini-api": [
+    [/^Gemini 3\.6 Flash$/i, "Gemini 3.6 Flash"],
+    [/^Gemini 3\.5 Flash$/i, "Gemini 3.5 Flash"],
+    [/^Gemini 3\.5 Flash-Lite$/i, "Gemini 3.5 Flash-Lite"],
+    [/^Gemini 3\.1 Flash-Lite$/i, "Gemini 3.1 Flash-Lite"],
+  ],
+  "grok-api": [
+    [/^grok-4\.5$/i, "grok-4.5"],
+    [/^grok-4\.3$/i, "grok-4.3"],
+    [/^grok-4\.20-0309-reasoning$/i, "grok-4.20-0309-reasoning"],
+    [/^grok-4\.20-0309-non-reasoning$/i, "grok-4.20-0309-non-reasoning"],
+  ],
+};
+
+function pricingWindowIncludes(
+  modelLabel: string,
+  observedAt: string,
+): boolean {
+  const observed = new Date(observedAt);
+  if (!Number.isFinite(observed.getTime())) return true;
+  const starting = modelLabel.match(
+    /starting\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i,
+  )?.[1];
+  if (starting) {
+    const start = new Date(`${starting} 00:00:00 UTC`);
+    if (Number.isFinite(start.getTime()) && observed < start) return false;
+  }
+  const through = modelLabel.match(
+    /through\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i,
+  )?.[1];
+  if (through) {
+    const end = new Date(`${through} 23:59:59 UTC`);
+    if (Number.isFinite(end.getTime()) && observed > end) return false;
+  }
+  return true;
+}
+
+function selectedGlobalApiModelName(
+  providerSlug: string,
+  modelLabel: string,
+  observedAt: string,
+): string | null {
+  if (!pricingWindowIncludes(modelLabel, observedAt)) return null;
+  for (const [pattern, canonicalName] of globalApiModelNames[providerSlug] ??
+    []) {
+    if (pattern.test(modelLabel)) return canonicalName;
+  }
+  return null;
+}
+
 function globalTier(text: string): {
   label: string;
   order: number;
@@ -889,7 +957,11 @@ function parseGlobalUsdTables(
     }
     for (const row of table.rows.slice(headerIndex + 1)) {
       const rawModelName = row[modelIndex] ?? "";
-      const modelName = globalModelName(rawModelName);
+      const modelName = selectedGlobalApiModelName(
+        provider.providerSlug,
+        globalModelName(rawModelName),
+        raw.observedAt,
+      );
       if (!modelName || /model|模型/i.test(modelName)) continue;
       const tier = globalTier(
         `${table.context} ${headers.join(" ")} ${rawModelName} ${row.join(" ")}`,
@@ -938,21 +1010,21 @@ function parseGlobalUsdTables(
 export function parseOpenAiApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "openai-api",
-    parserVersion: "openai-api-v2",
+    parserVersion: "openai-api-v3",
   });
 }
 
 export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "claude-api",
-    parserVersion: "claude-api-v2",
+    parserVersion: "claude-api-v3",
   });
 }
 
 export function parseGrokApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "grok-api",
-    parserVersion: "grok-api-v2",
+    parserVersion: "grok-api-v3",
   });
 }
 
@@ -961,7 +1033,7 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
   if ($("table").length === 0) {
     return parseGlobalUsdTables(raw, {
       providerSlug: "gemini-api",
-      parserVersion: "gemini-api-v2",
+      parserVersion: "gemini-api-v3",
     });
   }
 
@@ -974,10 +1046,16 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
     if (tag !== "table") {
       const heading = compactLabel($(element).text());
       if (/gemini[\s-]*\d/i.test(heading)) {
-        modelName = heading
+        const headingModelName = heading
           .replace(/\s*(pricing|定价).*$/i, "")
           .replace(/\s*\(.*$/, "")
           .trim();
+        modelName =
+          selectedGlobalApiModelName(
+            "gemini-api",
+            headingModelName,
+            raw.observedAt,
+          ) ?? "";
         section = "标准实时";
       } else if (
         /standard|batch|flex|priority|free|标准|批量|优先|免费/i.test(heading)
@@ -1030,7 +1108,7 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
           apiOffer({
             raw,
             providerSlug: "gemini-api",
-            parserVersion: "gemini-api-v2",
+            parserVersion: "gemini-api-v3",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel: label,

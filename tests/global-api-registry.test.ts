@@ -24,7 +24,7 @@ function offer(
     taxIncluded: null,
     sourceUrl: "https://official.example/pricing",
     observedAt: "2026-07-31T00:00:00.000Z",
-    parserVersion: "global-api-v2",
+    parserVersion: "global-api-v3",
     modelName: "Model",
     modelSlug: "model",
     priceType,
@@ -53,7 +53,7 @@ describe("global API adapter registry", () => {
         (adapter) =>
           adapter.sourceUrl.startsWith("https://") &&
           adapter.quoteCurrencies?.includes("USD") &&
-          adapter.parserVersion.endsWith("-v2"),
+          adapter.parserVersion.endsWith("-v3"),
       ),
     ).toBe(true);
   });

@@ -12,15 +12,8 @@ export function ProviderMark({
   if (providerId.startsWith("gemini")) {
     return (
       <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24">
-        <defs>
-          <linearGradient id="gemini-gradient" x1="2" y1="2" x2="22" y2="22">
-            <stop stopColor="#4C78FF" />
-            <stop offset="0.48" stopColor="#9B72F6" />
-            <stop offset="1" stopColor="#F05A91" />
-          </linearGradient>
-        </defs>
         <path
-          fill="url(#gemini-gradient)"
+          fill="#756AF6"
           d="M12 1.8c.74 5.8 4.4 9.46 10.2 10.2-5.8.74-9.46 4.4-10.2 10.2C11.26 16.4 7.6 12.74 1.8 12 7.6 11.26 11.26 7.6 12 1.8Z"
         />
       </svg>

@@ -11,19 +11,28 @@ import {
 } from "@/lib/pricing/api-ranking";
 import { formatApiCny, formatOfferPrice } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 type ApiPriceRankingProps = {
   providers: ProviderCatalogItem[];
   changes?: ApiRankingChange[];
   onSelectEntry: (selection: ApiRankingSelection) => void;
   onSubscribe: () => void;
+  focusRequest?: ApiRankingFocusRequest | null;
 };
 
 export type ApiRankingSelection = {
   providerId: string;
   modelSlug: string;
   offerId: string;
+};
+
+export type ApiRankingFocusRequest = {
+  providerId: string;
+  modelSlug?: string;
+  offerId?: string;
+  metric?: ApiRankingMetric;
+  requestId: number;
 };
 
 const metrics: Array<{ id: ApiRankingMetric; label: string }> = [
@@ -66,9 +75,23 @@ export function ApiPriceRanking({
   changes = [],
   onSelectEntry,
   onSubscribe,
+  focusRequest,
 }: ApiPriceRankingProps) {
   const titleId = useId();
-  const [metric, setMetric] = useState<ApiRankingMetric>("input");
+  const [metricSelection, setMetricSelection] = useState<{
+    metric: ApiRankingMetric;
+    afterRequestId: number;
+  }>({ metric: "input", afterRequestId: 0 });
+  const metric =
+    focusRequest?.metric &&
+    focusRequest.requestId > metricSelection.afterRequestId
+      ? focusRequest.metric
+      : metricSelection.metric;
+  const entryRefs = useRef(new Map<string, HTMLButtonElement>());
+  const highlightedEntryRef = useRef<HTMLButtonElement | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const entries = useMemo(
     () => apiRankingEntries(providers, metric),
     [metric, providers],
@@ -81,6 +104,47 @@ export function ApiPriceRanking({
           .map((change) => [change.entryId, change]),
       ),
     [changes, metric],
+  );
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const entry =
+      entries.find(
+        (candidate) =>
+          candidate.providerId === focusRequest.providerId &&
+          candidate.modelSlug === focusRequest.modelSlug,
+      ) ??
+      entries.find(
+        (candidate) => candidate.providerId === focusRequest.providerId,
+      );
+    if (!entry) return;
+    const node = entryRefs.current.get(entry.id);
+    if (!node || node.offsetParent === null) return;
+
+    highlightedEntryRef.current?.removeAttribute("data-highlighted");
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.setAttribute("data-highlighted", "true");
+    highlightedEntryRef.current = node;
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      node.removeAttribute("data-highlighted");
+      if (highlightedEntryRef.current === node) {
+        highlightedEntryRef.current = null;
+      }
+      highlightTimeoutRef.current = null;
+    }, 3000);
+  }, [entries, focusRequest, metric]);
+
+  useEffect(
+    () => () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+      highlightedEntryRef.current?.removeAttribute("data-highlighted");
+    },
+    [],
   );
 
   return (
@@ -105,7 +169,12 @@ export function ApiPriceRanking({
             key={item.id}
             data-active={metric === item.id}
             aria-pressed={metric === item.id}
-            onClick={() => setMetric(item.id)}
+            onClick={() =>
+              setMetricSelection({
+                metric: item.id,
+                afterRequestId: focusRequest?.requestId ?? 0,
+              })
+            }
           >
             {item.label}
           </button>
@@ -163,6 +232,13 @@ export function ApiPriceRanking({
                 data-model-slug={entry.modelSlug}
                 data-offer-id={offer?.id}
                 aria-label={`查看 ${entry.providerName} ${entry.modelName} 价格`}
+                ref={(node) => {
+                  if (node) {
+                    entryRefs.current.set(entry.id, node);
+                  } else {
+                    entryRefs.current.delete(entry.id);
+                  }
+                }}
                 onClick={() => {
                   if (!offer) return;
                   onSelectEntry({

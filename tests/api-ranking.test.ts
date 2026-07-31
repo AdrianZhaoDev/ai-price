@@ -77,6 +77,26 @@ describe("API ranking", () => {
     });
   });
 
+  it("allows up to ten curated global models while domestic providers stay at two", () => {
+    const values = Array.from({ length: 12 }, (_, index) => [
+      `Model-${index + 1}`,
+      index,
+      10 + index,
+      20 + index,
+      30 + index,
+    ]) as Array<[string, number, number, number, number]>;
+    const entries = apiRankingEntries(
+      [provider("openai-api", values), provider("domestic-api", values)],
+      "input",
+    );
+    expect(
+      entries.filter((entry) => entry.providerId === "openai-api"),
+    ).toHaveLength(10);
+    expect(
+      entries.filter((entry) => entry.providerId === "domestic-api"),
+    ).toHaveLength(2);
+  });
+
   it("changes ordering with the selected price metric", () => {
     const providers = [
       provider("A", [["A", 0, 100, 10, 500]]),

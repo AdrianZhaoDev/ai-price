@@ -734,6 +734,25 @@ input:focus-visible {
   background: color-mix(in srgb, var(--tint-soft) 42%, transparent);
 }
 
+.api-ranking-entry[data-highlighted="true"] {
+  position: relative;
+  z-index: 1;
+  animation: ranking-entry-target-pulse 750ms ease-in-out 4;
+  outline: 2px solid color-mix(in srgb, var(--tint) 72%, transparent);
+  outline-offset: -2px;
+}
+
+@keyframes ranking-entry-target-pulse {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: color-mix(in srgb, var(--tint) 15%, transparent);
+  }
+}
+
 .api-ranking-entry:focus-visible {
   outline: 2px solid var(--tint);
   outline-offset: -2px;
@@ -1131,6 +1150,29 @@ input:focus-visible {
   outline-offset: -2px;
 }
 
+.price-row[data-clickable="true"] {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.price-row[data-clickable="true"]:hover,
+.price-row[data-clickable="true"]:focus-visible {
+  background-color: color-mix(in srgb, var(--tint-soft) 36%, transparent);
+}
+
+.price-row[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
+}
+
 @keyframes price-row-target-pulse {
   0%,
   100% {
@@ -1143,6 +1185,7 @@ input:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .api-ranking-entry[data-highlighted="true"],
   .price-row[data-highlighted="true"] {
     animation: none;
     background-color: color-mix(in srgb, var(--tint) 12%, transparent);
