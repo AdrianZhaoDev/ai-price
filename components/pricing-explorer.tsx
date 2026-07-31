@@ -42,6 +42,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -56,6 +57,16 @@ type PricingExplorerProps = {
   deferredProviderIds?: string[];
   contactEmail: string;
   dataVersion: string | null;
+  initialQuery?: {
+    providerId?: string;
+    planId?: string;
+    modelSlug?: string;
+  };
+  priceIndexLinks?: Array<{
+    href: string;
+    label: string;
+    description: string;
+  }>;
 };
 
 const subscribeToHydration = () => () => {};
@@ -94,15 +105,22 @@ export function PricingExplorer({
   deferredProviderIds = [],
   contactEmail,
   dataVersion,
+  initialQuery,
+  priceIndexLinks = [],
 }: PricingExplorerProps) {
   const router = useRouter();
+  const availableInitialProviders = sortProvidersByRank(
+    providers.filter(
+      (provider) =>
+        provider.mode === initialMode && hasDisplayableOffers(provider),
+    ),
+  );
   const initialProvider =
-    sortProvidersByRank(
-      providers.filter(
-        (provider) =>
-          provider.mode === initialMode && hasDisplayableOffers(provider),
-      ),
-    )[0] ?? providers.find((provider) => hasDisplayableOffers(provider));
+    availableInitialProviders.find(
+      (provider) => provider.id === initialQuery?.providerId,
+    ) ??
+    availableInitialProviders[0] ??
+    providers.find((provider) => hasDisplayableOffers(provider));
   const activeMode = initialMode;
   const [providerItems, setProviderItems] = useState(providers);
   const [deferredIds, setDeferredIds] = useState(
@@ -118,6 +136,15 @@ export function PricingExplorer({
     initialProvider?.id ?? "",
   );
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(() => {
+    if (
+      initialProvider &&
+      initialQuery?.planId &&
+      displayableOffers(initialProvider.offers).some(
+        (offer) => offer.planId === initialQuery.planId,
+      )
+    ) {
+      return initialQuery.planId;
+    }
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -139,6 +166,7 @@ export function PricingExplorer({
   );
   const rankingRequestIdRef = useRef(0);
   const providerSelectionIdRef = useRef(0);
+  const initialQueryAppliedRef = useRef(false);
 
   const modeProviders = useMemo(
     () =>
@@ -194,49 +222,52 @@ export function PricingExplorer({
       }).format(new Date(selectedProvider.lastCheckedAt))
     : "等待首次采集";
 
-  async function ensureProviderLoaded(provider: ProviderCatalogItem) {
-    if (!deferredIds.has(provider.id)) return provider;
+  const ensureProviderLoaded = useCallback(
+    async function ensureProviderLoaded(provider: ProviderCatalogItem) {
+      if (!deferredIds.has(provider.id)) return provider;
 
-    setLoadingProviderId(provider.id);
-    setProviderLoadError(null);
-    try {
-      const response = await fetch(
-        `/pricing-data/${encodeURIComponent(provider.id)}`,
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const payload = (await response.json()) as {
-        provider?: ProviderCatalogItem;
-      };
-      if (
-        !payload.provider ||
-        payload.provider.id !== provider.id ||
-        payload.provider.mode !== activeMode
-      ) {
-        throw new Error("Invalid provider response");
-      }
+      setLoadingProviderId(provider.id);
+      setProviderLoadError(null);
+      try {
+        const response = await fetch(
+          `/pricing-data/${encodeURIComponent(provider.id)}`,
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = (await response.json()) as {
+          provider?: ProviderCatalogItem;
+        };
+        if (
+          !payload.provider ||
+          payload.provider.id !== provider.id ||
+          payload.provider.mode !== activeMode
+        ) {
+          throw new Error("Invalid provider response");
+        }
 
-      setProviderItems((current) =>
-        current.map((item) =>
-          item.id === provider.id ? payload.provider! : item,
-        ),
-      );
-      setDeferredIds((current) => {
-        const next = new Set(current);
-        next.delete(provider.id);
-        return next;
-      });
-      return payload.provider;
-    } catch {
-      setProviderLoadError(
-        `${provider.label}完整报价暂时加载失败，请稍后重试。`,
-      );
-      return provider;
-    } finally {
-      setLoadingProviderId(null);
-    }
-  }
+        setProviderItems((current) =>
+          current.map((item) =>
+            item.id === provider.id ? payload.provider! : item,
+          ),
+        );
+        setDeferredIds((current) => {
+          const next = new Set(current);
+          next.delete(provider.id);
+          return next;
+        });
+        return payload.provider;
+      } catch {
+        setProviderLoadError(
+          `${provider.label}完整报价暂时加载失败，请稍后重试。`,
+        );
+        return provider;
+      } finally {
+        setLoadingProviderId(null);
+      }
+    },
+    [activeMode, deferredIds],
+  );
 
   async function selectProvider(provider: ProviderCatalogItem) {
     const selectionId = ++providerSelectionIdRef.current;
@@ -246,6 +277,26 @@ export function PricingExplorer({
     if (selectionId !== providerSelectionIdRef.current) return;
     setSelectedProviderId(loadedProvider.id);
     setSelectedPlanId(defaultPlanId(loadedProvider));
+    const query = new URLSearchParams({ provider: loadedProvider.id });
+    if (activeMode === "global") {
+      const planId = defaultPlanId(loadedProvider);
+      if (planId) query.set("plan", planId);
+    }
+    router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
+      scroll: false,
+    });
+  }
+
+  function selectPlan(planId: string) {
+    setSelectedPlanId(planId);
+    if (activeMode !== "global") return;
+    const query = new URLSearchParams({
+      provider: selectedProvider.id,
+      plan: planId,
+    });
+    router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
+      scroll: false,
+    });
   }
 
   async function selectRankingEntry(selection: ApiRankingSelection) {
@@ -285,7 +336,62 @@ export function PricingExplorer({
       ...selection,
       requestId: rankingRequestIdRef.current,
     });
+    router.replace(
+      `${modeHref(activeMode)}?provider=${encodeURIComponent(provider.id)}&model=${encodeURIComponent(selection.modelSlug)}`,
+      { scroll: false },
+    );
   }
+
+  useEffect(() => {
+    if (initialQueryAppliedRef.current || !initialQuery?.providerId) return;
+    const provider = modeProviders.find(
+      (item) => item.id === initialQuery.providerId,
+    );
+    if (!provider) {
+      initialQueryAppliedRef.current = true;
+      return;
+    }
+
+    let cancelled = false;
+    const applyQuery = async () => {
+      const loadedProvider = await ensureProviderLoaded(provider);
+      if (cancelled) return;
+      setSelectedProviderId(loadedProvider.id);
+      if (
+        activeMode === "global" &&
+        initialQuery.planId &&
+        displayableOffers(loadedProvider.offers).some(
+          (offer) => offer.planId === initialQuery.planId,
+        )
+      ) {
+        setSelectedPlanId(initialQuery.planId);
+      }
+      if (activeMode === "api" && initialQuery.modelSlug) {
+        const offer = displayableOffers(loadedProvider.offers).find(
+          (candidate) => candidate.modelSlug === initialQuery.modelSlug,
+        );
+        if (offer) {
+          setExpandedProviderIds((current) => {
+            const next = new Set(current);
+            next.add(loadedProvider.id);
+            return next;
+          });
+          rankingRequestIdRef.current += 1;
+          setPendingApiTarget({
+            providerId: loadedProvider.id,
+            modelSlug: initialQuery.modelSlug,
+            offerId: offer.id,
+            requestId: rankingRequestIdRef.current,
+          });
+        }
+      }
+      initialQueryAppliedRef.current = true;
+    };
+    void applyQuery();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode, ensureProviderLoaded, initialQuery, modeProviders]);
 
   useEffect(() => {
     if (
@@ -419,14 +525,14 @@ export function PricingExplorer({
         className="site-header"
         aria-hidden={sheetOpen ? true : undefined}
       >
-        <Link href="/" className="brand" aria-label="AI 价签首页">
+        <Link href="/" className="brand" aria-label="Low Price Radar 首页">
           <span className="brand-mark" aria-hidden="true">
             <span />
             <span />
           </span>
           <span className="brand-copy">
-            <strong>AI 价签</strong>
-            <small>官方价格参考</small>
+            <strong>Low Price Radar</strong>
+            <small>AI订阅全球比价</small>
           </span>
         </Link>
 
@@ -465,7 +571,7 @@ export function PricingExplorer({
       >
         <h1 className="sr-only" id="workspace-title">
           {activeMode === "global"
-            ? "同一份订阅，不同的地区价格"
+            ? "AI订阅全球价格对比"
             : activeMode === "china-subscription"
               ? "国内 AI 会员，直接看官方价"
               : "模型调用成本，按官方单位列清楚"}
@@ -613,7 +719,8 @@ export function PricingExplorer({
                         className="plan-button pressable"
                         data-active={selectedPlanId === plan.id}
                         data-cheapest={index === 0}
-                        onClick={() => setSelectedPlanId(plan.id)}
+                        data-plan-id={plan.id}
+                        onClick={() => selectPlan(plan.id)}
                         aria-label={`${plan.name}，全球最低价 ${formatCny(plan.minimumCny)}`}
                       >
                         <span className="plan-name">{plan.name}</span>
@@ -904,10 +1011,18 @@ export function PricingExplorer({
                     }
                   >
                     {expandedProviderIds.has(selectedProvider.id)
-                      ? "收起"
-                      : "全部"}
+                      ? activeMode === "global"
+                        ? "收起地区列表"
+                        : "收起价格项目"
+                      : activeMode === "global"
+                        ? `查看全部 ${sortedOffers.length} 个地区`
+                        : `查看全部 ${sortedOffers.length} 个价格项目`}
                     <span>
-                      已显示 {visibleOffers.length} / {sortedOffers.length}
+                      {expandedProviderIds.has(selectedProvider.id)
+                        ? activeMode === "global"
+                          ? `已显示全部 ${sortedOffers.length} 个地区`
+                          : `已显示全部 ${sortedOffers.length} 个价格项目`
+                        : `当前显示 ${visibleOffers.length} 个`}
                     </span>
                   </button>
                 ) : null}
@@ -933,6 +1048,35 @@ export function PricingExplorer({
             </div>
           ) : null}
         </div>
+        {priceIndexLinks.length > 0 ? (
+          <nav className="price-index" aria-labelledby="price-index-title">
+            <div className="price-index-heading">
+              <p className="eyebrow">
+                <span className="eyebrow-line" />
+                可收录价格页面
+              </p>
+              <h2 id="price-index-title">
+                {activeMode === "global" ? "按产品继续比较" : "按品牌查看价格"}
+              </h2>
+              <p>
+                {activeMode === "global"
+                  ? "进入产品页查看套餐范围，再按具体套餐比较不同地区。"
+                  : "每个品牌页汇总可追溯的官方套餐、模型和计费单位。"}
+              </p>
+            </div>
+            <div className="price-index-links">
+              {priceIndexLinks.map((link) => (
+                <Link key={link.href} href={link.href}>
+                  <span>
+                    <strong>{link.label}</strong>
+                    <small>{link.description}</small>
+                  </span>
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          </nav>
+        ) : null}
       </main>
 
       <footer
@@ -940,12 +1084,12 @@ export function PricingExplorer({
         aria-hidden={sheetOpen ? true : undefined}
       >
         <div>
-          <strong>AI 价签</strong>
-          <p>看清官方价格，再决定是否订阅。</p>
+          <strong>Low Price Radar</strong>
+          <p>AI订阅全球比价 · 看清官方价格，再决定是否订阅。</p>
         </div>
         <div className="footer-links">
-          <a href="/methodology">采集方法</a>
-          <a href="/privacy">隐私</a>
+          <Link href="/methodology">采集方法</Link>
+          <Link href="/privacy">隐私</Link>
           <a
             href={
               hydrated

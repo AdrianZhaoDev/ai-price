@@ -29,9 +29,24 @@ function databaseMode(mode: PriceMode) {
   return mode === "china-subscription" ? "china_subscription" : mode;
 }
 
+export function latestProviderCheckAt(
+  current: string | undefined,
+  lastSeenAt: Date,
+): string {
+  if (!current || lastSeenAt > new Date(current)) {
+    return lastSeenAt.toISOString();
+  }
+  return current;
+}
+
+type LoadProviderCatalogOptions = {
+  fallbackOnError?: boolean;
+};
+
 export async function loadProviderCatalog(
   mode?: PriceMode,
   providerId?: string,
+  options: LoadProviderCatalogOptions = {},
 ): Promise<ProviderCatalogItem[]> {
   const catalog = cloneCatalog(mode, providerId);
   if (!isReadDatabaseConfigured()) return catalog;
@@ -93,6 +108,7 @@ export async function loadProviderCatalog(
         unit: observation.unit ?? undefined,
         status,
         observedAt: observation.observedAt.toISOString(),
+        lastCheckedAt: observation.lastSeenAt.toISOString(),
         modelName:
           typeof metadata.modelName === "string"
             ? metadata.modelName
@@ -142,15 +158,17 @@ export async function loadProviderCatalog(
         provider.status === "stale" || status === "stale"
           ? "stale"
           : "verified";
-      if (
-        !provider.lastCheckedAt ||
-        observation.observedAt > new Date(provider.lastCheckedAt)
-      ) {
-        provider.lastCheckedAt = observation.observedAt.toISOString();
-      }
+      provider.lastCheckedAt = latestProviderCheckAt(
+        provider.lastCheckedAt,
+        observation.lastSeenAt,
+      );
     }
     return catalog;
   } catch (error) {
+    if (options.fallbackOnError === false) {
+      console.error("Failed to load persisted prices.", error);
+      throw error;
+    }
     console.error(
       "Failed to load persisted prices; using catalog seed.",
       error,

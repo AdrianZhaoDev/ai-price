@@ -6,6 +6,19 @@ import { metadataForMode } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 export const metadata = metadataForMode("china-subscription");
 
-export default function ChinaAiSubscriptionsPage() {
-  return <PricingPage mode="china-subscription" />;
+export default async function ChinaAiSubscriptionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  return (
+    <PricingPage
+      mode="china-subscription"
+      query={{
+        providerId:
+          typeof params.provider === "string" ? params.provider : undefined,
+      }}
+    />
+  );
 }

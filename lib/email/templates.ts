@@ -35,7 +35,7 @@ function shell(content: string): string {
 <html lang="zh-CN">
   <body style="margin:0;background:#f6f5f2;color:#1d1d1f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
-      <div style="font-size:15px;font-weight:700;margin-bottom:22px;">AI 价签</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:22px;">Low Price Radar</div>
       <div style="background:#fff;border:1px solid rgba(60,60,67,.14);border-radius:22px;padding:28px;">
         ${content}
       </div>
@@ -180,7 +180,7 @@ export function adminAlertEmail({
   `);
 
   return {
-    subject: `[AI 价签] ${sourceName} 采集异常`,
+    subject: `[Low Price Radar] ${sourceName} 采集异常`,
     html,
     text: `${sourceName} 采集异常\n${errorCode}\n${occurredAt}\n${message}${adminUrl ? `\n完整日志：${adminUrl}` : ""}`,
   };

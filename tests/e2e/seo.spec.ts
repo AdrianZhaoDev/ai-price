@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const publicPages = [
   {
     path: "/",
-    title: "AI 订阅价格对比",
+    title: "AI订阅全球价格对比",
     canonical: "https://lowpriceradar.com",
     sitemapUrl: "https://lowpriceradar.com/",
   },
@@ -19,6 +19,40 @@ const publicPages = [
     canonical: "https://lowpriceradar.com/api-pricing",
     sitemapUrl: "https://lowpriceradar.com/api-pricing",
   },
+] as const;
+
+const landingPaths = [
+  "/chatgpt-price",
+  "/claude-price",
+  "/gemini-price",
+  "/grok-price",
+  "/chatgpt-plus-price",
+  "/chatgpt-go-price",
+  "/chatgpt-pro-price",
+  "/claude-pro-price",
+  "/claude-max-price",
+  "/gemini-pro-price",
+  "/glm-price",
+  "/kimi-price",
+  "/stepfun-price",
+  "/minimax-price",
+  "/qwen-price",
+  "/baidu-qianfan-price",
+  "/spark-price",
+  "/mimo-price",
+  "/huawei-maas-price",
+  "/comate-price",
+  "/qoder-price",
+  "/trae-price",
+  "/codebuddy-price",
+  "/sensenova-price",
+  "/deepseek-price",
+  "/doubao-price",
+  "/hunyuan-price",
+  "/baichuan-price",
+  "/longcat-price",
+  "/siliconflow-price",
+  "/teleai-price",
 ] as const;
 
 test("publishes distinct indexable pricing pages and structured data", async ({
@@ -55,6 +89,11 @@ test("publishes distinct indexable pricing pages and structured data", async ({
         expect.objectContaining({ "@type": "ItemList" }),
       ]),
     );
+    await expect(page.locator(".price-index")).toBeVisible();
+    await expect(page.locator(".price-index-links a").first()).toHaveAttribute(
+      "href",
+      /.+-price|china-ai-subscriptions|api-pricing/,
+    );
   }
 });
 
@@ -79,6 +118,100 @@ test("publishes complete metadata on trust and policy pages", async ({
       "content",
       "summary_large_image",
     );
+  }
+});
+
+test("publishes the complete provider landing page matrix", async ({
+  page,
+  request,
+  isMobile,
+}) => {
+  test.setTimeout(120_000);
+  test.skip(isMobile, "SEO output is device-independent.");
+  const sitemap = await (await request.get("/sitemap.xml")).text();
+
+  for (const path of landingPaths) {
+    const response = await page.goto(path);
+    expect(response?.ok()).toBe(true);
+    expect((await response?.body())?.byteLength).toBeLessThan(2_000_000);
+    await expect(page).toHaveTitle(/Low Price Radar/);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+      "content",
+      /.{50,}/,
+    );
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      "href",
+      `https://lowpriceradar.com${path}`,
+    );
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "先看这组数据说明了什么" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".landing-summary-copy > p").last(),
+    ).toContainText(/收录|覆盖|报价|模型|数据/);
+    await expect(page.locator(".landing-cta-link").first()).toBeVisible();
+    const robots =
+      (await page
+        .locator('meta[name="robots"]')
+        .first()
+        .getAttribute("content")) ?? "";
+    expect(
+      sitemap.includes(`<loc>https://lowpriceradar.com${path}</loc>`),
+    ).toBe(!robots.includes("noindex"));
+    const structuredData = (
+      await page.locator('script[type="application/ld+json"]').allTextContents()
+    ).flatMap((value) => {
+      const parsed = JSON.parse(value) as
+        Record<string, unknown> | Record<string, unknown>[];
+      return Array.isArray(parsed) ? parsed : [parsed];
+    });
+    expect(structuredData).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ "@type": "Dataset" }),
+        expect.objectContaining({ "@type": "BreadcrumbList" }),
+      ]),
+    );
+  }
+});
+
+test("landing pages fit common phone widths and expose crawlable links", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Explicit phone widths are covered once.");
+
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 812 });
+    for (const path of [
+      "/chatgpt-price",
+      "/chatgpt-plus-price",
+      "/glm-price",
+      "/deepseek-price",
+    ]) {
+      await page.goto(path);
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth,
+        ),
+      ).toBe(true);
+      await expect(page.locator(".landing-cta-link").first()).toBeVisible();
+      expect(
+        await page
+          .locator(".landing-cta-link")
+          .first()
+          .evaluate((link) => link.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(48);
+      expect(
+        await page
+          .locator(".landing-related a")
+          .evaluateAll((links) =>
+            links.every((link) => Boolean(link.getAttribute("href"))),
+          ),
+      ).toBe(true);
+    }
   }
 });
 

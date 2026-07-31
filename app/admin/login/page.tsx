@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginForm } from "./login-form";
 
 export const metadata = {
-  title: "管理员登录｜AI 价签",
+  title: "管理员登录｜Low Price Radar",
 };
 
 export default async function AdminLoginPage() {

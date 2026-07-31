@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Low Price Radar · AI 价签",
-    short_name: "AI 价签",
+    name: "Low Price Radar · AI订阅全球比价",
+    short_name: "Low Price Radar",
     description:
       "ChatGPT、Claude、Gemini、Grok 与国内 AI 的官方订阅及 API 价格参考。",
     start_url: "/",

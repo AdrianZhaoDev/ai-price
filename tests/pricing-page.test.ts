@@ -1,10 +1,28 @@
 import { providerCatalog } from "@/lib/data/catalog";
 import { prepareProvidersForClient } from "@/lib/pricing/client-catalog";
-import { loadProviderCatalog } from "@/lib/pricing/repository";
+import {
+  latestProviderCheckAt,
+  loadProviderCatalog,
+} from "@/lib/pricing/repository";
 import type { ProviderCatalogItem } from "@/lib/pricing/types";
 import { describe, expect, it } from "vitest";
 
 describe("pricing page payload", () => {
+  it("uses the latest successful sighting for the freshness label", () => {
+    expect(
+      latestProviderCheckAt(
+        "2026-07-28T03:16:43.199Z",
+        new Date("2026-07-31T04:00:47.289Z"),
+      ),
+    ).toBe("2026-07-31T04:00:47.289Z");
+    expect(
+      latestProviderCheckAt(
+        "2026-07-31T04:00:47.289Z",
+        new Date("2026-07-28T03:16:43.199Z"),
+      ),
+    ).toBe("2026-07-31T04:00:47.289Z");
+  });
+
   it("loads only the requested pricing mode", async () => {
     const providers = await loadProviderCatalog("china-subscription");
 

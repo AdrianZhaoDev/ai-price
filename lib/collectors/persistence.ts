@@ -223,7 +223,7 @@ async function ensurePlan(
         name: offer.rawPlanName,
         billingPeriod: offer.billingPeriod,
         unit: offer.unit,
-        metadata,
+        metadata: sql`coalesce(${plans.metadata}, '{}'::jsonb) || excluded.metadata`,
         active: true,
         updatedAt: new Date(),
       },

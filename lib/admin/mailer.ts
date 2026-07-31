@@ -20,7 +20,7 @@ export async function sendAdminLoginCode(code: string): Promise<void> {
     const result = await getEmailTransport().sendMail({
       from: process.env.SMTP_FROM,
       to: recipient,
-      subject: "AI 价签管理员登录验证码",
+      subject: "Low Price Radar 管理员登录验证码",
       text: `你的管理员登录验证码是：${code}\n\n验证码 10 分钟内有效。如非本人操作，请忽略此邮件。`,
     });
     await settleEmailDelivery(deliveryId, {
