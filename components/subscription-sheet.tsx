@@ -28,6 +28,7 @@ export function SubscriptionSheet({
     useState<SubscriptionResultStatus>("subscribed");
   const dialogRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const lastSuccessfulSubscriptionRef = useRef("");
 
   const closeSheet = useCallback(() => {
     setState("idle");
@@ -87,8 +88,19 @@ export function SubscriptionSheet({
     setResultStatus("subscribed");
 
     const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    const subscriptionKey = `${email}:${providerId}:${planId || "*"}`;
+    if (lastSuccessfulSubscriptionRef.current === subscriptionKey) {
+      setState("success");
+      setMessage("您已订阅，请勿重复订阅。");
+      setResultStatus("already_subscribed");
+      return;
+    }
+
     const payload = {
-      email: form.get("email"),
+      email,
       providerId,
       planId: planId || null,
     };
@@ -110,7 +122,8 @@ export function SubscriptionSheet({
 
       setState("success");
       setMessage(result.message || "您已订阅成功！");
-      setResultStatus(result.status ?? "subscribed");
+      setResultStatus("subscribed");
+      lastSuccessfulSubscriptionRef.current = subscriptionKey;
     } catch (error) {
       setState("error");
       setMessage(

@@ -83,13 +83,15 @@ test("submits a real subscription payload without an autofill honeypot", async (
 test("shows an already-subscribed notice for an identical subscription", async ({
   page,
 }) => {
+  let requestCount = 0;
   await page.route("**/api/subscriptions", async (route) => {
+    requestCount += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        status: "already_subscribed",
-        message: "您已订阅，请勿重复订阅。",
+        status: "subscribed",
+        message: "您已订阅成功！",
       }),
     });
   });
@@ -99,11 +101,20 @@ test("shows an already-subscribed notice for an identical subscription", async (
   await page.getByRole("button", { name: "关注价格" }).click();
   await page.getByLabel("邮箱").fill("reader@example.com");
   await page.getByRole("button", { name: "立即订阅" }).click();
+  await expect(
+    page.getByRole("heading", { name: "您已订阅成功！" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "完成" }).click();
+
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
 
   await expect(
     page.getByRole("heading", { name: "您已订阅，请勿重复订阅。" }),
   ).toBeVisible();
   await expect(page.getByText("无需再次提交")).toBeVisible();
+  expect(requestCount).toBe(1);
 });
 
 test("shows ranked RMB prices without duplicate or status-only plans", async ({

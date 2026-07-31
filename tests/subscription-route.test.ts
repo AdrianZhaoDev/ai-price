@@ -55,14 +55,7 @@ describe("subscription route", () => {
       retryAfterSeconds: 0,
     });
     mocks.requestPriceSubscription.mockResolvedValue({
-      status: "subscribed",
-      emailTask: {
-        subscriptionId: "subscription-id",
-        recipient: "reader@example.com",
-        scopeLabel: "ChatGPT",
-        unsubscribeUrl:
-          "http://localhost:3100/api/subscriptions/unsubscribe?token=test",
-      },
+      notificationId: "subscription-id",
     });
     mocks.sendSubscriptionCreatedEmail.mockResolvedValue(undefined);
   });
@@ -82,16 +75,16 @@ describe("subscription route", () => {
     expect(mocks.sendSubscriptionCreatedEmail).toHaveBeenCalledOnce();
   });
 
-  it("returns a duplicate notice without scheduling email", async () => {
+  it("does not disclose a duplicate subscription", async () => {
     mocks.requestPriceSubscription.mockResolvedValueOnce({
-      status: "already_subscribed",
+      notificationId: undefined,
     });
 
     const response = await POST(subscriptionRequest());
 
     await expect(response.json()).resolves.toEqual({
-      status: "already_subscribed",
-      message: "您已订阅，请勿重复订阅。",
+      status: "subscribed",
+      message: "您已订阅成功！",
     });
     expect(mocks.after).not.toHaveBeenCalled();
   });

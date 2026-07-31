@@ -90,28 +90,25 @@ export async function POST(request: NextRequest) {
       providerId: parsed.data.providerId,
       planId: parsed.data.planId ?? null,
     });
-    if (result.status === "already_subscribed") {
-      return NextResponse.json({
-        status: result.status,
-        message: "您已订阅，请勿重复订阅。",
+
+    const notificationId = result.notificationId;
+    if (notificationId) {
+      after(async () => {
+        try {
+          await sendSubscriptionCreatedEmail(notificationId);
+        } catch (error) {
+          console.error("Subscription email delivery failed.", {
+            subscriptionId: notificationId,
+            providerId: parsed.data.providerId,
+            planId: parsed.data.planId ?? null,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
       });
     }
 
-    after(async () => {
-      try {
-        await sendSubscriptionCreatedEmail(result.emailTask);
-      } catch (error) {
-        console.error("Subscription email delivery failed.", {
-          subscriptionId: result.emailTask.subscriptionId,
-          providerId: parsed.data.providerId,
-          planId: parsed.data.planId ?? null,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    });
-
     return NextResponse.json({
-      status: result.status,
+      status: "subscribed",
       message: "您已订阅成功！",
     });
   } catch (error) {

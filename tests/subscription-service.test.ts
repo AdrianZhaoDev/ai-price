@@ -1,20 +1,29 @@
 import { providerCatalog } from "@/lib/data/catalog";
 import {
+  deliverPendingSubscriptionCreatedEmails,
   requestPriceSubscription,
   sendSubscriptionCreatedEmail,
 } from "@/lib/subscriptions/service";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  claimSubscriptionCreatedEmail: vi.fn(),
   createActiveSubscription: vi.fn(),
+  createUnsubscribeToken: vi.fn(),
+  listPendingSubscriptionEmailIds: vi.fn(),
   loadProviderCatalog: vi.fn(),
   reserveEmailDelivery: vi.fn(),
+  settleSubscriptionCreatedEmail: vi.fn(),
   settleEmailDelivery: vi.fn(),
   sendMail: vi.fn(),
 }));
 
 vi.mock("@/lib/subscriptions/repository", () => ({
+  claimSubscriptionCreatedEmail: mocks.claimSubscriptionCreatedEmail,
   createActiveSubscription: mocks.createActiveSubscription,
+  createUnsubscribeToken: mocks.createUnsubscribeToken,
+  listPendingSubscriptionEmailIds: mocks.listPendingSubscriptionEmailIds,
+  settleSubscriptionCreatedEmail: mocks.settleSubscriptionCreatedEmail,
 }));
 
 vi.mock("@/lib/pricing/repository", () => ({
@@ -38,10 +47,18 @@ describe("subscription service", () => {
     vi.stubEnv("SMTP_FROM", "AI Price Atlas <dev@localhost>");
     mocks.createActiveSubscription.mockResolvedValue({
       alreadySubscribed: false,
-      unsubscribeToken: "unsubscribe-token",
+      emailNotificationPending: true,
+      subscriptionId: "subscription-id",
+    });
+    mocks.claimSubscriptionCreatedEmail.mockResolvedValue({
       subscriptionId: "subscription-id",
       email: "reader@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-go-monthly",
+      attempt: 1,
     });
+    mocks.createUnsubscribeToken.mockResolvedValue("unsubscribe-token");
+    mocks.listPendingSubscriptionEmailIds.mockResolvedValue([]);
     mocks.reserveEmailDelivery.mockResolvedValue("delivery-id");
     mocks.sendMail.mockResolvedValue({ messageId: "test-message" });
   });
@@ -80,30 +97,33 @@ describe("subscription service", () => {
       providerSlug: "chatgpt",
       planSlug: "chatgpt-go-monthly",
     });
-    expect(result.status).toBe("subscribed");
+    expect(result).toEqual({ notificationId: "subscription-id" });
     expect(mocks.sendMail).not.toHaveBeenCalled();
 
-    if (result.status !== "subscribed") throw new Error("Expected subscribed.");
-    expect(result.emailTask.unsubscribeUrl).toBe(
+    await sendSubscriptionCreatedEmail(result.notificationId!);
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
+    expect(mocks.sendMail.mock.calls[0][0].html).toContain(
       "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token",
     );
-    await sendSubscriptionCreatedEmail(result.emailTask);
-    expect(mocks.sendMail).toHaveBeenCalledOnce();
     expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
       status: "sent",
       providerMessageId: "test-message",
     });
+    expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
+      "subscription-id",
+      { status: "sent", attempt: 1 },
+    );
   });
 
-  it("does not schedule another email for an identical active subscription", async () => {
+  it("does not expose whether an identical active subscription exists", async () => {
     const staticProvider = providerCatalog.find(
       (provider) => provider.id === "chatgpt",
     );
     mocks.loadProviderCatalog.mockResolvedValue([staticProvider]);
     mocks.createActiveSubscription.mockResolvedValue({
       alreadySubscribed: true,
+      emailNotificationPending: false,
       subscriptionId: "subscription-id",
-      email: "reader@example.com",
     });
 
     await expect(
@@ -112,7 +132,7 @@ describe("subscription service", () => {
         providerId: "chatgpt",
         planId: null,
       }),
-    ).resolves.toEqual({ status: "already_subscribed" });
+    ).resolves.toEqual({ notificationId: undefined });
     expect(mocks.sendMail).not.toHaveBeenCalled();
   });
 
@@ -149,21 +169,31 @@ describe("subscription service", () => {
   });
 
   it("records a background email failure without changing subscription success", async () => {
-    const task = {
-      subscriptionId: "subscription-id",
-      recipient: "reader@example.com",
-      scopeLabel: "ChatGPT",
-      unsubscribeUrl:
-        "http://localhost:3000/api/subscriptions/unsubscribe?token=token",
-    };
     mocks.sendMail.mockRejectedValueOnce(new Error("SMTP timeout"));
 
-    await expect(sendSubscriptionCreatedEmail(task)).rejects.toThrow(
-      "SMTP timeout",
-    );
+    await expect(
+      sendSubscriptionCreatedEmail("subscription-id"),
+    ).rejects.toThrow("SMTP timeout");
     expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
       status: "failed",
       error: "SMTP timeout",
     });
+    expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
+      "subscription-id",
+      { status: "failed", attempt: 1 },
+    );
+  });
+
+  it("retries persisted pending notifications in the background worker", async () => {
+    mocks.listPendingSubscriptionEmailIds.mockResolvedValueOnce([
+      "subscription-id",
+    ]);
+
+    await expect(deliverPendingSubscriptionCreatedEmails()).resolves.toEqual({
+      attempted: 1,
+      sent: 1,
+      failed: 0,
+    });
+    expect(mocks.sendMail).toHaveBeenCalledOnce();
   });
 });

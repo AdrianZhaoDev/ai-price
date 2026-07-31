@@ -6,8 +6,14 @@ import { subscriptionCreatedEmail } from "@/lib/email/templates";
 import { getEmailTransport } from "@/lib/email/transport";
 import { providerCatalog } from "@/lib/data/catalog";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
-import { hashEmail, hashValue } from "@/lib/security/tokens";
-import { createActiveSubscription } from "./repository";
+import { hashEmail } from "@/lib/security/tokens";
+import {
+  claimSubscriptionCreatedEmail,
+  createActiveSubscription,
+  createUnsubscribeToken,
+  listPendingSubscriptionEmailIds,
+  settleSubscriptionCreatedEmail,
+} from "./repository";
 import { getApplicationBaseUrl } from "./urls";
 import { z } from "zod";
 
@@ -17,16 +23,9 @@ type RequestSubscriptionInput = {
   planId: string | null;
 };
 
-export type SubscriptionEmailTask = {
-  subscriptionId: string;
-  recipient: string;
-  scopeLabel: string;
-  unsubscribeUrl: string;
+export type RequestSubscriptionResult = {
+  notificationId?: string;
 };
-
-export type RequestSubscriptionResult =
-  | { status: "already_subscribed" }
-  | { status: "subscribed"; emailTask: SubscriptionEmailTask };
 
 export async function requestPriceSubscription(
   input: RequestSubscriptionInput,
@@ -52,70 +51,113 @@ export async function requestPriceSubscription(
     throw new Error("该套餐不属于所选产品。");
   }
 
-  const baseUrl = getApplicationBaseUrl();
   const subscription = await createActiveSubscription({
     email,
     providerSlug: input.providerId,
     planSlug: input.planId,
   });
-  if (subscription.alreadySubscribed) {
-    return { status: "already_subscribed" };
-  }
-
-  const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", baseUrl);
-  unsubscribeUrl.searchParams.set("token", subscription.unsubscribeToken);
-
-  const selectedPlan = provider.offers.find(
-    (offer) => offer.planId === input.planId,
-  );
-  const scopeLabel = selectedPlan
-    ? `${provider.name} · ${selectedPlan.planName}`
-    : provider.name;
 
   return {
-    status: "subscribed",
-    emailTask: {
-      subscriptionId: subscription.subscriptionId,
-      recipient: subscription.email,
-      scopeLabel,
-      unsubscribeUrl: unsubscribeUrl.toString(),
-    },
+    notificationId: subscription.emailNotificationPending
+      ? subscription.subscriptionId
+      : undefined,
   };
 }
 
 export async function sendSubscriptionCreatedEmail(
-  task: SubscriptionEmailTask,
-): Promise<void> {
-  const deliveryId = await reserveEmailDelivery({
-    type: "subscription_created",
-    recipient: task.recipient,
-    dedupeKey: `subscription-created:${task.subscriptionId}:${hashValue(task.unsubscribeUrl)}`,
-  });
-  if (!deliveryId) return;
+  subscriptionId: string,
+): Promise<boolean> {
+  const claim = await claimSubscriptionCreatedEmail(subscriptionId);
+  if (!claim) return false;
+
+  let deliveryId: string | null = null;
 
   try {
+    const catalogProvider = providerCatalog.find(
+      (candidate) => candidate.id === claim.providerSlug,
+    );
+    const [liveProvider] = catalogProvider
+      ? await loadProviderCatalog(catalogProvider.mode, claim.providerSlug)
+      : [];
+    const provider = liveProvider ?? catalogProvider;
+    const selectedPlan = provider?.offers.find(
+      (offer) => offer.planId === claim.planSlug,
+    );
+    const scopeLabel =
+      provider && selectedPlan
+        ? `${provider.name} · ${selectedPlan.planName}`
+        : (provider?.name ?? claim.providerSlug);
+
+    const unsubscribeToken = await createUnsubscribeToken(claim.subscriptionId);
+    const unsubscribeUrl = new URL(
+      "/api/subscriptions/unsubscribe",
+      getApplicationBaseUrl(),
+    );
+    unsubscribeUrl.searchParams.set("token", unsubscribeToken);
+
+    deliveryId = await reserveEmailDelivery({
+      type: "subscription_created",
+      recipient: claim.email,
+      dedupeKey: `subscription-created:${claim.subscriptionId}:attempt:${claim.attempt}`,
+    });
+    if (!deliveryId) {
+      throw new Error("Subscription email delivery attempt was not reserved.");
+    }
+
     const result = await getEmailTransport().sendMail({
       from: process.env.SMTP_FROM ?? "AI Price Atlas <dev@localhost>",
-      to: task.recipient,
+      to: claim.email,
       ...subscriptionCreatedEmail({
-        scopeLabel: task.scopeLabel,
-        unsubscribeUrl: task.unsubscribeUrl,
+        scopeLabel,
+        unsubscribeUrl: unsubscribeUrl.toString(),
       }),
       headers: {
-        "X-Entity-Ref-ID": hashEmail(
-          `${task.subscriptionId}:${task.recipient}`,
-        ),
+        "X-Entity-Ref-ID": hashEmail(`${claim.subscriptionId}:${claim.email}`),
       },
     });
     await settleEmailDelivery(deliveryId, {
       status: "sent",
       providerMessageId: result.messageId,
     });
+    await settleSubscriptionCreatedEmail(claim.subscriptionId, {
+      status: "sent",
+      attempt: claim.attempt,
+    });
+    return true;
   } catch (error) {
-    await settleEmailDelivery(deliveryId, {
+    const message = error instanceof Error ? error.message : String(error);
+    if (deliveryId) {
+      await settleEmailDelivery(deliveryId, {
+        status: "failed",
+        error: message,
+      });
+    }
+    await settleSubscriptionCreatedEmail(claim.subscriptionId, {
       status: "failed",
-      error: error instanceof Error ? error.message : String(error),
+      attempt: claim.attempt,
     });
     throw error;
   }
+}
+
+export async function deliverPendingSubscriptionCreatedEmails(
+  limit = 20,
+): Promise<{ attempted: number; sent: number; failed: number }> {
+  const subscriptionIds = await listPendingSubscriptionEmailIds(limit);
+  let sent = 0;
+  let failed = 0;
+
+  for (const subscriptionId of subscriptionIds) {
+    try {
+      if (await sendSubscriptionCreatedEmail(subscriptionId)) sent += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return {
+    attempted: subscriptionIds.length,
+    sent,
+    failed,
+  };
 }

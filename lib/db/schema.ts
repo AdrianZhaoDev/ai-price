@@ -387,6 +387,21 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum("status").default("active").notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    successEmailPending: boolean("success_email_pending")
+      .default(false)
+      .notNull(),
+    successEmailAttempts: integer("success_email_attempts")
+      .default(0)
+      .notNull(),
+    successEmailNextAttemptAt: timestamp("success_email_next_attempt_at", {
+      withTimezone: true,
+    }),
+    successEmailLockedAt: timestamp("success_email_locked_at", {
+      withTimezone: true,
+    }),
+    successEmailSentAt: timestamp("success_email_sent_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -404,6 +419,10 @@ export const subscriptions = pgTable(
       table.status,
       table.providerSlug,
       table.planSlug,
+    ),
+    index("subscriptions_success_email_pending_idx").on(
+      table.successEmailPending,
+      table.successEmailNextAttemptAt,
     ),
   ],
 );

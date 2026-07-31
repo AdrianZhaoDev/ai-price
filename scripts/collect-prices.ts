@@ -3,6 +3,7 @@ import { createCollectorRegistry } from "@/lib/collectors/registry";
 import { runCollectors } from "@/lib/collectors/runner";
 import { closeDatabase, isDatabaseConfigured } from "@/lib/db/client";
 import { refreshPricingCacheAfterCollection } from "@/lib/pricing/cache-refresh";
+import { deliverPendingSubscriptionCreatedEmails } from "@/lib/subscriptions/service";
 import { dataSyncErrorMessage, runConfiguredDataSync } from "@/lib/sync";
 
 config({ path: [".env.local", ".env"] });
@@ -34,6 +35,19 @@ async function main() {
     console.warn(
       "DATABASE_URL is not configured; running verification without persistence.",
     );
+  } else {
+    try {
+      const emailRetry = await deliverPendingSubscriptionCreatedEmails();
+      if (emailRetry.attempted > 0) {
+        console.log(JSON.stringify({ subscriptionEmailRetry: emailRetry }));
+      }
+    } catch (error) {
+      console.error(
+        `Subscription email retry failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   }
 
   const summary = await runCollectors(adapters, {

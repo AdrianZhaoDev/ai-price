@@ -1,5 +1,5 @@
 {
-  "id": "bddf090a-5855-43bd-92d5-2cee18d590ac",
+  "id": "1d962ceb-6090-47b1-9200-27c06fdae74e",
   "prevId": "87eeab51-cd38-46e6-8be9-6b3474c2a871",
   "version": "7",
   "dialect": "postgresql",
@@ -1739,6 +1739,38 @@
           "primaryKey": false,
           "notNull": false
         },
+        "success_email_pending": {
+          "name": "success_email_pending",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "success_email_attempts": {
+          "name": "success_email_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "success_email_next_attempt_at": {
+          "name": "success_email_next_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "success_email_locked_at": {
+          "name": "success_email_locked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "success_email_sent_at": {
+          "name": "success_email_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1799,6 +1831,27 @@
             },
             {
               "expression": "plan_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "subscriptions_success_email_pending_idx": {
+          "name": "subscriptions_success_email_pending_idx",
+          "columns": [
+            {
+              "expression": "success_email_pending",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "success_email_next_attempt_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

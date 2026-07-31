@@ -9,6 +9,11 @@ CREATE TABLE "subscription_attempts" (
 );
 --> statement-breakpoint
 ALTER TABLE "subscriptions" ALTER COLUMN "status" SET DEFAULT 'active';--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "success_email_pending" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "success_email_attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "success_email_next_attempt_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "success_email_locked_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "success_email_sent_at" timestamp with time zone;--> statement-breakpoint
 UPDATE "subscriptions"
 SET
 	"status" = 'active',
@@ -18,4 +23,5 @@ SET
 WHERE "status" = 'pending';--> statement-breakpoint
 CREATE INDEX "subscription_attempts_created_idx" ON "subscription_attempts" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "subscription_attempts_ip_created_idx" ON "subscription_attempts" USING btree ("ip_hash","created_at");--> statement-breakpoint
-CREATE INDEX "subscription_attempts_ip_accepted_created_idx" ON "subscription_attempts" USING btree ("ip_hash","accepted","created_at");
+CREATE INDEX "subscription_attempts_ip_accepted_created_idx" ON "subscription_attempts" USING btree ("ip_hash","accepted","created_at");--> statement-breakpoint
+CREATE INDEX "subscriptions_success_email_pending_idx" ON "subscriptions" USING btree ("success_email_pending","success_email_next_attempt_at");
