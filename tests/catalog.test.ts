@@ -32,7 +32,7 @@ describe("catalog contract", () => {
         "sensenova-token-plan",
       ]),
     );
-    expect(providersForMode("api")).toHaveLength(16);
+    expect(providersForMode("api")).toHaveLength(20);
     expect(providersForMode("api").map((item) => item.id)).toEqual(
       expect.arrayContaining([
         "mimo-api",
@@ -41,8 +41,17 @@ describe("catalog contract", () => {
         "siliconflow-api",
         "huawei-maas-api",
         "teleai-api",
+        "openai-api",
+        "claude-api",
+        "gemini-api",
+        "grok-api",
       ]),
     );
+    expect(
+      providersForMode("api")
+        .slice(16)
+        .map((item) => item.id),
+    ).toEqual(["openai-api", "claude-api", "gemini-api", "grok-api"]);
   });
 
   it("keeps every record traceable to an official HTTPS source", () => {

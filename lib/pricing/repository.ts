@@ -123,6 +123,10 @@ export async function loadProviderCatalog(
             : undefined,
         category:
           typeof metadata.category === "string" ? metadata.category : undefined,
+        rankingEligible:
+          typeof metadata.rankingEligible === "boolean"
+            ? metadata.rankingEligible
+            : undefined,
       };
       const matchingIndex = provider.offers.findIndex(
         (candidate) =>

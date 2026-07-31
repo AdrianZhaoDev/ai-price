@@ -63,7 +63,7 @@ export function ProviderMark({
     );
   }
 
-  if (providerId.startsWith("chatgpt")) {
+  if (providerId.startsWith("chatgpt") || providerId.startsWith("openai")) {
     return (
       <svg
         aria-hidden="true"

@@ -10,7 +10,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import {
   compareCnyPrice,
   API_INITIAL_VISIBLE_COUNT,
+  formatApiCny,
   formatFxRate,
+  formatFxDate,
   formatCny,
   formatOfferPrice,
   displayableOffers,
@@ -662,7 +664,7 @@ export function PricingExplorer({
                       当前最低参考
                       <strong className="lowest-price">
                         {activeMode === "api"
-                          ? formatOfferPrice(lowestOffer)
+                          ? formatApiCny(lowestOffer.convertedCny)
                           : formatCny(lowestOffer.convertedCny)}
                       </strong>
                     </p>
@@ -690,7 +692,9 @@ export function PricingExplorer({
                     ) : (
                       <>
                         <span role="columnheader">方案 / 模型</span>
-                        <span role="columnheader">官方价格</span>
+                        <span role="columnheader">
+                          {activeMode === "api" ? "人民币价格" : "官方价格"}
+                        </span>
                         <span role="columnheader">
                           {activeMode === "api" ? "计费单位" : "人民币参考"}
                         </span>
@@ -838,10 +842,18 @@ export function PricingExplorer({
                           role="cell"
                           data-rank={rank}
                         >
-                          <strong>{formatOfferPrice(offer)}</strong>
+                          <strong>
+                            {activeMode === "api" &&
+                            offer.convertedCny !== undefined
+                              ? formatApiCny(offer.convertedCny)
+                              : formatOfferPrice(offer)}
+                          </strong>
                           {offer.currency ? (
                             <small>
-                              {offer.currency}
+                              {activeMode === "api" &&
+                              offer.currency.toUpperCase() !== "CNY"
+                                ? `${formatOfferPrice(offer)} · ${formatFxRate(offer)} · ${formatFxDate(offer)}`
+                                : offer.currency}
                               {activeMode === "api" && offer.unit ? (
                                 <span className="mobile-api-unit">
                                   {" "}

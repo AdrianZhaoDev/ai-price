@@ -3,10 +3,11 @@
 import { ProviderMark } from "@/components/icons/provider-mark";
 import {
   apiRankingEntries,
+  rankingCnyValue,
   type ApiRankingEntry,
   type ApiRankingMetric,
 } from "@/lib/pricing/api-ranking";
-import { formatOfferPrice } from "@/lib/pricing/format";
+import { formatApiCny, formatOfferPrice } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 import { useId, useMemo, useState } from "react";
 
@@ -27,8 +28,17 @@ const metrics: Array<{ id: ApiRankingMetric; label: string }> = [
   { id: "output", label: "输出" },
 ];
 
-function compactPrice(offer: PriceOffer | undefined) {
-  return offer ? formatOfferPrice(offer) : "—";
+function CompactPrice({ offer }: { offer: PriceOffer | undefined }) {
+  if (!offer) return <>—</>;
+  const value = rankingCnyValue(offer);
+  return (
+    <>
+      <strong>{formatApiCny(value)}</strong>
+      {offer.currency?.toUpperCase() !== "CNY" ? (
+        <small>{formatOfferPrice(offer)}</small>
+      ) : null}
+    </>
+  );
 }
 
 function selectedOffer(
@@ -126,16 +136,16 @@ export function ApiPriceRanking({
                   data-label="缓存输入"
                   data-highlight={metric === "cached_input"}
                 >
-                  {compactPrice(entry.cachedInput)}
+                  <CompactPrice offer={entry.cachedInput} />
                 </span>
                 <span
                   data-label="非缓存输入"
                   data-highlight={metric === "input"}
                 >
-                  {compactPrice(entry.input)}
+                  <CompactPrice offer={entry.input} />
                 </span>
                 <span data-label="输出" data-highlight={metric === "output"}>
-                  {compactPrice(entry.output)}
+                  <CompactPrice offer={entry.output} />
                 </span>
               </button>
             </li>

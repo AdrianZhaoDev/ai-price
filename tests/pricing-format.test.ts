@@ -3,6 +3,7 @@ import {
   displayableOffers,
   compareCnyPrice,
   API_INITIAL_VISIBLE_COUNT,
+  formatApiCny,
   formatCny,
   formatFxRate,
   formatOfferPrice,
@@ -43,6 +44,9 @@ describe("price formatting", () => {
     expect(formatCny(Number.NaN)).toBe("—");
     expect(formatCny(49.5)).toContain("49.5");
     expect(formatCny(143.25)).toContain("143");
+    expect(formatApiCny(0.025)).toBe("¥0.025");
+    expect(formatApiCny(6.999999)).toBe("¥6.999999");
+    expect(formatApiCny(Number.NaN)).toBe("—");
   });
 
   it("formats persisted or derived exchange rates and price comparisons", () => {

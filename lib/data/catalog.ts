@@ -1,4 +1,8 @@
-import type { ModeDefinition, ProviderCatalogItem } from "@/lib/pricing/types";
+import type {
+  ModeDefinition,
+  PriceOffer,
+  ProviderCatalogItem,
+} from "@/lib/pricing/types";
 
 export const modes: ModeDefinition[] = [
   {
@@ -18,11 +22,57 @@ export const modes: ModeDefinition[] = [
     label: "API 价格排行榜",
     shortLabel: "API 价格排行榜",
     description:
-      "集中查看各平台官方 API 价格，并按缓存输入、非缓存输入和输出成本排行。",
+      "集中查看国内外平台官方 API 价格，统一换算人民币，并按缓存输入、非缓存输入和输出成本排行。",
   },
 ];
 
 const observedAt = "2026-07-23T18:00:00+08:00";
+const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
+const globalApiFxRate = 1 / 0.14797;
+
+function globalApiOffers(
+  providerId: string,
+  models: Array<{
+    name: string;
+    cached: number;
+    input: number;
+    output: number;
+  }>,
+): PriceOffer[] {
+  return models.flatMap((model, modelOrder) => {
+    const modelSlug = model.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    return (
+      [
+        ["cached_input", "缓存输入", model.cached],
+        ["input", "非缓存输入", model.input],
+        ["output", "输出", model.output],
+      ] as const
+    ).map(([priceType, label, value]) => ({
+      id: `${providerId}-${modelSlug}-${priceType}`,
+      planId: `${modelSlug}-${priceType}`,
+      planName: `${model.name} · ${label}`,
+      amountMinor: Number((value * 100).toFixed(6)),
+      currency: "USD",
+      displayPrice: `$${value}`,
+      billingPeriod: "usage",
+      regionName: "全球",
+      convertedCny: Number((value * globalApiFxRate).toFixed(6)),
+      fxRate: globalApiFxRate,
+      fxRateObservedAt: globalApiObservedAt,
+      unit: "/百万 tokens",
+      status: "verified",
+      observedAt: globalApiObservedAt,
+      modelName: model.name,
+      modelSlug,
+      modelOrder,
+      priceType,
+      priceTier: "标准实时",
+      tierOrder: 0,
+      category: "官方标准实时价",
+      rankingEligible: true,
+    }));
+  });
+}
 
 export const providerCatalog: ProviderCatalogItem[] = [
   {
@@ -1896,6 +1946,78 @@ export const providerCatalog: ProviderCatalogItem[] = [
         observedAt,
       },
     ],
+  },
+  {
+    id: "openai-api",
+    name: "OpenAI API",
+    label: "OpenAI",
+    description: "OpenAI 官方标准实时、短上下文 Token 价格",
+    mode: "api",
+    rank: 17,
+    sourceUrl: "https://developers.openai.com/api/docs/pricing",
+    sourceLabel: "OpenAI API Pricing",
+    sourceType: "official_api",
+    color: "#111111",
+    status: "verified",
+    lastCheckedAt: globalApiObservedAt,
+    offers: globalApiOffers("openai-api", [
+      { name: "gpt-5.6-sol", cached: 0.5, input: 5, output: 30 },
+      { name: "gpt-5.6-terra", cached: 0.2, input: 2, output: 12 },
+    ]),
+  },
+  {
+    id: "claude-api",
+    name: "Claude API",
+    label: "Claude",
+    description: "Anthropic 官方标准 Token 价格",
+    mode: "api",
+    rank: 18,
+    sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+    sourceLabel: "Claude Platform Pricing",
+    sourceType: "official_api",
+    color: "#D97757",
+    status: "verified",
+    lastCheckedAt: globalApiObservedAt,
+    offers: globalApiOffers("claude-api", [
+      { name: "Claude Fable 5", cached: 1, input: 10, output: 50 },
+      { name: "Claude Opus 5", cached: 0.5, input: 5, output: 25 },
+    ]),
+  },
+  {
+    id: "gemini-api",
+    name: "Gemini API",
+    label: "Gemini",
+    description: "Google Gemini Developer API 官方付费标准价",
+    mode: "api",
+    rank: 19,
+    sourceUrl: "https://ai.google.dev/gemini-api/docs/pricing",
+    sourceLabel: "Gemini Developer API Pricing",
+    sourceType: "official_api",
+    color: "#5E6AD2",
+    status: "verified",
+    lastCheckedAt: globalApiObservedAt,
+    offers: globalApiOffers("gemini-api", [
+      { name: "Gemini 3.6 Flash", cached: 0.15, input: 1.5, output: 7.5 },
+      { name: "Gemini 3.5 Flash", cached: 0.15, input: 1.5, output: 9 },
+    ]),
+  },
+  {
+    id: "grok-api",
+    name: "xAI Grok API",
+    label: "Grok",
+    description: "xAI 官方短上下文标准 Token 价格",
+    mode: "api",
+    rank: 20,
+    sourceUrl: "https://docs.x.ai/developers/pricing",
+    sourceLabel: "xAI API Pricing",
+    sourceType: "official_api",
+    color: "#111111",
+    status: "verified",
+    lastCheckedAt: globalApiObservedAt,
+    offers: globalApiOffers("grok-api", [
+      { name: "grok-4.5", cached: 0.3, input: 2, output: 6 },
+      { name: "grok-build-0.1", cached: 0.2, input: 1, output: 2 },
+    ]),
   },
 ];
 
