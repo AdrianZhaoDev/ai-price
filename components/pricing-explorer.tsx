@@ -545,8 +545,14 @@ export function PricingExplorer({
               className="nav-item pressable"
               data-mode={mode.id}
               aria-current={activeMode === mode.id ? "page" : undefined}
+              aria-label={mode.shortLabel}
             >
               {mode.shortLabel}
+              {mode.id === "api" ? (
+                <span className="nav-label-compact" aria-hidden="true">
+                  API 榜单
+                </span>
+              ) : null}
               {mode.id === "api" ? (
                 <span className="nav-hot-badge" aria-hidden="true">
                   Hot

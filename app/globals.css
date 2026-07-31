@@ -256,6 +256,10 @@ input:focus-visible {
     box-shadow 180ms ease;
 }
 
+.nav-label-compact {
+  display: none;
+}
+
 .nav-item[aria-current="page"] {
   background: #0066cc;
   box-shadow: 0 5px 16px rgba(0, 102, 204, 0.28);
@@ -331,7 +335,7 @@ input:focus-visible {
 .main-content {
   width: min(calc(100% - 40px), var(--content-width));
   margin: 0 auto;
-  padding: 84px 0 72px;
+  padding: 44px 0 72px;
 }
 
 .pricing-empty-state {
@@ -1707,6 +1711,15 @@ input:focus-visible {
     align-items: flex-start;
   }
 
+  .provider-rail {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px 14px;
+  }
+
+  .provider-button-content {
+    justify-content: flex-start;
+  }
+
   .provider-actions {
     flex-direction: column;
     align-items: stretch;
@@ -1794,8 +1807,14 @@ input:focus-visible {
   }
 
   .nav-item[data-mode="api"] {
-    line-height: 1.15;
-    white-space: normal;
+    line-height: 1;
+    font-size: 0;
+    white-space: nowrap;
+  }
+
+  .nav-label-compact {
+    display: inline;
+    font-size: clamp(12px, 3.4vw, 13px);
   }
 
   .nav-item[aria-current="page"] {
@@ -1808,7 +1827,7 @@ input:focus-visible {
 
   .main-content {
     width: calc(100% - 24px);
-    padding: 56px 0 48px;
+    padding: 32px 0 48px;
   }
 
   .section-label-row {
@@ -1822,6 +1841,11 @@ input:focus-visible {
 
   .provider-section {
     padding: 0 0 22px;
+  }
+
+  .provider-rail {
+    grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+    gap: 8px;
   }
 
   .provider-rail-global {

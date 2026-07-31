@@ -524,7 +524,9 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
             navigation.scrollWidth <= navigation.clientWidth &&
             items.length === 3 &&
             items.every((item) => {
-              const style = getComputedStyle(item);
+              const visibleLabel =
+                item.querySelector(".nav-label-compact") ?? item;
+              const style = getComputedStyle(visibleLabel);
               return (
                 item.scrollWidth <= item.clientWidth &&
                 item.getBoundingClientRect().height >= 48 &&
@@ -535,15 +537,11 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
         }),
       ).toBe(true);
       expect(
-        await page.locator(".desktop-nav .nav-item").evaluateAll((items) =>
-          items.map((item) =>
-            [...item.childNodes]
-              .filter((node) => node.nodeType === Node.TEXT_NODE)
-              .map((node) => node.textContent ?? "")
-              .join("")
-              .trim(),
+        await page
+          .locator(".desktop-nav .nav-item")
+          .evaluateAll((items) =>
+            items.map((item) => item.getAttribute("aria-label")),
           ),
-        ),
       ).toEqual(["全球区价", "国内订阅", "API 价格排行榜"]);
     }
   }
