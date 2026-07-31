@@ -34,6 +34,13 @@
    以及 [`docs/VPS_OPERATIONS.md`](docs/VPS_OPERATIONS.md)；发布必须使用该
    `main` 提交对应且结论为成功的 GitHub Actions 生产构建产物，并完成全部生产验收。
 
+## 托管范围
+
+本项目只自动维护 `https://lowpriceradar.com` 对应的 VPS 生产环境。除非用户在
+当前任务中明确要求，否则不得创建或恢复 `.openai/hosting.json`、不得添加 Sites
+源码 remote，也不得自动构建、保存、核对或发布 ChatGPT Sites 托管版本。现有 Sites
+网址不属于常规开发、合并或生产发布流程。
+
 ## VPS 生产环境更新规则
 
 本项目的生产环境位于 SSH 别名 `american-vps` 对应的 VPS，当前通过
