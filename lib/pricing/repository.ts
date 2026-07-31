@@ -2,21 +2,30 @@ import { providerCatalog } from "@/lib/data/catalog";
 import { getReadDatabase, isReadDatabaseConfigured } from "@/lib/db/client";
 import { plans, priceObservations, products, sources } from "@/lib/db/schema";
 import type {
+  PriceMode,
   PriceOffer,
   PriceStatus,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
-function cloneCatalog(): ProviderCatalogItem[] {
-  return providerCatalog.map((provider) => ({
-    ...provider,
-    offers: provider.offers.map((offer) => ({ ...offer })),
-  }));
+function cloneCatalog(mode?: PriceMode): ProviderCatalogItem[] {
+  return providerCatalog
+    .filter((provider) => !mode || provider.mode === mode)
+    .map((provider) => ({
+      ...provider,
+      offers: provider.offers.map((offer) => ({ ...offer })),
+    }));
 }
 
-export async function loadProviderCatalog(): Promise<ProviderCatalogItem[]> {
-  const catalog = cloneCatalog();
+function databaseMode(mode: PriceMode) {
+  return mode === "china-subscription" ? "china_subscription" : mode;
+}
+
+export async function loadProviderCatalog(
+  mode?: PriceMode,
+): Promise<ProviderCatalogItem[]> {
+  const catalog = cloneCatalog(mode);
   if (!isReadDatabaseConfigured()) return catalog;
 
   try {
@@ -30,7 +39,11 @@ export async function loadProviderCatalog(): Promise<ProviderCatalogItem[]> {
       .innerJoin(plans, eq(plans.id, priceObservations.planId))
       .innerJoin(products, eq(products.id, plans.productId))
       .innerJoin(sources, eq(sources.id, priceObservations.sourceId))
-      .where(eq(plans.active, true))
+      .where(
+        mode
+          ? and(eq(plans.active, true), eq(products.mode, databaseMode(mode)))
+          : eq(plans.active, true),
+      )
       .orderBy(
         priceObservations.planId,
         priceObservations.sourceId,

@@ -1,6 +1,7 @@
 import { PricingExplorer } from "@/components/pricing-explorer";
 import { StructuredData } from "@/components/structured-data";
 import { modes } from "@/lib/data/catalog";
+import { prepareProvidersForClient } from "@/lib/pricing/client-catalog";
 import { displayableOffers } from "@/lib/pricing/format";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
 import type { PriceMode } from "@/lib/pricing/types";
@@ -12,14 +13,10 @@ type PricingPageProps = {
 };
 
 export async function PricingPage({ mode }: PricingPageProps) {
-  const providers = await loadProviderCatalog();
-  const modeProviders = providers
-    .filter((provider) => provider.mode === mode)
-    .sort(
-      (a, b) =>
-        (a.rank ?? Number.MAX_SAFE_INTEGER) -
-        (b.rank ?? Number.MAX_SAFE_INTEGER),
-    );
+  const modeProviders = (await loadProviderCatalog(mode)).sort(
+    (a, b) =>
+      (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER),
+  );
   const lastCheckedAt = modeProviders
     .map((provider) => provider.lastCheckedAt)
     .filter((value): value is string => Boolean(value))
@@ -29,6 +26,7 @@ export async function PricingPage({ mode }: PricingPageProps) {
   const hasDisplayableMode = modeProviders.some(
     (provider) => displayableOffers(provider.offers).length > 0,
   );
+  const clientCatalog = prepareProvidersForClient(modeProviders, mode);
 
   const structuredData = [
     {
@@ -71,7 +69,8 @@ export async function PricingPage({ mode }: PricingPageProps) {
           key={mode}
           initialMode={mode}
           modes={modes}
-          providers={providers}
+          providers={clientCatalog.providers}
+          deferredProviderIds={clientCatalog.deferredProviderIds}
           contactEmail={process.env.CONTACT_EMAIL ?? "price@example.com"}
         />
       ) : (

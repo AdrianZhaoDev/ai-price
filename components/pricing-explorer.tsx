@@ -52,6 +52,7 @@ type PricingExplorerProps = {
   initialMode: PriceMode;
   modes: ModeDefinition[];
   providers: ProviderCatalogItem[];
+  deferredProviderIds?: string[];
   contactEmail: string;
 };
 
@@ -62,6 +63,8 @@ const getServerHydratedSnapshot = () => false;
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
 };
+
+const GLOBAL_INITIAL_VISIBLE_COUNT = 24;
 
 function hasDisplayableOffers(provider: ProviderCatalogItem): boolean {
   return displayableOffers(provider.offers).length > 0;
@@ -86,6 +89,7 @@ export function PricingExplorer({
   initialMode,
   modes,
   providers,
+  deferredProviderIds = [],
   contactEmail,
 }: PricingExplorerProps) {
   const initialProvider =
@@ -96,6 +100,16 @@ export function PricingExplorer({
       ),
     )[0] ?? providers.find((provider) => hasDisplayableOffers(provider));
   const activeMode = initialMode;
+  const [providerItems, setProviderItems] = useState(providers);
+  const [deferredIds, setDeferredIds] = useState(
+    () => new Set(deferredProviderIds),
+  );
+  const [loadingProviderId, setLoadingProviderId] = useState<string | null>(
+    null,
+  );
+  const [providerLoadError, setProviderLoadError] = useState<string | null>(
+    null,
+  );
   const [selectedProviderId, setSelectedProviderId] = useState(
     initialProvider?.id ?? "",
   );
@@ -110,9 +124,9 @@ export function PricingExplorer({
     getServerHydratedSnapshot,
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [expandedApiProviderIds, setExpandedApiProviderIds] = useState<
-    Set<string>
-  >(() => new Set());
+  const [expandedProviderIds, setExpandedProviderIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [pendingApiTarget, setPendingApiTarget] =
     useState<PendingApiTarget | null>(null);
   const priceRowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -125,12 +139,12 @@ export function PricingExplorer({
   const modeProviders = useMemo(
     () =>
       sortProvidersByRank(
-        providers.filter(
+        providerItems.filter(
           (provider) =>
             provider.mode === activeMode && hasDisplayableOffers(provider),
         ),
       ),
-    [activeMode, providers],
+    [activeMode, providerItems],
   );
 
   const selectedProvider =
@@ -151,10 +165,17 @@ export function PricingExplorer({
       : eligibleOffers,
     sortDirection,
   );
-  const visibleOffers =
-    activeMode === "api" && !expandedApiProviderIds.has(selectedProvider.id)
+  const initialVisibleCount =
+    activeMode === "api"
+      ? API_INITIAL_VISIBLE_COUNT
+      : activeMode === "global"
+        ? GLOBAL_INITIAL_VISIBLE_COUNT
+        : sortedOffers.length;
+  const visibleOffers = expandedProviderIds.has(selectedProvider.id)
+    ? sortedOffers
+    : activeMode === "api"
       ? visibleApiOffers(sortedOffers, false)
-      : sortedOffers;
+      : sortedOffers.slice(0, initialVisibleCount);
 
   const lowestOffer = lowestComparableOffer(sortedOffers);
   const topThreeRanks = lowestThreeRanks(sortedOffers);
@@ -168,19 +189,65 @@ export function PricingExplorer({
       }).format(new Date(selectedProvider.lastCheckedAt))
     : "等待首次采集";
 
-  function selectProvider(provider: ProviderCatalogItem) {
-    setSelectedProviderId(provider.id);
-    setSelectedPlanId(defaultPlanId(provider));
+  async function ensureProviderLoaded(provider: ProviderCatalogItem) {
+    if (!deferredIds.has(provider.id)) return provider;
+
+    setLoadingProviderId(provider.id);
+    setProviderLoadError(null);
+    try {
+      const response = await fetch(
+        `/pricing-data/${encodeURIComponent(provider.id)}`,
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        provider?: ProviderCatalogItem;
+      };
+      if (
+        !payload.provider ||
+        payload.provider.id !== provider.id ||
+        payload.provider.mode !== activeMode
+      ) {
+        throw new Error("Invalid provider response");
+      }
+
+      setProviderItems((current) =>
+        current.map((item) =>
+          item.id === provider.id ? payload.provider! : item,
+        ),
+      );
+      setDeferredIds((current) => {
+        const next = new Set(current);
+        next.delete(provider.id);
+        return next;
+      });
+      return payload.provider;
+    } catch {
+      setProviderLoadError(
+        `${provider.label}完整报价暂时加载失败，请稍后重试。`,
+      );
+      return provider;
+    } finally {
+      setLoadingProviderId(null);
+    }
   }
 
-  function selectRankingEntry(selection: ApiRankingSelection) {
+  async function selectProvider(provider: ProviderCatalogItem) {
+    const loadedProvider = await ensureProviderLoaded(provider);
+    setSelectedProviderId(loadedProvider.id);
+    setSelectedPlanId(defaultPlanId(loadedProvider));
+  }
+
+  async function selectRankingEntry(selection: ApiRankingSelection) {
     const provider = modeProviders.find(
       (item) => item.id === selection.providerId,
     );
     if (!provider) return;
+    const loadedProvider = await ensureProviderLoaded(provider);
 
     const targetOffers = sortOffersByCny(
-      displayableOffers(provider.offers),
+      displayableOffers(loadedProvider.offers),
       sortDirection,
     );
     const targetIndex = targetOffers.findIndex(
@@ -189,16 +256,16 @@ export function PricingExplorer({
         offer.modelSlug === selection.modelSlug,
     );
     if (targetIndex >= API_INITIAL_VISIBLE_COUNT) {
-      setExpandedApiProviderIds((current) => {
+      setExpandedProviderIds((current) => {
         const next = new Set(current);
-        next.add(provider.id);
+        next.add(loadedProvider.id);
         return next;
       });
     }
 
     rankingRequestIdRef.current += 1;
-    setSelectedProviderId(provider.id);
-    setSelectedPlanId(defaultPlanId(provider));
+    setSelectedProviderId(loadedProvider.id);
+    setSelectedPlanId(defaultPlanId(loadedProvider));
     highlightedRowRef.current?.removeAttribute("data-highlighted");
     highlightedRowRef.current = null;
     setPendingApiTarget({
@@ -436,6 +503,7 @@ export function PricingExplorer({
           >
             {modeProviders.map((provider) => {
               const active = selectedProvider.id === provider.id;
+              const loading = loadingProviderId === provider.id;
               return (
                 <button
                   key={provider.id}
@@ -443,8 +511,9 @@ export function PricingExplorer({
                   className="provider-button pressable"
                   data-provider-id={provider.id}
                   data-active={active}
-                  onClick={() => selectProvider(provider)}
+                  onClick={() => void selectProvider(provider)}
                   aria-pressed={active}
+                  aria-busy={loading}
                 >
                   {active ? (
                     <motion.span
@@ -462,12 +531,17 @@ export function PricingExplorer({
                       providerId={provider.id}
                       color={provider.color}
                     />
-                    <span>{provider.label}</span>
+                    <span>{loading ? "加载中…" : provider.label}</span>
                   </span>
                 </button>
               );
             })}
           </div>
+          {providerLoadError ? (
+            <p className="provider-load-error" role="status">
+              {providerLoadError}
+            </p>
+          ) : null}
         </section>
 
         <div
@@ -802,16 +876,13 @@ export function PricingExplorer({
                   })}
                 </div>
 
-                {activeMode === "api" &&
-                sortedOffers.length > API_INITIAL_VISIBLE_COUNT ? (
+                {sortedOffers.length > initialVisibleCount ? (
                   <button
                     type="button"
                     className="load-more-prices pressable"
-                    aria-expanded={expandedApiProviderIds.has(
-                      selectedProvider.id,
-                    )}
+                    aria-expanded={expandedProviderIds.has(selectedProvider.id)}
                     onClick={() =>
-                      setExpandedApiProviderIds((current) => {
+                      setExpandedProviderIds((current) => {
                         const next = new Set(current);
                         if (next.has(selectedProvider.id)) {
                           next.delete(selectedProvider.id);
@@ -822,7 +893,7 @@ export function PricingExplorer({
                       })
                     }
                   >
-                    {expandedApiProviderIds.has(selectedProvider.id)
+                    {expandedProviderIds.has(selectedProvider.id)
                       ? "收起"
                       : "全部"}
                     <span>
@@ -844,7 +915,7 @@ export function PricingExplorer({
           {activeMode === "api" ? (
             <ApiPriceRanking
               providers={modeProviders}
-              onSelectEntry={selectRankingEntry}
+              onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
           ) : null}
         </div>
@@ -861,7 +932,15 @@ export function PricingExplorer({
         <div className="footer-links">
           <a href="/methodology">采集方法</a>
           <a href="/privacy">隐私</a>
-          <a href={`mailto:${contactEmail}`}>数据纠错</a>
+          <a
+            href={
+              hydrated
+                ? `mailto:${contactEmail}`
+                : "/methodology#data-corrections"
+            }
+          >
+            数据纠错
+          </a>
         </div>
       </footer>
 

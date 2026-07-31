@@ -1,7 +1,13 @@
 import manifest from "@/app/manifest";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
-import { absoluteUrl, metadataForMode, modeHref, SITE_ORIGIN } from "@/lib/seo";
+import {
+  absoluteUrl,
+  metadataForDocument,
+  metadataForMode,
+  modeHref,
+  SITE_ORIGIN,
+} from "@/lib/seo";
 import nextConfig, {
   privateRouteHeaders,
   securityHeaders,
@@ -21,6 +27,24 @@ describe("SEO routes", () => {
       "/china-ai-subscriptions",
     );
     expect(metadataForMode("api").alternates?.canonical).toBe("/api-pricing");
+    expect(metadataForMode("global").description?.length).toBeGreaterThan(70);
+  });
+
+  it("builds complete social metadata for document pages", () => {
+    const metadata = metadataForDocument({
+      path: "/methodology",
+      title: "价格采集方法",
+      description: "一段足够清楚的页面说明",
+    });
+
+    expect(metadata.alternates?.canonical).toBe("/methodology");
+    expect(metadata.openGraph).toMatchObject({
+      type: "article",
+      url: "/methodology",
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: "summary_large_image",
+    });
   });
 
   it("publishes all public pages in the sitemap", () => {
@@ -42,8 +66,11 @@ describe("SEO routes", () => {
     expect(result.rules).toMatchObject({
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/api/", "/subscription/"],
+      disallow: ["/admin", "/api/", "/pricing-data/", "/subscription/"],
     });
+    expect(
+      result.rules && !Array.isArray(result.rules) && result.rules.disallow,
+    ).toContain("/pricing-data/");
     expect(
       result.rules &&
         !Array.isArray(result.rules) &&

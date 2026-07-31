@@ -429,7 +429,11 @@ openssl x509 -checkend 1209600 -noout \
 
 - SSL/TLS：手动 Full (strict)，Automatic SSL/TLS 必须关闭；
 - Minimum TLS Version：1.2；
-- TLS 1.3、HTTP/2、HTTP/3、Brotli、Always Use HTTPS：启用；
+- TLS 1.3、HTTP/2、HTTP/3、Brotli：启用；
+- Cloudflare `Always Use HTTPS`：关闭。HTTP 主域和 `ai` 由 Nginx 直接 301 到
+  HTTPS 主域；Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 同时处理
+  HTTP/HTTPS 的 `www`，保留路径和查询参数。不得重新启用 `Always Use HTTPS`，
+  否则 `http://www` 会先跳到 `https://www`，重新形成两跳；
 - DNSSEC：启用且注册商存在 DS；
 - HSTS：`max-age=15552000; includeSubDomains`，暂不加入 preload；
 - Early Hints、Crawler Hints：启用；Speed Brain、Rocket Loader、0-RTT：保持关闭；

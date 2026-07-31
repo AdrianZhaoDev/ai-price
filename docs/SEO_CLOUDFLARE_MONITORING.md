@@ -4,6 +4,10 @@
 Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生产修改仍必须完整执行
 [`VPS_OPERATIONS.md`](VPS_OPERATIONS.md)。
 
+每日 15:00 的自动检查应执行独立流程
+[`DAILY_MONITORING_WORKFLOW.md`](DAILY_MONITORING_WORKFLOW.md)。本文保存长期基线、
+判断规则和观察方法；独立流程规定每次任务具体检查什么、如何分级以及怎样提交日报。
+
 ## 1. 固定目标
 
 | 项目           | 目标                                                 |
@@ -17,6 +21,9 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 | 私有页面       | noindex，并且 `private, no-store`                    |
 | HTML 缓存      | 默认动态；只对确认无用户态的页面单独评估             |
 | 静态资源       | `/_next/static/` 长缓存、immutable                   |
+| SEO 数据       | Search Console 已验证，Sitemap 已提交                |
+| 访问数据       | Cloudflare Web Analytics/RUM 或等价分析已启用        |
+| 外链数据       | Ahrefs 域名已验证；不可用时明确写数据缺口            |
 
 ## 2. 当前生产基线
 
@@ -36,6 +43,24 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 - DNSSEC 已在 Dynadot 和 Cloudflare 完整启用，`.com` 父区、1.1.1.1 与 8.8.8.8
   均返回匹配的 DS，递归验证返回 `ad` 标志；
 - Ahrefs 站点指标接口当前返回 `Insufficient plan`，不能把它解释成指标为零。
+
+2026-07-31 数据测量基线：
+
+- Google Search Console 域名资源已通过 Cloudflare DNS 自动验证；
+- `https://lowpriceradar.com/sitemap.xml` 已提交成功，Google 首次读取发现 5 个页面；
+- Search Console 新资源正在处理首批索引与效果数据，控制台提示约 1 天后可查看；
+- Ahrefs 项目已通过 DNS TXT 验证，首次 Site Audit 已开始抓取；
+- Ahrefs 初始基线为 DR 0、250 个引用域（30 天变化 +57）、自然流量 0、自然关键词
+  0；这是项目刚建立时的 Ahrefs 当前值，不代表 Search Console 指标；
+- Cloudflare Web Analytics/RUM 已全球启用，公开 HTML 已确认注入
+  `cloudflareinsights` beacon，首批数据需要等待真实访问产生；
+- Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 已启用；
+  `Always Use HTTPS` 为避免 `http://www` 两跳而关闭，HTTP 主域和 `ai` 继续由
+  Nginx 一跳到规范 HTTPS 主域；
+- 项目代码未发现 Google Analytics、Plausible、Umami、PostHog 或 Clarity；
+- Nginx access log 可用于请求级估算，但不能替代用户、会话和参与度分析；
+- 因 Cloudflare 代理和静态缓存存在，源站日志既可能看到边缘 IP，也可能遗漏缓存
+  命中请求，所有“访客”字段必须标为估算。
 
 2026-07-31 验证生效的公开 DS 参数是：
 
@@ -96,6 +121,27 @@ curl -fsS -I https://lowpriceradar.com/api/admin/session
 - 突然大量掉页：先检查 robots、canonical、noindex、5xx 和重定向链；
 - 品牌词被“雷达硬件”占据：持续强化 `Low Price Radar · AI 价签` 品牌关联。
 
+### 4.1 收录报告的固定口径
+
+每次报告按以下顺序列证据：
+
+1. Sitemap URL 总数和 URL 清单；
+2. Search Console 已收录与未收录分类；
+3. 最近一次 Googlebot/Bingbot 抓取核心 URL 的时间和状态码；
+4. `site:` 查询只作为公开可见性抽查。
+
+没有 Search Console 时，不得写“收录 0”。可以写“公开 `site:` 抽查未发现结果，
+精确收录数待 Search Console 验证”。新站上线后的前 2–4 周不因短期无结果频繁改
+canonical、robots 或 Sitemap。
+
+### 4.2 搜索表现的固定口径
+
+- 日报展示最近完整 7 天对前 7 天、最近完整 28 天对前 28 天；
+- 总量之外必须列 Top 10 查询和页面，以及增长/下降 Top 5；
+- 查询分品牌词、产品/模型词、AI 订阅词、API 价格词；
+- 新站样本过小时报告绝对值，不放大百分比；
+- 只有连续两个窗口方向一致，才判断为趋势。
+
 ## 5. Ahrefs 使用
 
 项目 MCP 名称为 `ahrefs`。当前套餐可能对 DR、外链、自然关键词等接口返回
@@ -122,6 +168,24 @@ curl -fsS -I https://lowpriceradar.com/api/admin/session
 - Cache Rules、Redirect Rules、Configuration Rules 的最近变更；
 - Certbot 与边缘证书距离过期是否少于 14 天。
 - Cloudflare 官方 IP 清单与 UFW 80/443 allow 规则是否一致。
+
+### 6.1 访问分析口径
+
+Cloudflare HTTP 流量表示边缘请求，不等于真人访问。Cloudflare Web Analytics/RUM
+或独立分析工具才用于访客、页面浏览、来源、设备和 Core Web Vitals。Nginx 日志只
+用于交叉验证公共 HTML 请求、状态码、来源和异常路径。
+
+日报至少分开报告：
+
+- 边缘总请求与缓存命中；
+- 公共 HTML 页面浏览估算；
+- 浏览器型非爬虫页面浏览估算；
+- 搜索引荐请求；
+- 已验证搜索爬虫、未验证爬虫 UA 和恶意扫描；
+- 无法测量的会话、参与度和转化。
+
+国家/地区请求量往往包含机器人和扫描器，不得称为“用户地区”。设备和浏览器只有
+RUM/Analytics 数据可用时才写分布。
 
 缓存判断：
 
@@ -194,3 +258,15 @@ Cloudflare 4xx/5xx：
 
 不要把 Cloudflare token、数据库连接串、SMTP 密码或 `/etc/ai-price.env` 内容写入
 记录。
+
+## 10. 观察频率
+
+| 频率             | 范围                                                              |
+| ---------------- | ----------------------------------------------------------------- |
+| 每天 15:00       | 可用性、重定向、安全头、缓存、DNSSEC、服务、timer、证书、错误日志 |
+| 每周一           | Search Console、Cloudflare 7 日趋势、索引异常、CWV                |
+| 每月第一个工作日 | SSL Labs、Ahrefs、Cloudflare IP/UFW、证书与 DNS 配置漂移          |
+| 发布后           | 立即执行第 3 节，并按第 8 节执行 2/7/28 天观察                    |
+
+每日任务只能读取和报告。即使发现 P0，也不得自动修改 DNS、Cloudflare、Nginx、
+systemd、数据库或生产文件；应在报告中给出证据、影响和建议动作，等待人工授权。

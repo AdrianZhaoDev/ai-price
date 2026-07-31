@@ -451,6 +451,12 @@ input:focus-visible {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.provider-load-error {
+  margin: 0.75rem 0 0;
+  color: #a13a32;
+  font-size: 0.875rem;
+}
+
 .provider-button {
   position: relative;
   min-width: 0;
