@@ -11,13 +11,15 @@ import {
 } from "@/lib/pricing/api-ranking";
 import { formatApiCny, formatOfferPrice } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 
 type ApiPriceRankingProps = {
   providers: ProviderCatalogItem[];
   changes?: ApiRankingChange[];
   onSelectEntry: (selection: ApiRankingSelection) => void;
   onSubscribe: () => void;
+  metric: ApiRankingMetric;
+  onMetricChange: (metric: ApiRankingMetric) => void;
   focusRequest?: ApiRankingFocusRequest | null;
 };
 
@@ -31,7 +33,6 @@ export type ApiRankingFocusRequest = {
   providerId: string;
   modelSlug?: string;
   offerId?: string;
-  metric?: ApiRankingMetric;
   requestId: number;
 };
 
@@ -75,18 +76,11 @@ export function ApiPriceRanking({
   changes = [],
   onSelectEntry,
   onSubscribe,
+  metric,
+  onMetricChange,
   focusRequest,
 }: ApiPriceRankingProps) {
   const titleId = useId();
-  const [metricSelection, setMetricSelection] = useState<{
-    metric: ApiRankingMetric;
-    afterRequestId: number;
-  }>({ metric: "input", afterRequestId: 0 });
-  const metric =
-    focusRequest?.metric &&
-    focusRequest.requestId > metricSelection.afterRequestId
-      ? focusRequest.metric
-      : metricSelection.metric;
   const entryRefs = useRef(new Map<string, HTMLButtonElement>());
   const highlightedEntryRef = useRef<HTMLButtonElement | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -108,6 +102,13 @@ export function ApiPriceRanking({
 
   useEffect(() => {
     if (!focusRequest) return;
+    highlightedEntryRef.current?.removeAttribute("data-highlighted");
+    highlightedEntryRef.current = null;
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+
     const entry = focusRequest.modelSlug
       ? entries.find(
           (candidate) =>
@@ -121,7 +122,6 @@ export function ApiPriceRanking({
     const node = entryRefs.current.get(entry.id);
     if (!node || node.offsetParent === null) return;
 
-    highlightedEntryRef.current?.removeAttribute("data-highlighted");
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     node.setAttribute("data-highlighted", "true");
     highlightedEntryRef.current = node;
@@ -169,12 +169,7 @@ export function ApiPriceRanking({
             key={item.id}
             data-active={metric === item.id}
             aria-pressed={metric === item.id}
-            onClick={() =>
-              setMetricSelection({
-                metric: item.id,
-                afterRequestId: focusRequest?.requestId ?? 0,
-              })
-            }
+            onClick={() => onMetricChange(item.id)}
           >
             {item.label}
           </button>

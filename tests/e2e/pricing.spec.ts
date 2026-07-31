@@ -653,6 +653,13 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     "#756AF6",
   );
 
+  const outputMetric = page
+    .locator(".api-ranking-desktop .api-ranking-switch")
+    .getByRole("button", { name: "输出" });
+  await outputMetric.click();
+  await geminiButton.click();
+  await expect(outputMetric).toHaveAttribute("aria-pressed", "true");
+
   const firstRankingEntry = page
     .locator(
       '.api-ranking-desktop .api-ranking-entry[data-provider-id="openai-api"]',
@@ -672,8 +679,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   ).toHaveAttribute("aria-pressed", "true");
   const targetRow = page
     .locator(
-      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"], ` +
-        `.price-row[data-highlighted="true"][data-model-slug="${targetModelSlug}"]`,
+      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"]`,
     )
     .first();
   await expect(targetRow).toBeVisible();

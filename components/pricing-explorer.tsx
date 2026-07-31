@@ -220,6 +220,7 @@ export function PricingExplorer({
     useState<PendingApiTarget | null>(null);
   const [rankingFocusRequest, setRankingFocusRequest] =
     useState<ApiRankingFocusRequest | null>(null);
+  const [rankingMetric, setRankingMetric] = useState<ApiRankingMetric>("input");
   const priceRowRefs = useRef(new Map<string, HTMLElement>());
   const highlightedRowRef = useRef<HTMLElement | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -415,11 +416,12 @@ export function PricingExplorer({
 
   function focusRankingForOffer(offer: PriceOffer) {
     if (activeMode !== "api") return;
+    const offerMetric = rankingMetricForOffer(offer);
+    if (offerMetric) setRankingMetric(offerMetric);
     setRankingFocusRequest({
       providerId: selectedProvider.id,
       modelSlug: offer.modelSlug,
       offerId: offer.id,
-      metric: rankingMetricForOffer(offer),
       requestId: ++rankingFocusRequestIdRef.current,
     });
   }
@@ -455,11 +457,15 @@ export function PricingExplorer({
       displayableOffers(loadedProvider.offers),
       sortDirection,
     );
-    const targetIndex = targetOffers.findIndex(
-      (offer) =>
-        offer.id === selection.offerId ||
-        offer.modelSlug === selection.modelSlug,
+    const exactTargetIndex = targetOffers.findIndex(
+      (offer) => offer.id === selection.offerId,
     );
+    const targetIndex =
+      exactTargetIndex >= 0
+        ? exactTargetIndex
+        : targetOffers.findIndex(
+            (offer) => offer.modelSlug === selection.modelSlug,
+          );
     if (targetIndex >= API_INITIAL_VISIBLE_COUNT) {
       setExpandedProviderIds((current) => {
         const next = new Set(current);
@@ -709,6 +715,8 @@ export function PricingExplorer({
               onSubscribe={() => {
                 openSubscriptionSheet("api_ranking");
               }}
+              metric={rankingMetric}
+              onMetricChange={setRankingMetric}
               focusRequest={rankingFocusRequest}
               onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
@@ -1257,6 +1265,8 @@ export function PricingExplorer({
                 onSubscribe={() => {
                   openSubscriptionSheet("api_ranking");
                 }}
+                metric={rankingMetric}
+                onMetricChange={setRankingMetric}
                 focusRequest={rankingFocusRequest}
                 onSelectEntry={(selection) =>
                   void selectRankingEntry(selection)
