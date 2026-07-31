@@ -1,9 +1,11 @@
 "use client";
 
 import { ProviderMark } from "@/components/icons/provider-mark";
+import { ChangeBadge } from "@/components/change-badge";
 import {
   apiRankingEntries,
   rankingCnyValue,
+  type ApiRankingChange,
   type ApiRankingEntry,
   type ApiRankingMetric,
 } from "@/lib/pricing/api-ranking";
@@ -13,7 +15,9 @@ import { useId, useMemo, useState } from "react";
 
 type ApiPriceRankingProps = {
   providers: ProviderCatalogItem[];
+  changes?: ApiRankingChange[];
   onSelectEntry: (selection: ApiRankingSelection) => void;
+  onSubscribe: () => void;
 };
 
 export type ApiRankingSelection = {
@@ -59,13 +63,24 @@ function selectedOffer(
 
 export function ApiPriceRanking({
   providers,
+  changes = [],
   onSelectEntry,
+  onSubscribe,
 }: ApiPriceRankingProps) {
   const titleId = useId();
   const [metric, setMetric] = useState<ApiRankingMetric>("input");
   const entries = useMemo(
     () => apiRankingEntries(providers, metric),
     [metric, providers],
+  );
+  const changesByEntry = useMemo(
+    () =>
+      new Map(
+        changes
+          .filter((change) => change.metric === metric)
+          .map((change) => [change.entryId, change]),
+      ),
+    [changes, metric],
   );
 
   return (
@@ -75,7 +90,12 @@ export function ApiPriceRanking({
           <p className="api-ranking-kicker">/百万 tokens</p>
           <h2 id={titleId}>API 价格排行榜</h2>
         </div>
-        <span>{entries.length} 个模型</span>
+        <div className="api-ranking-heading-actions">
+          <span>{entries.length} 个模型</span>
+          <button type="button" onClick={onSubscribe}>
+            订阅排行榜变动
+          </button>
+        </div>
       </div>
 
       <div className="api-ranking-switch" aria-label="选择排行价格">
@@ -102,8 +122,40 @@ export function ApiPriceRanking({
       <ol className="api-ranking-list">
         {entries.map((entry, index) => {
           const offer = selectedOffer(entry, metric);
+          const change = changesByEntry.get(entry.id);
+          const rankLabel = change?.isNew
+            ? "新"
+            : change?.rankDelta
+              ? `${change.rankDelta > 0 ? "↑" : "↓"}${Math.abs(change.rankDelta)}`
+              : change?.priceDirection === "decrease"
+                ? "降价"
+                : change?.priceDirection === "increase"
+                  ? "涨价"
+                  : null;
+          const rankTone = change?.isNew
+            ? "info"
+            : (change?.rankDelta ?? 0) !== 0
+              ? change!.rankDelta! > 0
+                ? "positive"
+                : "negative"
+              : change?.priceDirection === "decrease"
+                ? "positive"
+                : "negative";
+          const changeDetails = change
+            ? [
+                change.isNew
+                  ? `新上榜 · 当前第 ${change.currentRank} 名`
+                  : `原排名 ${change.previousRank ?? "—"} · 现排名 ${change.currentRank}`,
+                change.rankDelta
+                  ? `${change.rankDelta > 0 ? "上升" : "下降"} ${Math.abs(change.rankDelta)} 名`
+                  : "排名未变",
+                `原价格 ${change.previousDisplayPrice ?? "—"} · 现价格 ${change.currentDisplayPrice ?? "—"}`,
+                `人民币参考 ${change.previousPriceCny === null ? "—" : formatApiCny(change.previousPriceCny)} → ${change.currentPriceCny === null ? "—" : formatApiCny(change.currentPriceCny)}`,
+                `确认时间 ${new Date(change.changedAt).toLocaleString("zh-CN", { hour12: false })}`,
+              ]
+            : [];
           return (
-            <li key={entry.id}>
+            <li key={entry.id} className="api-ranking-entry-shell">
               <button
                 type="button"
                 className="api-ranking-entry"
@@ -148,6 +200,15 @@ export function ApiPriceRanking({
                   <CompactPrice offer={entry.output} />
                 </span>
               </button>
+              {change && rankLabel ? (
+                <ChangeBadge
+                  className="api-ranking-change"
+                  label={rankLabel}
+                  tone={rankTone}
+                  ariaLabel={`${entry.modelName} 排行榜变化：${rankLabel}`}
+                  details={changeDetails}
+                />
+              ) : null}
             </li>
           );
         })}

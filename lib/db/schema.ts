@@ -330,6 +330,94 @@ export const priceChangeCandidates = pgTable(
   ],
 );
 
+export const apiRankingState = pgTable(
+  "api_ranking_state",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    metric: text("metric").notNull(),
+    entryKey: text("entry_key").notNull(),
+    providerSlug: text("provider_slug").notNull(),
+    providerName: text("provider_name").notNull(),
+    providerColor: text("provider_color").notNull(),
+    modelSlug: text("model_slug").notNull(),
+    modelName: text("model_name").notNull(),
+    modelOrder: integer("model_order").notNull(),
+    offerPlanSlug: text("offer_plan_slug"),
+    rank: integer("rank"),
+    priceCny: numeric("price_cny", {
+      precision: 20,
+      scale: 6,
+      mode: "number",
+    }),
+    displayPrice: text("display_price"),
+    active: boolean("active").default(true).notNull(),
+    collectionRunId: uuid("collection_run_id").references(
+      () => collectionRuns.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("api_ranking_state_identity_unique").on(
+      table.metric,
+      table.entryKey,
+    ),
+    index("api_ranking_state_active_idx").on(table.metric, table.active),
+  ],
+);
+
+export const apiRankingEvents = pgTable(
+  "api_ranking_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    collectionRunId: uuid("collection_run_id")
+      .references(() => collectionRuns.id, { onDelete: "cascade" })
+      .notNull(),
+    metric: text("metric").notNull(),
+    entryKey: text("entry_key").notNull(),
+    providerSlug: text("provider_slug").notNull(),
+    providerName: text("provider_name").notNull(),
+    modelSlug: text("model_slug").notNull(),
+    modelName: text("model_name").notNull(),
+    previousRank: integer("previous_rank"),
+    currentRank: integer("current_rank"),
+    previousPriceCny: numeric("previous_price_cny", {
+      precision: 20,
+      scale: 6,
+      mode: "number",
+    }),
+    currentPriceCny: numeric("current_price_cny", {
+      precision: 20,
+      scale: 6,
+      mode: "number",
+    }),
+    previousDisplayPrice: text("previous_display_price"),
+    currentDisplayPrice: text("current_display_price"),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("api_ranking_events_run_identity_unique").on(
+      table.collectionRunId,
+      table.metric,
+      table.entryKey,
+    ),
+    index("api_ranking_events_latest_idx").on(
+      table.metric,
+      table.entryKey,
+      table.createdAt,
+    ),
+    index("api_ranking_events_pending_idx").on(table.notifiedAt),
+  ],
+);
+
 export const collectionErrors = pgTable(
   "collection_errors",
   {

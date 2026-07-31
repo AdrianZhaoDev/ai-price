@@ -9,10 +9,17 @@ type SubscriptionSheetProps = {
   scopeLabel: string;
   providerId: string;
   planId?: string;
+  subscriptionType?: "price" | "api_ranking";
   onClose: () => void;
 };
 
-type SubmitState = "idle" | "submitting" | "success" | "error";
+type SubmitState =
+  | "idle"
+  | "submitting"
+  | "success"
+  | "error"
+  | "fallback_confirm"
+  | "fallback_submitting";
 type SubscriptionResultStatus = "subscribed" | "already_subscribed";
 
 export function SubscriptionSheet({
@@ -20,20 +27,24 @@ export function SubscriptionSheet({
   scopeLabel,
   providerId,
   planId,
+  subscriptionType = "price",
   onClose,
 }: SubscriptionSheetProps) {
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
   const [resultStatus, setResultStatus] =
     useState<SubscriptionResultStatus>("subscribed");
+  const [email, setEmail] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const fallbackConfirmRef = useRef<HTMLButtonElement>(null);
   const lastSuccessfulSubscriptionRef = useRef("");
 
   const closeSheet = useCallback(() => {
     setState("idle");
     setMessage("");
     setResultStatus("subscribed");
+    setEmail("");
     onClose();
   }, [onClose]);
 
@@ -81,17 +92,43 @@ export function SubscriptionSheet({
     };
   }, [closeSheet, open]);
 
+  useEffect(() => {
+    if (!open || state !== "fallback_confirm") return;
+    const frame = window.requestAnimationFrame(() =>
+      fallbackConfirmRef.current?.focus(),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, state]);
+
+  async function submitRequest(payload: Record<string, unknown>): Promise<{
+    ok: boolean;
+    message?: string;
+    status?: SubscriptionResultStatus;
+    code?: string;
+    rankingFallbackAllowed?: boolean;
+  }> {
+    const response = await fetch("/api/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = (await response.json()) as {
+      message?: string;
+      status?: SubscriptionResultStatus;
+      code?: string;
+      rankingFallbackAllowed?: boolean;
+    };
+    return { ok: response.ok, ...result };
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setState("submitting");
     setMessage("");
     setResultStatus("subscribed");
 
-    const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") ?? "")
-      .trim()
-      .toLowerCase();
-    const subscriptionKey = `${email}:${providerId}:${planId || "*"}`;
+    const normalizedEmail = email.trim().toLowerCase();
+    const subscriptionKey = `${normalizedEmail}:${subscriptionType}:${providerId}:${planId || "*"}`;
     if (lastSuccessfulSubscriptionRef.current === subscriptionKey) {
       setState("success");
       setMessage("您已订阅，请勿重复订阅。");
@@ -99,24 +136,32 @@ export function SubscriptionSheet({
       return;
     }
 
-    const payload = {
-      email,
-      providerId,
-      planId: planId || null,
-    };
+    const payload =
+      subscriptionType === "api_ranking"
+        ? {
+            subscriptionType: "api_ranking",
+            email: normalizedEmail,
+            rankingFallback: false,
+          }
+        : {
+            subscriptionType: "price",
+            email: normalizedEmail,
+            providerId,
+            planId: planId || null,
+          };
 
     try {
-      const response = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = (await response.json()) as {
-        message?: string;
-        status?: SubscriptionResultStatus;
-      };
-
-      if (!response.ok) {
+      const result = await submitRequest(payload);
+      if (
+        !result.ok &&
+        result.code === "subscription_limit" &&
+        result.rankingFallbackAllowed
+      ) {
+        setState("fallback_confirm");
+        setMessage(result.message ?? "");
+        return;
+      }
+      if (!result.ok) {
         throw new Error(result.message || "暂时无法创建订阅，请稍后重试。");
       }
 
@@ -124,6 +169,32 @@ export function SubscriptionSheet({
       setMessage(result.message || "您已订阅成功！");
       setResultStatus("subscribed");
       lastSuccessfulSubscriptionRef.current = subscriptionKey;
+    } catch (error) {
+      setState("error");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "暂时无法创建订阅，请稍后重试。",
+      );
+    }
+  }
+
+  async function confirmRankingFallback() {
+    setState("fallback_submitting");
+    setMessage("");
+    try {
+      const result = await submitRequest({
+        subscriptionType: "api_ranking",
+        email: email.trim().toLowerCase(),
+        rankingFallback: true,
+      });
+      if (!result.ok) {
+        throw new Error(result.message || "暂时无法创建订阅，请稍后重试。");
+      }
+      setState("success");
+      setMessage(result.message || "您已订阅成功！");
+      setResultStatus("subscribed");
+      lastSuccessfulSubscriptionRef.current = `${email.trim().toLowerCase()}:api_ranking:api-ranking:*`;
     } catch (error) {
       setState("error");
       setMessage(
@@ -193,12 +264,55 @@ export function SubscriptionSheet({
                   完成
                 </button>
               </div>
+            ) : state === "fallback_confirm" ||
+              state === "fallback_submitting" ? (
+              <div className="sheet-fallback-confirm">
+                <p className="eyebrow">一次掌握全部变化</p>
+                <h2 id="subscription-title">订阅次数有点多</h2>
+                <p>
+                  您近期提交了较多订阅。要不要改为一次订阅 API
+                  价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。
+                </p>
+                <div className="sheet-confirm-actions">
+                  <button
+                    ref={fallbackConfirmRef}
+                    type="button"
+                    className="primary-button pressable"
+                    disabled={state === "fallback_submitting"}
+                    onClick={() => void confirmRankingFallback()}
+                  >
+                    {state === "fallback_submitting"
+                      ? "正在订阅…"
+                      : "确认订阅排行榜"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button pressable"
+                    disabled={state === "fallback_submitting"}
+                    onClick={closeSheet}
+                  >
+                    暂不订阅
+                  </button>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="sheet-copy">
-                  <p className="eyebrow">价格变动通知</p>
-                  <h2 id="subscription-title">关注 {scopeLabel}</h2>
-                  <p>提交后立即生效，仅在价格或套餐发生变化时发送邮件。</p>
+                  <p className="eyebrow">
+                    {subscriptionType === "api_ranking"
+                      ? "排行榜变动通知"
+                      : "价格变动通知"}
+                  </p>
+                  <h2 id="subscription-title">
+                    {subscriptionType === "api_ranking"
+                      ? "订阅 API 价格排行榜"
+                      : `关注 ${scopeLabel}`}
+                  </h2>
+                  <p>
+                    {subscriptionType === "api_ranking"
+                      ? "缓存输入、非缓存输入或输出榜发生变化时，我们会发送一封汇总邮件。"
+                      : "提交后立即生效，仅在价格或套餐发生变化时发送邮件。"}
+                  </p>
                 </div>
 
                 <form onSubmit={onSubmit} className="subscription-form">
@@ -212,6 +326,8 @@ export function SubscriptionSheet({
                     autoComplete="email"
                     placeholder="you@example.com"
                     required
+                    value={email}
+                    onChange={(event) => setEmail(event.currentTarget.value)}
                     aria-describedby={
                       state === "error" ? "subscription-error" : undefined
                     }

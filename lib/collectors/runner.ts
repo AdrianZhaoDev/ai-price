@@ -1,4 +1,5 @@
 import {
+  notifyPendingApiRankingChanges,
   notifyPriceChangeDigest,
   sendAdminCollectionAlert,
 } from "@/lib/alerts/notifier";
@@ -24,6 +25,7 @@ import { offerIdentityHealthCheck } from "@/lib/collectors/offer-stability";
 import { appStorefronts } from "@/lib/collectors/adapters/app-store";
 import { refreshFxRates, type FxRate } from "@/lib/collectors/fx";
 import { isDatabaseConfigured } from "@/lib/db/client";
+import { refreshApiRankingHistory } from "@/lib/pricing/ranking-history";
 import {
   errorDiagnosticDetails,
   redactDiagnosticText,
@@ -223,6 +225,20 @@ export async function runCollectors(
       failureCount: summary.failureCount,
     });
     try {
+      const rankingResult = await refreshApiRankingHistory(runId);
+      await notifyPendingApiRankingChanges(rankingResult.rankings);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      options.onProgress?.(`✗ price-ranking: RANKING_FAILED ${message}`);
+      await sendAdminCollectionAlert({
+        sourceName: "price-ranking",
+        errorCode: "RANKING_FAILED",
+        message,
+        occurredAt: new Date().toISOString(),
+        dedupeKey: `price-ranking:${runId}`,
+      });
+    }
+    try {
       const { digests, ignoredEventIds } = await buildPriceChangeDigests(
         runId,
         collectedChanges,
@@ -248,13 +264,13 @@ export async function runCollectors(
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      options.onProgress?.(`✗ price-ranking: RANKING_FAILED ${message}`);
+      options.onProgress?.(`✗ price-email: DELIVERY_FAILED ${message}`);
       await sendAdminCollectionAlert({
-        sourceName: "price-ranking",
-        errorCode: "RANKING_FAILED",
+        sourceName: "price-email",
+        errorCode: "DELIVERY_FAILED",
         message,
         occurredAt: new Date().toISOString(),
-        dedupeKey: `price-ranking:${runId}`,
+        dedupeKey: `price-email:${runId}`,
       });
     }
   }

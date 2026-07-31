@@ -8,6 +8,8 @@ export type DataSyncTableCounts = {
   priceObservations: number;
   priceChangeCandidates: number;
   priceChangeEvents: number;
+  apiRankingState: number;
+  apiRankingEvents: number;
   collectionErrors: number;
 };
 

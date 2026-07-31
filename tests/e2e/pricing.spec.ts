@@ -171,6 +171,107 @@ test("shows the remaining cooldown measured from the previous accepted click", a
   await expect(page.getByRole("button", { name: "立即订阅" })).toBeEnabled();
 });
 
+test("offers one-click ranking fallback and reuses the entered email", async ({
+  page,
+}) => {
+  const payloads: Array<Record<string, unknown>> = [];
+  await page.route("**/api/subscriptions", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    payloads.push(payload);
+    const isFallback = payload.rankingFallback === true;
+    await route.fulfill({
+      status: isFallback ? 200 : 429,
+      headers: isFallback ? {} : { "Retry-After": "1200" },
+      contentType: "application/json",
+      body: JSON.stringify(
+        isFallback
+          ? { status: "subscribed", message: "您已订阅成功！" }
+          : {
+              message: "您近期提交了较多订阅。",
+              code: "subscription_limit",
+              retryAfterSeconds: 1200,
+              rankingFallbackAllowed: true,
+            },
+      ),
+    });
+  });
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "订阅次数有点多" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "确认订阅排行榜" }).click();
+  await expect(
+    page.getByRole("heading", { name: "您已订阅成功！" }),
+  ).toBeVisible();
+  expect(payloads[1]).toEqual({
+    subscriptionType: "api_ranking",
+    email: "reader@example.com",
+    rankingFallback: true,
+  });
+});
+
+test("submits the regular ranking subscription", async ({ page }) => {
+  let payload: Record<string, unknown> | undefined;
+  await page.route("**/api/subscriptions", async (route) => {
+    payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "subscribed",
+        message: "您已订阅成功！",
+      }),
+    });
+  });
+  await page.goto("/api-pricing");
+  await waitForPricingHydration(page);
+  await page
+    .getByRole("button", { name: "订阅排行榜变动" })
+    .filter({ visible: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "订阅 API 价格排行榜" }),
+  ).toBeVisible();
+  await page.getByLabel("邮箱").fill("ranking@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+  await expect(
+    page.getByRole("heading", { name: "您已订阅成功！" }),
+  ).toBeVisible();
+  expect(payload).toEqual({
+    subscriptionType: "api_ranking",
+    email: "ranking@example.com",
+    rankingFallback: false,
+  });
+});
+
+test("closes the ranking fallback when the user declines", async ({ page }) => {
+  await page.route("**/api/subscriptions", async (route) => {
+    await route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "您近期提交了较多订阅。",
+        code: "subscription_limit",
+        retryAfterSeconds: 1200,
+        rankingFallbackAllowed: true,
+      }),
+    });
+  });
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+  await page.getByRole("button", { name: "暂不订阅" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+});
+
 test("shows an already-subscribed notice for an identical subscription", async ({
   page,
 }) => {

@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   afterCallback: undefined as undefined | (() => Promise<void>),
   checkSubscriptionRateLimit: vi.fn(),
+  releaseRankingFallbackAttempt: vi.fn(),
+  requestApiRankingSubscription: vi.fn(),
   requestPriceSubscription: vi.fn(),
   sendSubscriptionCreatedEmail: vi.fn(),
 }));
@@ -19,9 +21,11 @@ vi.mock("next/server", async (importOriginal) => {
 
 vi.mock("@/lib/security/subscription-rate-limit", () => ({
   checkSubscriptionRateLimit: mocks.checkSubscriptionRateLimit,
+  releaseRankingFallbackAttempt: mocks.releaseRankingFallbackAttempt,
 }));
 
 vi.mock("@/lib/subscriptions/service", () => ({
+  requestApiRankingSubscription: mocks.requestApiRankingSubscription,
   requestPriceSubscription: mocks.requestPriceSubscription,
   sendSubscriptionCreatedEmail: mocks.sendSubscriptionCreatedEmail,
 }));
@@ -43,6 +47,21 @@ function subscriptionRequest() {
   });
 }
 
+function rankingRequest(rankingFallback = false) {
+  return new NextRequest("http://localhost:3100/api/subscriptions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": "203.0.113.10",
+    },
+    body: JSON.stringify({
+      subscriptionType: "api_ranking",
+      email: "reader@example.com",
+      rankingFallback,
+    }),
+  });
+}
+
 describe("subscription route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,7 +76,11 @@ describe("subscription route", () => {
     mocks.requestPriceSubscription.mockResolvedValue({
       notificationId: "subscription-id",
     });
+    mocks.requestApiRankingSubscription.mockResolvedValue({
+      notificationId: "ranking-subscription-id",
+    });
     mocks.sendSubscriptionCreatedEmail.mockResolvedValue(undefined);
+    mocks.releaseRankingFallbackAttempt.mockResolvedValue(undefined);
   });
 
   it("returns success before running the background email task", async () => {
@@ -124,4 +147,61 @@ describe("subscription route", () => {
       expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
     },
   );
+
+  it("offers a one-click ranking fallback for the five-hour IP limit", async () => {
+    mocks.checkSubscriptionRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      reason: "ip_window",
+      retryAfterSeconds: 1200,
+      rankingFallbackAllowed: true,
+    });
+
+    const response = await POST(subscriptionRequest());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("1200");
+    await expect(response.json()).resolves.toEqual({
+      message:
+        "您近期提交了较多订阅。要不要改为一次订阅 API 价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。",
+      code: "subscription_limit",
+      retryAfterSeconds: 1200,
+      rankingFallbackAllowed: true,
+    });
+  });
+
+  it("creates the confirmed ranking fallback with the same email", async () => {
+    const response = await POST(rankingRequest(true));
+
+    expect(response.status).toBe(200);
+    expect(mocks.checkSubscriptionRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "reader@example.com",
+        providerSlug: "api-ranking",
+        planSlug: "*",
+        rankingFallback: true,
+      }),
+    );
+    expect(mocks.requestApiRankingSubscription).toHaveBeenCalledWith(
+      "reader@example.com",
+    );
+    expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
+  });
+
+  it("releases the fallback reservation when subscription creation fails", async () => {
+    mocks.checkSubscriptionRateLimit.mockResolvedValueOnce({
+      allowed: true,
+      retryAfterSeconds: 0,
+      fallbackAttemptId: "attempt-id",
+    });
+    mocks.requestApiRankingSubscription.mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+
+    const response = await POST(rankingRequest(true));
+
+    expect(response.status).toBe(503);
+    expect(mocks.releaseRankingFallbackAttempt).toHaveBeenCalledWith(
+      "attempt-id",
+    );
+  });
 });

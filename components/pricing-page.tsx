@@ -22,6 +22,7 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
     priceModifiedAt,
     hasDisplayableMode,
     clientCatalog,
+    rankingChanges,
     providerSources,
   } = await loadCachedPricingPageData(mode);
   const seo = modeSeo[mode];
@@ -96,6 +97,7 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
           modes={modes}
           providers={clientCatalog.providers}
           deferredProviderIds={clientCatalog.deferredProviderIds}
+          rankingChanges={rankingChanges}
           contactEmail={process.env.CONTACT_EMAIL ?? "price@example.com"}
           dataVersion={lastCheckedAt ?? null}
           initialQuery={query}

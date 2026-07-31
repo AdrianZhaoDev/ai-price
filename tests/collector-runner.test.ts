@@ -46,6 +46,12 @@ const state = vi.hoisted(() => ({
     }),
   ),
   notifyPriceChangeDigest: vi.fn(async () => 1),
+  refreshApiRankingHistory: vi.fn(async () => ({
+    baseline: true,
+    changes: [],
+    rankings: { cached_input: [], input: [], output: [] },
+  })),
+  notifyPendingApiRankingChanges: vi.fn(async () => 0),
   sendAdminCollectionAlert: vi.fn(async () => true),
   refreshFxRates: vi.fn(
     async () =>
@@ -92,8 +98,13 @@ vi.mock("@/lib/collectors/persistence", () => ({
 }));
 
 vi.mock("@/lib/alerts/notifier", () => ({
+  notifyPendingApiRankingChanges: state.notifyPendingApiRankingChanges,
   notifyPriceChangeDigest: state.notifyPriceChangeDigest,
   sendAdminCollectionAlert: state.sendAdminCollectionAlert,
+}));
+
+vi.mock("@/lib/pricing/ranking-history", () => ({
+  refreshApiRankingHistory: state.refreshApiRankingHistory,
 }));
 
 vi.mock("@/lib/collectors/fx", () => ({
