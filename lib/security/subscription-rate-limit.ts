@@ -3,8 +3,8 @@ import { subscriptionAttempts } from "@/lib/db/schema";
 import { hashEmail, hashValue } from "@/lib/security/tokens";
 import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 
-const SAME_SCOPE_DIFFERENT_EMAIL_MS = 60 * 1000;
-const DIFFERENT_SCOPE_DIFFERENT_EMAIL_MS = 120 * 1000;
+const SAME_SCOPE_DIFFERENT_EMAIL_MS = 20 * 1000;
+const DIFFERENT_SCOPE_DIFFERENT_EMAIL_MS = 300 * 1000;
 const DIFFERENT_SCOPE_SAME_EMAIL_MS = 10 * 1000;
 const IP_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const IP_DAILY_LIMIT = 10;
@@ -75,46 +75,48 @@ function evaluateAttempt(
     };
   }
 
-  let blocked:
-    | {
-        reason: Exclude<SubscriptionRateLimitReason, "ip_daily">;
-        retryAfterSeconds: number;
-      }
-    | undefined;
-
-  for (const attempt of withinDay) {
-    if (!attempt.accepted) continue;
-
-    const sameScope =
-      attempt.providerSlug === current.providerSlug &&
-      attempt.planSlug === current.planSlug;
-    const sameEmail = attempt.emailHash === current.emailHash;
-    let reason: Exclude<SubscriptionRateLimitReason, "ip_daily"> | undefined;
-    let intervalMs = 0;
-
-    if (sameScope && !sameEmail) {
-      reason = "same_scope_different_email";
-      intervalMs = SAME_SCOPE_DIFFERENT_EMAIL_MS;
-    } else if (!sameScope && !sameEmail) {
-      reason = "different_scope_different_email";
-      intervalMs = DIFFERENT_SCOPE_DIFFERENT_EMAIL_MS;
-    } else if (!sameScope && sameEmail) {
-      reason = "different_scope_same_email";
-      intervalMs = DIFFERENT_SCOPE_SAME_EMAIL_MS;
-    }
-
-    if (!reason) continue;
-    const deadline = attempt.createdAt.getTime() + intervalMs;
-    if (deadline <= nowMs) continue;
-    const retryAfterSeconds = secondsRemaining(deadline, nowMs);
-    if (!blocked || retryAfterSeconds > blocked.retryAfterSeconds) {
-      blocked = { reason, retryAfterSeconds };
-    }
+  const previousAcceptedAttempt = withinDay
+    .filter((attempt) => attempt.accepted)
+    .reduce<Attempt | undefined>(
+      (latest, attempt) =>
+        !latest || attempt.createdAt > latest.createdAt ? attempt : latest,
+      undefined,
+    );
+  if (!previousAcceptedAttempt) {
+    return { allowed: true, retryAfterSeconds: 0 };
   }
 
-  return blocked
-    ? { allowed: false, ...blocked }
-    : { allowed: true, retryAfterSeconds: 0 };
+  const sameScope =
+    previousAcceptedAttempt.providerSlug === current.providerSlug &&
+    previousAcceptedAttempt.planSlug === current.planSlug;
+  const sameEmail = previousAcceptedAttempt.emailHash === current.emailHash;
+  let reason: Exclude<SubscriptionRateLimitReason, "ip_daily"> | undefined;
+  let intervalMs = 0;
+
+  if (sameScope && !sameEmail) {
+    reason = "same_scope_different_email";
+    intervalMs = SAME_SCOPE_DIFFERENT_EMAIL_MS;
+  } else if (!sameScope && !sameEmail) {
+    reason = "different_scope_different_email";
+    intervalMs = DIFFERENT_SCOPE_DIFFERENT_EMAIL_MS;
+  } else if (!sameScope && sameEmail) {
+    reason = "different_scope_same_email";
+    intervalMs = DIFFERENT_SCOPE_SAME_EMAIL_MS;
+  }
+
+  if (!reason) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+  const deadline = previousAcceptedAttempt.createdAt.getTime() + intervalMs;
+  if (deadline <= nowMs) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  return {
+    allowed: false,
+    reason,
+    retryAfterSeconds: secondsRemaining(deadline, nowMs),
+  };
 }
 
 export async function checkSubscriptionRateLimit(

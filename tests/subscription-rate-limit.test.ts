@@ -18,7 +18,7 @@ describe("subscription rate limits", () => {
     clearSubscriptionRateLimitsForTests();
   });
 
-  it("requires 60 seconds for the same scope with a different email", async () => {
+  it("requires 20 seconds for the same scope with a different email", async () => {
     await expect(
       checkSubscriptionRateLimit({
         ...baseInput,
@@ -35,11 +35,11 @@ describe("subscription rate limits", () => {
     ).resolves.toEqual({
       allowed: false,
       reason: "same_scope_different_email",
-      retryAfterSeconds: 59,
+      retryAfterSeconds: 19,
     });
   });
 
-  it("requires 120 seconds when both scope and email change", async () => {
+  it("requires 300 seconds when both scope and email change", async () => {
     await checkSubscriptionRateLimit({
       ...baseInput,
       now: new Date("2026-07-31T00:00:00Z"),
@@ -56,7 +56,7 @@ describe("subscription rate limits", () => {
     ).resolves.toEqual({
       allowed: false,
       reason: "different_scope_different_email",
-      retryAfterSeconds: 90,
+      retryAfterSeconds: 270,
     });
   });
 
@@ -92,6 +92,71 @@ describe("subscription rate limits", () => {
         now: new Date("2026-07-31T00:00:01Z"),
       }),
     ).resolves.toEqual({ allowed: true, retryAfterSeconds: 0 });
+  });
+
+  it("measures the cooldown from the latest accepted click only", async () => {
+    const startedAt = Date.parse("2026-07-31T00:00:00Z");
+    await checkSubscriptionRateLimit({
+      ...baseInput,
+      now: new Date(startedAt),
+    });
+    await expect(
+      checkSubscriptionRateLimit({
+        ...baseInput,
+        providerSlug: "claude",
+        planSlug: "pro",
+        now: new Date(startedAt + 10_000),
+      }),
+    ).resolves.toEqual({ allowed: true, retryAfterSeconds: 0 });
+
+    await expect(
+      checkSubscriptionRateLimit({
+        ...baseInput,
+        email: "second@example.com",
+        providerSlug: "claude",
+        planSlug: "pro",
+        now: new Date(startedAt + 11_000),
+      }),
+    ).resolves.toEqual({
+      allowed: false,
+      reason: "same_scope_different_email",
+      retryAfterSeconds: 19,
+    });
+  });
+
+  it("does not restart the cooldown after a blocked click", async () => {
+    const startedAt = Date.parse("2026-07-31T00:00:00Z");
+    await checkSubscriptionRateLimit({
+      ...baseInput,
+      now: new Date(startedAt),
+    });
+
+    const changedInput = {
+      ...baseInput,
+      email: "second@example.com",
+      providerSlug: "claude",
+      planSlug: "pro",
+    };
+    await expect(
+      checkSubscriptionRateLimit({
+        ...changedInput,
+        now: new Date(startedAt + 100_000),
+      }),
+    ).resolves.toEqual({
+      allowed: false,
+      reason: "different_scope_different_email",
+      retryAfterSeconds: 200,
+    });
+    await expect(
+      checkSubscriptionRateLimit({
+        ...changedInput,
+        now: new Date(startedAt + 150_000),
+      }),
+    ).resolves.toEqual({
+      allowed: false,
+      reason: "different_scope_different_email",
+      retryAfterSeconds: 150,
+    });
   });
 
   it("caps every IP at ten valid submission attempts in 24 hours", async () => {

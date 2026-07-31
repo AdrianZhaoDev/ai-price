@@ -89,20 +89,39 @@ describe("subscription route", () => {
     expect(mocks.after).not.toHaveBeenCalled();
   });
 
-  it("returns the applicable interval and Retry-After when rate limited", async () => {
-    mocks.checkSubscriptionRateLimit.mockResolvedValueOnce({
-      allowed: false,
-      reason: "different_scope_same_email",
+  it.each([
+    {
+      reason: "same_scope_different_email" as const,
+      retryAfterSeconds: 17,
+      message: "同一关注使用不同邮箱时需间隔 20 秒，请在 17 秒后再试。",
+    },
+    {
+      reason: "different_scope_different_email" as const,
+      retryAfterSeconds: 251,
+      message: "同时更换关注和邮箱时需间隔 300 秒，请在 251 秒后再试。",
+    },
+    {
+      reason: "different_scope_same_email" as const,
       retryAfterSeconds: 7,
-    });
-
-    const response = await POST(subscriptionRequest());
-
-    expect(response.status).toBe(429);
-    expect(response.headers.get("Retry-After")).toBe("7");
-    await expect(response.json()).resolves.toEqual({
       message: "同一邮箱更换关注时需间隔 10 秒，请在 7 秒后再试。",
-    });
-    expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
-  });
+    },
+  ])(
+    "returns the $reason interval and Retry-After when rate limited",
+    async ({ reason, retryAfterSeconds, message }) => {
+      mocks.checkSubscriptionRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        reason,
+        retryAfterSeconds,
+      });
+
+      const response = await POST(subscriptionRequest());
+
+      expect(response.status).toBe(429);
+      expect(response.headers.get("Retry-After")).toBe(
+        String(retryAfterSeconds),
+      );
+      await expect(response.json()).resolves.toEqual({ message });
+      expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -147,6 +147,32 @@ test("submits a real subscription payload without an autofill honeypot", async (
   expect(requestPayload).not.toHaveProperty("website");
 });
 
+test("shows the remaining cooldown measured from the previous accepted click", async ({
+  page,
+}) => {
+  await page.route("**/api/subscriptions", async (route) => {
+    await route.fulfill({
+      status: 429,
+      headers: { "Retry-After": "251" },
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "同时更换关注和邮箱时需间隔 300 秒，请在 251 秒后再试。",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+
+  await expect(page.locator("#subscription-error")).toHaveText(
+    "同时更换关注和邮箱时需间隔 300 秒，请在 251 秒后再试。",
+  );
+  await expect(page.getByRole("button", { name: "立即订阅" })).toBeEnabled();
+});
+
 test("shows an already-subscribed notice for an identical subscription", async ({
   page,
 }) => {
