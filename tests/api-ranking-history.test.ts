@@ -139,6 +139,7 @@ describe("API ranking history diff", () => {
       currentPriceCny: 1,
       previousDisplayPrice: "¥2",
       currentDisplayPrice: "¥1",
+      rankingSnapshot: [current],
       notifiedAt: null,
       createdAt,
     });
@@ -157,6 +158,6 @@ describe("API ranking history diff", () => {
 
     expect(batches.map((batch) => batch.runId)).toEqual(["run-old", "run-new"]);
     expect(batches[0].result.changes[0].id).toBe("event-1");
-    expect(batches[0].result.rankings).toBe(rankings);
+    expect(batches[0].result.rankings.input).toEqual([current]);
   });
 });

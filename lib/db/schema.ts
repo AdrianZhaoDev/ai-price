@@ -398,6 +398,10 @@ export const apiRankingEvents = pgTable(
     }),
     previousDisplayPrice: text("previous_display_price"),
     currentDisplayPrice: text("current_display_price"),
+    rankingSnapshot: jsonb("ranking_snapshot")
+      .$type<unknown[]>()
+      .default([])
+      .notNull(),
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -551,6 +555,10 @@ export const confirmationTokens = pgTable(
       .notNull(),
     purpose: tokenPurposeEnum("purpose").notNull(),
     tokenHash: text("token_hash").notNull(),
+    relatedSubscriptionIds: jsonb("related_subscription_ids")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })

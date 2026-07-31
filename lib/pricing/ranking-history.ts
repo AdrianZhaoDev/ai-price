@@ -182,6 +182,7 @@ export function buildApiRankingEventValues(
         currentPriceCny: current.priceCny,
         previousDisplayPrice: previous?.active ? previous.displayPrice : null,
         currentDisplayPrice: current.displayPrice,
+        rankingSnapshot: currentRows,
       });
     }
   }
@@ -201,6 +202,7 @@ export function buildApiRankingEventValues(
       currentPriceCny: null,
       previousDisplayPrice: previous.displayPrice,
       currentDisplayPrice: null,
+      rankingSnapshot: currentRows,
     });
   }
   return { baseline, eventValues, removedRows };
@@ -360,17 +362,39 @@ export function buildPendingApiRankingBatches(
   rows: RankingEventRow[],
   rankings: Record<ApiRankingMetric, ApiRankingSnapshotRow[]>,
 ): PendingApiRankingBatch[] {
-  const byRun = new Map<string, ApiRankingHistoryChange[]>();
+  const byRun = new Map<
+    string,
+    { changes: ApiRankingHistoryChange[]; snapshot: unknown[] }
+  >();
   for (const row of rows) {
-    const changes = byRun.get(row.collectionRunId) ?? [];
-    changes.push({
+    const batch = byRun.get(row.collectionRunId) ?? {
+      changes: [],
+      snapshot: row.rankingSnapshot,
+    };
+    batch.changes.push({
       ...row,
       metric: row.metric as ApiRankingMetric,
     });
-    byRun.set(row.collectionRunId, changes);
+    byRun.set(row.collectionRunId, batch);
   }
-  return [...byRun].map(([runId, changes]) => ({
-    runId,
-    result: { baseline: false, changes, rankings },
-  }));
+  return [...byRun].map(([runId, batch]) => {
+    const batchRankings = emptyRankings();
+    const snapshotRows = batch.snapshot as ApiRankingSnapshotRow[];
+    for (const metric of apiRankingMetrics) {
+      batchRankings[metric] = snapshotRows.filter(
+        (row) => row.metric === metric,
+      );
+    }
+    const hasSnapshot = apiRankingMetrics.some(
+      (metric) => batchRankings[metric].length > 0,
+    );
+    return {
+      runId,
+      result: {
+        baseline: false,
+        changes: batch.changes,
+        rankings: hasSnapshot ? batchRankings : rankings,
+      },
+    };
+  });
 }

@@ -90,6 +90,30 @@ describe("memory subscription repository", () => {
     expect(await listPendingSubscriptionEmailIds()).toEqual([]);
   });
 
+  it("unsubscribes every overlapping scope represented by one email", async () => {
+    const broad = await createActiveSubscription({
+      email: "reader@example.com",
+      providerSlug: "chatgpt",
+      planSlug: null,
+    });
+    const exact = await createActiveSubscription({
+      email: "reader@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-plus-monthly",
+    });
+    expect(
+      await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
+    ).toHaveLength(2);
+
+    const token = await createUnsubscribeToken(broad.subscriptionId, [
+      exact.subscriptionId,
+    ]);
+    expect(await unsubscribe(token)).toBe(true);
+    expect(
+      await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
+    ).toEqual([]);
+  });
+
   it("reclaims interrupted and failed success-email deliveries", async () => {
     const created = await createActiveSubscription({
       email: "reader@example.com",

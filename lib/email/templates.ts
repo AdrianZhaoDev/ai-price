@@ -47,6 +47,13 @@ export type ApiRankingEmailTable = {
 type ApiRankingChangeTemplateInput = {
   subject: string;
   tables: ApiRankingEmailTable[];
+  removed?: Array<{
+    metricLabel: string;
+    providerName: string;
+    modelName: string;
+    previousRank: number | null;
+    previousDisplayPrice: string | null;
+  }>;
   viewUrl: string;
   unsubscribeUrl: string;
 };
@@ -216,6 +223,7 @@ export function priceChangeEmail({
 export function apiRankingChangeEmail({
   subject,
   tables,
+  removed = [],
   viewUrl,
   unsubscribeUrl,
 }: ApiRankingChangeTemplateInput) {
@@ -272,11 +280,29 @@ export function apiRankingChangeEmail({
           .join("\n")}`,
     )
     .join("\n\n");
+  const removedHtml = removed.length
+    ? `<p style="margin:22px 0 5px;color:#85858c;font-size:12px;font-weight:800;">移出榜单</p>
+      <ul style="margin:0;padding:12px 12px 12px 28px;border-top:1px solid #ececef;color:#5f5f65;font-size:12px;line-height:1.7;">${removed
+        .map(
+          (row) =>
+            `<li>${escapeHtml(row.metricLabel)} · <strong>${escapeHtml(row.modelName)}</strong>（${escapeHtml(row.providerName)}）${row.previousRank === null ? "" : `，原第 ${row.previousRank} 名`}${row.previousDisplayPrice ? `，原价 ${escapeHtml(row.previousDisplayPrice)}` : ""}</li>`,
+        )
+        .join("")}</ul>`
+    : "";
+  const removedText = removed.length
+    ? `\n\n移出榜单\n${removed
+        .map(
+          (row) =>
+            `${row.metricLabel} · ${row.providerName} · ${row.modelName}${row.previousRank === null ? "" : `（原第 ${row.previousRank} 名）`}${row.previousDisplayPrice ? ` ${row.previousDisplayPrice}` : ""}`,
+        )
+        .join("\n")}`
+    : "";
   const html = shell(`
     <p style="margin:0;color:#0f9f5f;font-size:12px;font-weight:800;">API 价格排行榜更新</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${escapeHtml(subject)}</h1>
     <p style="margin:0;color:#5f5f65;font-size:13px;line-height:1.6;">三个榜单的当前前三与值得关注的变化都在这里。</p>
     ${tableHtml}
+    ${removedHtml}
     <p style="margin:24px 0 0;"><a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看完整榜单</a></p>
     <p style="margin:22px 0 0;color:#85858c;font-size:11px;"><a href="${safeUnsubscribeUrl}" style="color:#0066cc;">退订排行榜通知</a></p>
   `);
@@ -284,7 +310,7 @@ export function apiRankingChangeEmail({
   return {
     subject,
     html,
-    text: `${subject}\n\n${textTables}\n\n查看完整榜单：${safeViewTextUrl}\n退订：${safeUnsubscribeTextUrl}`,
+    text: `${subject}\n\n${textTables}${removedText}\n\n查看完整榜单：${safeViewTextUrl}\n退订：${safeUnsubscribeTextUrl}`,
   };
 }
 

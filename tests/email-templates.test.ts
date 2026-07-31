@@ -84,11 +84,23 @@ describe("email templates", () => {
           ],
         },
       ],
+      removed: [
+        {
+          metricLabel: "输出",
+          providerName: "Old Provider",
+          modelName: "Old Model",
+          previousRank: 4,
+          previousDisplayPrice: "¥3 / 百万 tokens",
+        },
+      ],
       viewUrl: "https://example.com/api-pricing#api-ranking",
       unsubscribeUrl: "https://example.com/unsubscribe",
     });
     expect(ranking.subject).toBe("Model A 更便宜了！");
     expect(ranking.html).toContain("↑5 · 降价");
+    expect(ranking.html).toContain("移出榜单");
+    expect(ranking.html).toContain("Old Model");
+    expect(ranking.text).toContain("输出 · Old Provider · Old Model");
     expect(ranking.text).toContain("查看完整榜单");
 
     const alert = adminAlertEmail({

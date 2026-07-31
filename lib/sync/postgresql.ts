@@ -329,6 +329,7 @@ export async function syncPostgresqlData(
               currentPriceCny: excluded("current_price_cny"),
               previousDisplayPrice: excluded("previous_display_price"),
               currentDisplayPrice: excluded("current_display_price"),
+              rankingSnapshot: excluded("ranking_snapshot"),
               notifiedAt: excluded("notified_at"),
               createdAt: excluded("created_at"),
             },

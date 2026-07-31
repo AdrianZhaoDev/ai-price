@@ -3,6 +3,7 @@ import { markPriceChangesNotified } from "@/lib/collectors/persistence";
 import { isDatabaseConfigured } from "@/lib/db/client";
 import { providerCatalog } from "@/lib/data/catalog";
 import {
+  isEmailDeliverySent,
   reserveEmailDelivery,
   settleEmailDelivery,
 } from "@/lib/email/delivery";
@@ -42,22 +43,31 @@ function applicationUrl(): string {
   );
 }
 
-function uniqueEmailRecipients<
+export function groupEmailRecipients<
   T extends { email: string; subscriptionId: string },
->(recipients: T[]): T[] {
-  const seen = new Set<string>();
-  return recipients.filter((recipient) => {
+>(recipients: T[]): Array<T & { subscriptionIds: string[] }> {
+  const grouped = new Map<string, T & { subscriptionIds: string[] }>();
+  for (const recipient of recipients) {
     const normalized = recipient.email.trim().toLowerCase();
-    if (seen.has(normalized)) return false;
-    seen.add(normalized);
-    return true;
-  });
+    const existing = grouped.get(normalized);
+    if (existing) {
+      if (!existing.subscriptionIds.includes(recipient.subscriptionId)) {
+        existing.subscriptionIds.push(recipient.subscriptionId);
+      }
+      continue;
+    }
+    grouped.set(normalized, {
+      ...recipient,
+      subscriptionIds: [recipient.subscriptionId],
+    });
+  }
+  return [...grouped.values()];
 }
 
 export async function notifyPriceChangeDigest(
   digest: PriceChangeDigest,
 ): Promise<number> {
-  const recipients = uniqueEmailRecipients(
+  const recipients = groupEmailRecipients(
     await listActivePriceSubscribers(digest.providerSlug, digest.planSlug),
   );
   const appUrl = applicationUrl();
@@ -78,15 +88,22 @@ export async function notifyPriceChangeDigest(
   let failed = 0;
 
   for (const recipient of recipients) {
+    const dedupeKey = `price-change:${digest.runId}:${digest.providerSlug}:${digest.planSlug}:${hashEmail(recipient.email)}`;
     const deliveryId = await reserveEmailDelivery({
       type: "price_change",
       recipient: recipient.email,
-      dedupeKey: `price-change:${digest.runId}:${digest.planSlug}:${hashEmail(recipient.email)}`,
+      dedupeKey,
     });
-    if (!deliveryId) continue;
+    if (!deliveryId) {
+      if (!(await isEmailDeliverySent(dedupeKey))) failed += 1;
+      continue;
+    }
 
     try {
-      const rawToken = await createUnsubscribeToken(recipient.subscriptionId);
+      const rawToken = await createUnsubscribeToken(
+        recipient.subscriptionId,
+        recipient.subscriptionIds,
+      );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
       const message = priceChangeEmail({
@@ -247,7 +264,7 @@ export async function notifyApiRankingChanges(
   runId: string,
 ): Promise<number> {
   if (result.baseline || result.changes.length === 0) return 0;
-  const recipients = uniqueEmailRecipients(
+  const recipients = groupEmailRecipients(
     await listActivePriceSubscribers(
       API_RANKING_PROVIDER_SLUG,
       API_RANKING_PLAN_SLUG,
@@ -257,23 +274,45 @@ export async function notifyApiRankingChanges(
   const viewUrl = new URL("/api-pricing#api-ranking", appUrl).toString();
   const subject = rankingSubject(result);
   const tables = rankingEmailTables(result);
+  const metricLabels = {
+    cached_input: "缓存输入",
+    input: "非缓存输入",
+    output: "输出",
+  } as const;
+  const removed = result.changes
+    .filter((change) => change.currentRank === null)
+    .map((change) => ({
+      metricLabel: metricLabels[change.metric],
+      providerName: change.providerName,
+      modelName: change.modelName,
+      previousRank: change.previousRank,
+      previousDisplayPrice: change.previousDisplayPrice,
+    }));
   let sent = 0;
   let failed = 0;
 
   for (const recipient of recipients) {
+    const dedupeKey = `api-ranking:${runId}:${hashEmail(recipient.email)}`;
     const deliveryId = await reserveEmailDelivery({
       type: "api_ranking_change",
       recipient: recipient.email,
-      dedupeKey: `api-ranking:${runId}:${hashEmail(recipient.email)}`,
+      dedupeKey,
     });
-    if (!deliveryId) continue;
+    if (!deliveryId) {
+      if (!(await isEmailDeliverySent(dedupeKey))) failed += 1;
+      continue;
+    }
     try {
-      const rawToken = await createUnsubscribeToken(recipient.subscriptionId);
+      const rawToken = await createUnsubscribeToken(
+        recipient.subscriptionId,
+        recipient.subscriptionIds,
+      );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
       const message = apiRankingChangeEmail({
         subject,
         tables,
+        removed,
         viewUrl,
         unsubscribeUrl: unsubscribeUrl.toString(),
       });

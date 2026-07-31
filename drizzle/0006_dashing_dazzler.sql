@@ -1,0 +1,2 @@
+ALTER TABLE "api_ranking_events" ADD COLUMN "ranking_snapshot" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "confirmation_tokens" ADD COLUMN "related_subscription_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;
