@@ -30,7 +30,7 @@ export const modeSeo: Record<PriceMode, ModeSeo> = {
     path: "/china-ai-subscriptions",
     title: "国内 AI 会员订阅价格",
     description:
-      "集中比较 Kimi、智谱清言、通义千问、MiniMax 等国内 AI 产品的官方会员、开发者套餐和 Token Plan 价格，查看月付、年付、套餐额度、更新时间与可核验的官方价格来源。",
+      "集中比较 Kimi、智谱清言、通义千问、MiniMax 等国内 AI 产品的官方会员、开发者套餐和 Token Plan 价格，查看月付、年付、套餐额度、更新时间与可核验的官方价格来源，帮助比较不同订阅周期的实际成本、额度差异、适用人群和购买决策。",
     keywords: [
       "国内 AI 会员价格",
       "AI 订阅价格",
@@ -43,7 +43,7 @@ export const modeSeo: Record<PriceMode, ModeSeo> = {
     path: "/api-pricing",
     title: "AI API 价格排行榜",
     description:
-      "比较 DeepSeek、豆包、通义千问、Kimi 等平台的官方 AI API 价格，按缓存输入、非缓存输入和输出成本查看每百万 Tokens 报价、模型差异、更新时间及官方计费来源。",
+      "比较 DeepSeek、豆包、通义千问、Kimi 等平台的官方 AI API 价格，按缓存输入、非缓存输入和输出成本查看每百万 Tokens 报价、模型差异、更新时间及官方计费来源，用于估算模型调用预算、比较输入输出成本并选择更合适的服务平台。",
     keywords: [
       "AI API 价格",
       "大模型 API 价格",

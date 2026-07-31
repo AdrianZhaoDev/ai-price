@@ -7,7 +7,7 @@ export const metadata = metadataForDocument({
   path: "/privacy",
   title: "隐私说明",
   description:
-    "了解 AI 价签在价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界。",
+    "了解 AI 价签在价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界；同时说明 Cloudflare 性能监测涉及的匿名访问数据、保留原则和用户权利。",
 });
 
 export default function PrivacyPage() {
@@ -62,6 +62,11 @@ export default function PrivacyPage() {
         <p>
           浏览器的主题偏好可以保存在本地存储中。是否设置安全或分析 Cookie
           取决于基础设施服务的实际功能；我们不会使用第三方广告 Cookie。
+        </p>
+        <p>
+          性能监测的汇总范围包括 Page Views、LCP、INP、CLS、browser
+          type、operating system 和 country or
+          region。这些指标用于判断页面是否可用、加载是否变慢和哪些设备需要优化，不与邮箱订阅记录合并，也不用于识别个人或建立用户画像。
         </p>
       </section>
       <section>

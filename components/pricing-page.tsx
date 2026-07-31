@@ -7,26 +7,44 @@ import { loadProviderCatalog } from "@/lib/pricing/repository";
 import type { PriceMode } from "@/lib/pricing/types";
 import { absoluteUrl, modeSeo, SITE_NAME, SITE_ORIGIN } from "@/lib/seo";
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 
 type PricingPageProps = {
   mode: PriceMode;
 };
 
+const loadCachedPricingPageData = unstable_cache(
+  async (mode: PriceMode) => {
+    const modeProviders = (await loadProviderCatalog(mode)).sort(
+      (a, b) =>
+        (a.rank ?? Number.MAX_SAFE_INTEGER) -
+        (b.rank ?? Number.MAX_SAFE_INTEGER),
+    );
+
+    return {
+      lastCheckedAt: modeProviders
+        .map((provider) => provider.lastCheckedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1),
+      hasDisplayableMode: modeProviders.some(
+        (provider) => displayableOffers(provider.offers).length > 0,
+      ),
+      clientCatalog: prepareProvidersForClient(modeProviders, mode),
+      providerSources: modeProviders.map((provider) => ({
+        name: provider.name,
+        sourceUrl: provider.sourceUrl,
+      })),
+    };
+  },
+  ["pricing-page-data-v1"],
+  { revalidate: 900 },
+);
+
 export async function PricingPage({ mode }: PricingPageProps) {
-  const modeProviders = (await loadProviderCatalog(mode)).sort(
-    (a, b) =>
-      (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER),
-  );
-  const lastCheckedAt = modeProviders
-    .map((provider) => provider.lastCheckedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1);
+  const { lastCheckedAt, hasDisplayableMode, clientCatalog, providerSources } =
+    await loadCachedPricingPageData(mode);
   const seo = modeSeo[mode];
-  const hasDisplayableMode = modeProviders.some(
-    (provider) => displayableOffers(provider.offers).length > 0,
-  );
-  const clientCatalog = prepareProvidersForClient(modeProviders, mode);
 
   const structuredData = [
     {
@@ -51,8 +69,8 @@ export async function PricingPage({ mode }: PricingPageProps) {
       "@context": "https://schema.org",
       "@type": "ItemList",
       name: `${seo.title}官方来源`,
-      numberOfItems: modeProviders.length,
-      itemListElement: modeProviders.map((provider, index) => ({
+      numberOfItems: providerSources.length,
+      itemListElement: providerSources.map((provider, index) => ({
         "@type": "ListItem",
         position: index + 1,
         name: provider.name,

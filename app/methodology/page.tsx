@@ -7,7 +7,7 @@ export const metadata = metadataForDocument({
   path: "/methodology",
   title: "价格采集方法",
   description:
-    "了解 AI 价签如何从 App Store、产品官网、帮助中心和开放平台采集 AI 订阅及 API 价格，以及数据核验、异常隔离、汇率换算、更新频率、来源追溯和纠错处理规则。",
+    "了解 AI 价签如何从 App Store、产品官网、帮助中心和开放平台采集 AI 订阅及 API 价格，以及数据核验、异常隔离、汇率换算、更新频率、来源追溯和纠错处理规则，并说明采集失败、过期价格与异常波动如何影响前台展示和价格变化通知。",
 });
 
 export default function MethodologyPage() {
@@ -44,6 +44,11 @@ export default function MethodologyPage() {
         <h2>异常不会覆盖旧值</h2>
         <p>
           页面结构变化、价格缺失、套餐数量异常减少或访问被限制时，本轮结果会被拒绝。最后一次有效价格继续展示并标记为“可能过期”。
+        </p>
+        <p>
+          每次核验还会记录 HTTP status、source URL、currency、billing
+          period、observed at、parser version
+          和连续失败次数。这些字段用于区分网络波动、来源改版、计费单位变化和真实价格调整，避免把采集故障误判成降价或涨价。
         </p>
       </section>
       <section>
