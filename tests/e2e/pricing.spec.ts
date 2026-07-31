@@ -8,9 +8,7 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
   await waitForPricingHydration(page);
-  await expect(page.locator("h1.sr-only")).toHaveText(
-    "同一份订阅，不同的地区价格",
-  );
+  await expect(page.locator("h1.sr-only")).toHaveText("AI订阅全球价格对比");
   await expect(page.locator(".workspace-heading")).toHaveCount(0);
   await expect(page.locator(".section-meta .freshness-block")).toBeVisible();
   await expect(page.locator(".official-source-count")).toContainText(
@@ -208,6 +206,47 @@ test("shows an already-subscribed notice for an identical subscription", async (
   ).toBeVisible();
   await expect(page.getByText("无需再次提交")).toBeVisible();
   expect(requestCount).toBe(1);
+});
+
+test("uses provider query links for landing-page handoff", async ({ page }) => {
+  await page.goto("/glm-price");
+  await expect(
+    page.getByRole("heading", { name: "智谱 GLM 订阅与 API 价格" }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: /比较 智谱 GLM 的订阅价格/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(
+    /\/china-ai-subscriptions\?provider=glm-resource-package$/,
+  );
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator('.provider-button[data-provider-id="glm-resource-package"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("uses stable model query links for API landing-page handoff", async ({
+  page,
+}) => {
+  await page.goto("/deepseek-price");
+  const modelLink = page.locator(".landing-model-link").first();
+  await expect(modelLink).toBeVisible();
+  const href = await modelLink.getAttribute("href");
+  expect(href).toMatch(
+    /^\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,
+  );
+  await modelLink.click();
+  await expect(page).toHaveURL(
+    /\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,
+  );
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator('.provider-button[data-provider-id="deepseek-api"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.price-row[data-highlighted="true"]')).toHaveCount(
+    1,
+  );
 });
 
 test("shows ranked RMB prices without duplicate or status-only plans", async ({

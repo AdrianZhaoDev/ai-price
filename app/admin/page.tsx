@@ -8,7 +8,7 @@ import { AdminHeader } from "./admin-header";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "订阅管理｜AI 价签",
+  title: "订阅管理｜Low Price Radar",
 };
 
 type StatusFilter = "all" | "pending" | "active" | "unsubscribed";

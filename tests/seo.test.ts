@@ -1,6 +1,12 @@
 import manifest from "@/app/manifest";
 import robots from "@/app/robots";
-import sitemap from "@/app/sitemap";
+import { buildSitemap } from "@/app/sitemap";
+import { providersForMode } from "@/lib/data/catalog";
+import {
+  landingPagePath,
+  landingPages,
+  metadataForLandingPage,
+} from "@/lib/landing-pages";
 import {
   absoluteUrl,
   metadataForDocument,
@@ -47,16 +53,47 @@ describe("SEO routes", () => {
     });
   });
 
-  it("publishes all public pages in the sitemap", () => {
-    const urls = sitemap().map((entry) => entry.url);
+  it("publishes public pages in the sitemap without duplicate URLs", () => {
+    const urls = buildSitemap({
+      global: providersForMode("global"),
+      "china-subscription": providersForMode("china-subscription"),
+      api: providersForMode("api"),
+    }).map((entry) => entry.url);
 
-    expect(urls).toEqual([
+    expect(urls.slice(0, 5)).toEqual([
       absoluteUrl("/"),
       absoluteUrl("/china-ai-subscriptions"),
       absoluteUrl("/api-pricing"),
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
     ]);
+    expect(
+      urls
+        .slice(5)
+        .every((url) =>
+          landingPages.some(
+            (page) => absoluteUrl(landingPagePath(page)) === url,
+          ),
+        ),
+    ).toBe(true);
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it("defines stable metadata for every SEO landing page", () => {
+    expect(landingPages).toHaveLength(31);
+    expect(new Set(landingPages.map((page) => page.slug)).size).toBe(31);
+    for (const page of landingPages) {
+      const metadata = metadataForLandingPage(page);
+      expect(metadata.title).toEqual({ absolute: page.title });
+      expect(metadata.alternates?.canonical).toBe(`/${page.slug}`);
+      expect(metadata.description).toContain(page.name);
+    }
+    expect(
+      metadataForLandingPage(landingPages[0]!, false).robots,
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
   });
 
   it("keeps private application routes out of search results", () => {

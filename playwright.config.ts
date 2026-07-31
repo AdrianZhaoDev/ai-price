@@ -9,8 +9,8 @@ const webServerCommand =
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
-  workers: process.env.CI ? 4 : undefined,
-  timeout: process.env.CI ? 45_000 : 30_000,
+  workers: 4,
+  timeout: 45_000,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {

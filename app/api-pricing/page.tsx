@@ -6,6 +6,20 @@ import { metadataForMode } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 export const metadata = metadataForMode("api");
 
-export default function ApiPricingPage() {
-  return <PricingPage mode="api" />;
+export default async function ApiPricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  return (
+    <PricingPage
+      mode="api"
+      query={{
+        providerId:
+          typeof params.provider === "string" ? params.provider : undefined,
+        modelSlug: typeof params.model === "string" ? params.model : undefined,
+      }}
+    />
+  );
 }

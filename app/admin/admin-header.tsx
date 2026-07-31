@@ -13,7 +13,7 @@ export function AdminHeader({
     <>
       <header className="admin-header">
         <div>
-          <p className="admin-eyebrow">AI 价签 · 管理后台</p>
+          <p className="admin-eyebrow">Low Price Radar · 管理后台</p>
           <h1>{title}</h1>
           <p>{description}</p>
         </div>
