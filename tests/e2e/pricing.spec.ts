@@ -301,22 +301,41 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   }
 
   const firstRankingEntry = page
-    .locator(".api-ranking-desktop .api-ranking-entry")
+    .locator(
+      '.api-ranking-desktop .api-ranking-entry[data-provider-id="openai-api"]',
+    )
     .first();
   const targetProviderId =
     await firstRankingEntry.getAttribute("data-provider-id");
   const targetOfferId = await firstRankingEntry.getAttribute("data-offer-id");
+  const targetModelSlug =
+    await firstRankingEntry.getAttribute("data-model-slug");
   expect(targetProviderId).toBeTruthy();
   expect(targetOfferId).toBeTruthy();
+  expect(targetModelSlug).toBeTruthy();
   await firstRankingEntry.click();
   await expect(
     page.locator(`.provider-button[data-provider-id="${targetProviderId}"]`),
   ).toHaveAttribute("aria-pressed", "true");
-  const targetRow = page.locator(
-    `.price-row[data-offer-id="${targetOfferId}"]`,
-  );
-  await expect(targetRow).toHaveAttribute("data-highlighted", "true");
+  const targetRow = page
+    .locator(
+      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"], ` +
+        `.price-row[data-highlighted="true"][data-model-slug="${targetModelSlug}"]`,
+    )
+    .first();
+  await expect(targetRow).toBeVisible();
   await expect(targetRow).toBeInViewport();
+
+  await expect(page.getByRole("heading", { name: "OpenAI API" })).toBeVisible();
+  const openAiRow = page.locator(".price-list > .price-row").first();
+  await expect(openAiRow.locator(".official-price strong")).toContainText("¥");
+  await expect(openAiRow.locator(".official-price small")).toContainText("$");
+  await expect(openAiRow.locator(".official-price small")).toContainText(
+    "1 USD ≈ ¥",
+  );
+  await expect(openAiRow.locator(".official-price small")).toContainText(
+    "汇率 2026-07-31",
+  );
 });
 
 test("mobile navigation and sheet remain usable", async ({
@@ -364,6 +383,19 @@ test("mobile navigation and sheet remain usable", async ({
       (entry) => entry.scrollWidth <= entry.clientWidth,
     ),
   ).toBe(true);
+  const globalRankingEntry = page
+    .locator(
+      '.api-ranking-mobile .api-ranking-entry[data-provider-id="openai-api"]',
+    )
+    .first();
+  await expect(globalRankingEntry).toBeVisible();
+  await globalRankingEntry.click();
+  await expect(
+    page.locator('.provider-button[data-provider-id="openai-api"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator('.price-row[data-model-slug="gpt-5-6-sol"]').first(),
+  ).toBeInViewport();
   expect(
     await page.evaluate(
       () =>

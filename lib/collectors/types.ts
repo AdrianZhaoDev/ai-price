@@ -30,6 +30,7 @@ export type NormalizedOffer = {
   priceTier?: string;
   tierOrder?: number;
   category?: string;
+  rankingEligible?: boolean;
 };
 
 export type CollectionContext = {
@@ -64,6 +65,7 @@ export interface PriceSourceAdapter {
   providerSlug: string;
   sourceUrl: string;
   parserVersion: string;
+  quoteCurrencies?: string[];
   collect(context: CollectionContext): Promise<RawCollectionResult>;
   parse(raw: RawCollectionResult): Promise<NormalizedOffer[]>;
   healthCheck(offers: NormalizedOffer[]): SourceHealth;

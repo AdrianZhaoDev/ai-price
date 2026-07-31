@@ -18,6 +18,7 @@ import {
   normalizeTokenUnit,
   numberFrom,
   officialTables,
+  pricingTables,
   priceColumns,
   priceTypeFrom,
 } from "@/lib/collectors/adapters/api-pricing/shared";
@@ -781,6 +782,247 @@ export function parseTeleAiApi(raw: RawCollectionResult): NormalizedOffer[] {
   );
 }
 
+type GlobalApiProvider = {
+  providerSlug: string;
+  parserVersion: string;
+};
+
+function globalTier(text: string): {
+  label: string;
+  order: number;
+  rankingEligible: boolean;
+} {
+  const normalized = text.toLowerCase();
+  if (/(?:<|≤)\s*[2-9]\d{2}k/.test(normalized)) {
+    return { label: "标准实时", order: 0, rankingEligible: true };
+  }
+  if (/batch|批量/.test(normalized)) {
+    return { label: "Batch", order: 10, rankingEligible: false };
+  }
+  if (/flex/.test(normalized)) {
+    return { label: "Flex", order: 20, rankingEligible: false };
+  }
+  if (/priority|fast|优先/.test(normalized)) {
+    return { label: "Priority", order: 30, rankingEligible: false };
+  }
+  if (/free|免费/.test(normalized)) {
+    return { label: "免费层", order: 40, rankingEligible: false };
+  }
+  if (/≥|>=|over|above|long|长上下文|[2-9]\d{2}k/.test(normalized)) {
+    return { label: "长上下文", order: 50, rankingEligible: false };
+  }
+  if (
+    /retired|deprecated|legacy|limited|preview|live|audio|image|nano banana|退役|限量|预览|实时翻译|音频|映像|图像/.test(
+      normalized,
+    )
+  ) {
+    return { label: "非通用模型", order: 60, rankingEligible: false };
+  }
+  return { label: "标准实时", order: 0, rankingEligible: true };
+}
+
+function globalModelName(value: string): string {
+  return compactLabel(
+    value
+      .replace(/\((?:<|≤|>=|≥|>|over|above)[^)]+\)/gi, "")
+      .replace(/\[(?:<|≤|>=|≥|>|over|above)[^\]]+]/gi, ""),
+  );
+}
+
+function parseGlobalUsdTables(
+  raw: RawCollectionResult,
+  provider: GlobalApiProvider,
+): NormalizedOffer[] {
+  const tokenUnitPattern =
+    /1\s*m(?:illion)?\s*tokens?|million tokens?|mtok|(?:100\s*万|百万)(?:个)?\s*tokens?/i;
+  if (!tokenUnitPattern.test(raw.body)) {
+    return [];
+  }
+  const hasGlobalTokenStatement =
+    /prices?\s+per\s+1\s*m(?:illion)?\s*tokens?/i.test(raw.body);
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  for (const table of pricingTables(raw.body)) {
+    const headerIndex = table.rows.findIndex(
+      (row) =>
+        row.some((cell) => /model|模型/i.test(cell)) &&
+        row.some((cell) => /input|输入/i.test(cell)) &&
+        row.some((cell) => /output|输出/i.test(cell)),
+    );
+    if (headerIndex < 0) continue;
+    const headers = table.rows[headerIndex];
+    const tableHasTokenUnit = headers.some((header) =>
+      tokenUnitPattern.test(header),
+    );
+    const modelIndex = headers.findIndex((cell) => /model|模型/i.test(cell));
+    const seenTypes = new Map<string, number>();
+    const columns = headers.flatMap((label, index) => {
+      if (index === modelIndex) return [];
+      const type = priceTypeFrom(label);
+      if (type === "other") return [];
+      const occurrence = seenTypes.get(type) ?? 0;
+      seenTypes.set(type, occurrence + 1);
+      return [{ index, label, type, occurrence }];
+    });
+    if (
+      modelIndex < 0 ||
+      !columns.some(({ type }) => type === "input") ||
+      !columns.some(({ type }) => type === "output")
+    ) {
+      continue;
+    }
+    for (const row of table.rows.slice(headerIndex + 1)) {
+      const rawModelName = row[modelIndex] ?? "";
+      const modelName = globalModelName(rawModelName);
+      if (!modelName || /model|模型/i.test(modelName)) continue;
+      const tier = globalTier(
+        `${table.context} ${headers.join(" ")} ${rawModelName} ${row.join(" ")}`,
+      );
+      for (const column of columns) {
+        const cell = row[column.index] ?? "";
+        if (!/\$|usd|美元/i.test(cell)) continue;
+        if (
+          !tokenUnitPattern.test(cell) &&
+          !tableHasTokenUnit &&
+          !hasGlobalTokenStatement
+        ) {
+          continue;
+        }
+        const value = firstNumberFrom(cell);
+        if (!validPrice(value)) continue;
+        const columnTier =
+          column.occurrence > 0
+            ? { label: "长上下文", order: 50, rankingEligible: false }
+            : tier;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: provider.providerSlug,
+            parserVersion: provider.parserVersion,
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: column.label,
+            priceType: column.type,
+            value,
+            currency: "USD",
+            region: "全球",
+            category: table.context || "官方 API 定价",
+            tier: columnTier.label,
+            tierOrder: columnTier.order,
+            rankingEligible: columnTier.rankingEligible,
+          }),
+        );
+      }
+    }
+  }
+  return dedupeOffers(offers);
+}
+
+export function parseOpenAiApi(raw: RawCollectionResult): NormalizedOffer[] {
+  return parseGlobalUsdTables(raw, {
+    providerSlug: "openai-api",
+    parserVersion: "openai-api-v1",
+  });
+}
+
+export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
+  return parseGlobalUsdTables(raw, {
+    providerSlug: "claude-api",
+    parserVersion: "claude-api-v1",
+  });
+}
+
+export function parseGrokApi(raw: RawCollectionResult): NormalizedOffer[] {
+  return parseGlobalUsdTables(raw, {
+    providerSlug: "grok-api",
+    parserVersion: "grok-api-v1",
+  });
+}
+
+export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
+  const $ = load(raw.body);
+  if ($("table").length === 0) {
+    return parseGlobalUsdTables(raw, {
+      providerSlug: "gemini-api",
+      parserVersion: "gemini-api-v1",
+    });
+  }
+
+  const orderFor = modelOrderer();
+  const offers: NormalizedOffer[] = [];
+  let modelName = "";
+  let section = "标准实时";
+  $("h1,h2,h3,h4,table").each((_, element) => {
+    const tag = element.tagName.toLowerCase();
+    if (tag !== "table") {
+      const heading = compactLabel($(element).text());
+      if (/gemini[\s-]*\d/i.test(heading)) {
+        modelName = heading
+          .replace(/\s*(pricing|定价).*$/i, "")
+          .replace(/\s*\(.*$/, "")
+          .trim();
+        section = "标准实时";
+      } else if (
+        /standard|batch|flex|priority|free|标准|批量|优先|免费/i.test(heading)
+      ) {
+        section = heading;
+      }
+      return;
+    }
+    if (!modelName) return;
+    const rows = officialTables($.html(element))[0]?.rows ?? [];
+    const headerIndex = rows.findIndex((row) =>
+      row.some(
+        (cell) =>
+          /paid tier|付费/i.test(cell) &&
+          /1\s*m(?:illion)?\s*tokens?|million tokens?|(?:100\s*万|百万)(?:个)?\s*tokens?/i.test(
+            cell,
+          ),
+      ),
+    );
+    if (headerIndex < 0) return;
+    const paidIndex = rows[headerIndex].findIndex((cell) =>
+      /paid tier|付费/i.test(cell),
+    );
+    if (paidIndex < 0) return;
+    const tier = globalTier(`${section} ${modelName}`);
+    for (const row of rows.slice(headerIndex + 1)) {
+      const label = compactLabel(row[0] ?? "");
+      const type = priceTypeFrom(label);
+      const cell = row[paidIndex] ?? "";
+      if (
+        type === "other" ||
+        !/\$|usd|美元/i.test(cell) ||
+        /not available|不适用/i.test(cell)
+      ) {
+        continue;
+      }
+      const value = firstNumberFrom(cell);
+      if (!validPrice(value)) continue;
+      const rowTier = globalTier(`${section} ${label} ${cell} ${modelName}`);
+      offers.push(
+        apiOffer({
+          raw,
+          providerSlug: "gemini-api",
+          parserVersion: "gemini-api-v1",
+          modelName,
+          modelOrder: orderFor(modelName),
+          priceLabel: label,
+          priceType: type,
+          value,
+          currency: "USD",
+          region: "全球",
+          category: section,
+          tier: rowTier.label,
+          tierOrder: rowTier.order,
+          rankingEligible: tier.rankingEligible && rowTier.rankingEligible,
+        }),
+      );
+    }
+  });
+  return dedupeOffers(offers);
+}
+
 export const apiPricingRules = {
   "stepfun-api": parseStepFunApi,
   "deepseek-api": parseDeepSeekApi,
@@ -798,4 +1040,8 @@ export const apiPricingRules = {
   "siliconflow-api": parseSiliconFlowApi,
   "huawei-maas-api": parseHuaweiMaaSApi,
   "teleai-api": parseTeleAiApi,
+  "openai-api": parseOpenAiApi,
+  "claude-api": parseClaudeApi,
+  "gemini-api": parseGeminiApi,
+  "grok-api": parseGrokApi,
 } as const;

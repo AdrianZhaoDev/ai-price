@@ -71,6 +71,11 @@ export function formatFxRate(offer: PriceOffer): string {
   return `1 ${offer.currency} ≈ ¥${formatted}`;
 }
 
+export function formatFxDate(offer: PriceOffer): string {
+  const date = offer.fxRateObservedAt?.slice(0, 10);
+  return date ? `汇率 ${date}` : "汇率日期未知";
+}
+
 export function compareCnyPrice(
   value?: number,
   minimum?: number,

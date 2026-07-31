@@ -19,6 +19,21 @@ export type ApiRankingEntry = {
   output?: PriceOffer;
 };
 
+export function rankingCnyValue(offer: PriceOffer | undefined): number {
+  if (!offer) return Number.POSITIVE_INFINITY;
+  if (offer.convertedCny !== undefined && Number.isFinite(offer.convertedCny)) {
+    return offer.convertedCny;
+  }
+  if (
+    offer.currency?.toUpperCase() === "CNY" &&
+    offer.amountMinor !== null &&
+    Number.isFinite(offer.amountMinor)
+  ) {
+    return offer.amountMinor / 100;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
 function inferredPriceType(offer: PriceOffer): ApiPriceType {
   if (offer.priceType) return offer.priceType;
   const text = offer.planName.toLowerCase();
@@ -38,8 +53,7 @@ function metricOffer(
     .sort(
       (a, b) =>
         (a.tierOrder ?? 0) - (b.tierOrder ?? 0) ||
-        (a.amountMinor ?? Number.POSITIVE_INFINITY) -
-          (b.amountMinor ?? Number.POSITIVE_INFINITY),
+        rankingCnyValue(a) - rankingCnyValue(b),
     )[0];
 }
 
@@ -63,6 +77,8 @@ export function apiRankingEntries(
       (offer) =>
         offer.status !== "pending" &&
         offer.status !== "unpublished" &&
+        offer.rankingEligible !== false &&
+        Number.isFinite(rankingCnyValue(offer)) &&
         offer.unit?.replace(/\s+/g, " ").trim() === "/百万 tokens",
     );
     const models = new Map<
@@ -117,8 +133,8 @@ export function apiRankingEntries(
         : entry.output;
 
   return entries.sort((a, b) => {
-    const aValue = selectedOffer(a)?.amountMinor ?? Number.POSITIVE_INFINITY;
-    const bValue = selectedOffer(b)?.amountMinor ?? Number.POSITIVE_INFINITY;
+    const aValue = rankingCnyValue(selectedOffer(a));
+    const bValue = rankingCnyValue(selectedOffer(b));
     return (
       aValue - bValue ||
       a.providerName.localeCompare(b.providerName, "zh-CN") ||

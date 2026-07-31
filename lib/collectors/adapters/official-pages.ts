@@ -7,6 +7,9 @@ import {
   parseDeepSeekApi,
   parseDoubaoApi,
   parseGlmApi,
+  parseGrokApi,
+  parseClaudeApi,
+  parseGeminiApi,
   parseHuaweiMaaSApi,
   parseHunyuanApi,
   parseKimiApi,
@@ -14,6 +17,7 @@ import {
   parseMimoApi,
   parseMiniMaxApi,
   parseQwenApi,
+  parseOpenAiApi,
   parseSiliconFlowApi,
   parseSparkApi,
   parseStepFunApi,
@@ -1209,6 +1213,10 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "siliconflow-pricing-official": 3,
   "huawei-maas-pricing-official": 2,
   "teleai-pricing-official": 2,
+  "openai-api-pricing-official": 6,
+  "claude-api-pricing-official": 6,
+  "gemini-api-pricing-official": 6,
+  "grok-api-pricing-official": 6,
 };
 
 export class OfficialPageAdapter implements PriceSourceAdapter {
@@ -1219,6 +1227,7 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
     readonly parserVersion: string,
     private readonly parser: Parser,
     private readonly collectUrl = sourceUrl,
+    readonly quoteCurrencies?: string[],
   ) {}
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
@@ -1615,5 +1624,41 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "https://www.teleai.com.cn/product/Multimodal",
     "teleai-api-v4",
     parseTeleAiApi,
+  ),
+  new OfficialPageAdapter(
+    "openai-api-pricing-official",
+    "openai-api",
+    "https://developers.openai.com/api/docs/pricing",
+    "openai-api-v1",
+    parseOpenAiApi,
+    "https://developers.openai.com/api/docs/pricing.md",
+    ["USD"],
+  ),
+  new OfficialPageAdapter(
+    "claude-api-pricing-official",
+    "claude-api",
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "claude-api-v1",
+    parseClaudeApi,
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    ["USD"],
+  ),
+  new OfficialPageAdapter(
+    "gemini-api-pricing-official",
+    "gemini-api",
+    "https://ai.google.dev/gemini-api/docs/pricing",
+    "gemini-api-v1",
+    parseGeminiApi,
+    "https://ai.google.dev/gemini-api/docs/pricing",
+    ["USD"],
+  ),
+  new OfficialPageAdapter(
+    "grok-api-pricing-official",
+    "grok-api",
+    "https://docs.x.ai/developers/pricing",
+    "grok-api-v1",
+    parseGrokApi,
+    "https://docs.x.ai/developers/pricing.md",
+    ["USD"],
   ),
 ];

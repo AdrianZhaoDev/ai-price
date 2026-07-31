@@ -198,6 +198,9 @@ async function ensurePlan(
     ...(offer.priceTier ? { priceTier: offer.priceTier } : {}),
     ...(offer.tierOrder !== undefined ? { tierOrder: offer.tierOrder } : {}),
     ...(offer.category ? { category: offer.category } : {}),
+    ...(offer.rankingEligible !== undefined
+      ? { rankingEligible: offer.rankingEligible }
+      : {}),
   };
   const [plan] = await getDatabase()
     .insert(plans)

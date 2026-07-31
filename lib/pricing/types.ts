@@ -33,6 +33,7 @@ export type PriceOffer = {
   priceTier?: string;
   tierOrder?: number;
   category?: string;
+  rankingEligible?: boolean;
 };
 
 export type ProviderCatalogItem = {

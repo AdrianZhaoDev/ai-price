@@ -1,5 +1,8 @@
 import { load } from "cheerio";
-import { slugifyPlan } from "@/lib/collectors/price-parser";
+import {
+  currencyFractionDigits,
+  slugifyPlan,
+} from "@/lib/collectors/price-parser";
 import type {
   ApiPriceType,
   NormalizedOffer,
@@ -79,6 +82,59 @@ export function officialTables(html: string): OfficialTable[] {
     .get();
 }
 
+function markdownCell(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function markdownRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map(markdownCell);
+}
+
+export function markdownTables(markdown: string): OfficialTable[] {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const tables: OfficialTable[] = [];
+  let context = "";
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const heading = lines[index].match(/^\s{0,3}#{1,6}\s+(.+)$/);
+    if (heading) {
+      context = markdownCell(heading[1]);
+      continue;
+    }
+    if (
+      !lines[index].includes("|") ||
+      !/^\s*\|?\s*:?-{3,}/.test(lines[index + 1])
+    ) {
+      continue;
+    }
+    const rows = [markdownRow(lines[index])];
+    index += 2;
+    while (index < lines.length && lines[index].includes("|")) {
+      const row = markdownRow(lines[index]);
+      if (row.some(Boolean)) rows.push(row);
+      index += 1;
+    }
+    tables.push({ context, rows });
+    index -= 1;
+  }
+  return tables;
+}
+
+export function pricingTables(content: string): OfficialTable[] {
+  const htmlTables = officialTables(content);
+  return htmlTables.length > 0 ? htmlTables : markdownTables(content);
+}
+
 export function numberFrom(value: string | undefined): number | null {
   if (!value) return null;
   const normalized = value.replace(/,/g, "");
@@ -100,7 +156,7 @@ export function priceTypeFrom(label: string): ApiPriceType {
   if (/缓存未命中|未命中缓存|uncached|cachemiss/.test(normalized)) {
     return "input";
   }
-  if (/缓存|cache|命中/.test(normalized)) return "cached_input";
+  if (/缓存|cache|caching|命中/.test(normalized)) return "cached_input";
   if (/输出|output|生成/.test(normalized)) return "output";
   if (/输入|input|提示/.test(normalized)) return "input";
   return "other";
@@ -162,6 +218,9 @@ export function apiOffer(input: {
   tier?: string;
   tierOrder?: number;
   planSuffix?: string;
+  currency?: string;
+  region?: string;
+  rankingEligible?: boolean;
 }): NormalizedOffer {
   const modelSlug = slugifyPlan(input.modelName);
   const priceType = input.priceType ?? priceTypeFrom(input.priceLabel);
@@ -170,7 +229,12 @@ export function apiOffer(input: {
     `${priceType}-${slugifyPlan(input.priceLabel || "price")}`;
   const multiplier = input.multiplier ?? 1;
   const value = input.value * multiplier;
-  const display = `¥${Number(value.toFixed(6))}`;
+  const currency = (input.currency ?? "CNY").toUpperCase();
+  const symbol = currency === "CNY" ? "¥" : currency === "USD" ? "$" : "";
+  const display = `${symbol}${Number(value.toFixed(6))}${
+    symbol ? "" : ` ${currency}`
+  }`;
+  const fractionDigits = currencyFractionDigits(currency);
   return {
     providerSlug: input.providerSlug,
     productSlug: input.providerSlug,
@@ -182,10 +246,10 @@ export function apiOffer(input: {
     }`,
     mode: "api",
     channel: "official_api",
-    region: "中国大陆",
+    region: input.region ?? "中国大陆",
     storefront: null,
-    currency: "CNY",
-    amountMinor: Number((value * 100).toFixed(6)),
+    currency,
+    amountMinor: Number((value * 10 ** fractionDigits).toFixed(6)),
     displayPrice: display,
     status: "verified",
     billingPeriod: "usage",
@@ -201,6 +265,7 @@ export function apiOffer(input: {
     priceTier: input.tier,
     tierOrder: input.tierOrder,
     category: input.category,
+    rankingEligible: input.rankingEligible,
   };
 }
 

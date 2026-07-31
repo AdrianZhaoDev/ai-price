@@ -90,9 +90,16 @@ export async function runCollectors(
 ): Promise<CollectionSummary> {
   const databaseEnabled = isDatabaseConfigured();
   const observedAt = new Date();
+  const quoteCurrencies = adapters.flatMap(
+    (adapter) => adapter.quoteCurrencies ?? [],
+  );
   const fxRates: Map<string, FxRate> = databaseEnabled
     ? await refreshFxRates(
-        ["CNY", ...appStorefronts.map((storefront) => storefront.currency)],
+        [
+          "CNY",
+          ...appStorefronts.map((storefront) => storefront.currency),
+          ...quoteCurrencies,
+        ],
         observedAt,
       )
     : new Map();

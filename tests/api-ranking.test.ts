@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apiRankingEntries } from "@/lib/pricing/api-ranking";
+import { apiRankingEntries, rankingCnyValue } from "@/lib/pricing/api-ranking";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 
 function offer(
@@ -7,6 +7,7 @@ function offer(
   modelOrder: number,
   priceType: PriceOffer["priceType"],
   amountMinor: number,
+  overrides: Partial<PriceOffer> = {},
 ): PriceOffer {
   return {
     id: `${modelName}-${priceType}`,
@@ -22,6 +23,7 @@ function offer(
     modelSlug: modelName.toLowerCase(),
     modelOrder,
     priceType,
+    ...overrides,
   };
 }
 
@@ -83,5 +85,46 @@ describe("API ranking", () => {
     expect(apiRankingEntries(providers, "cached_input")[0].modelName).toBe("B");
     expect(apiRankingEntries(providers, "input")[0].modelName).toBe("A");
     expect(apiRankingEntries(providers, "output")[0].modelName).toBe("B");
+  });
+
+  it("sorts mixed CNY and USD offers by precise RMB value", () => {
+    const cny = provider("CNY", [["CNY", 0, 100, 700, 900]]);
+    const usd = provider("USD", [["USD", 0, 10, 100, 200]]);
+    usd.offers = usd.offers.map((item) => ({
+      ...item,
+      currency: "USD",
+      displayPrice: `$${(item.amountMinor ?? 0) / 100}`,
+      convertedCny:
+        item.priceType === "input" ? 6.999999 : (item.amountMinor ?? 0) / 100,
+      fxRate: 7,
+      fxRateObservedAt: "2026-07-31T00:00:00.000Z",
+    }));
+
+    const entries = apiRankingEntries([cny, usd], "input");
+    expect(entries.map((entry) => entry.modelName)).toEqual(["USD", "CNY"]);
+    expect(rankingCnyValue(entries[0].input)).toBe(6.999999);
+    expect(rankingCnyValue(entries[1].input)).toBe(7);
+  });
+
+  it("excludes ineligible and unconvertible foreign tiers", () => {
+    const item = provider("global", [["Latest", 0, 10, 100, 200]]);
+    item.offers.push(
+      offer("Latest", 0, "input", 25, {
+        id: "latest-batch",
+        currency: "USD",
+        displayPrice: "$0.25",
+        convertedCny: 1.75,
+        rankingEligible: false,
+        tierOrder: 10,
+      }),
+      offer("Foreign-only", 1, "input", 100, {
+        currency: "USD",
+        displayPrice: "$1",
+      }),
+    );
+    const entries = apiRankingEntries([item], "input");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].input?.id).not.toBe("latest-batch");
+    expect(entries[0].modelName).toBe("Latest");
   });
 });

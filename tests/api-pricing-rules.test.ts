@@ -6,6 +6,9 @@ import {
   parseDeepSeekApi,
   parseDoubaoApi,
   parseGlmApi,
+  parseGrokApi,
+  parseClaudeApi,
+  parseGeminiApi,
   parseHuaweiMaaSApi,
   parseHunyuanApi,
   parseKimiApi,
@@ -13,11 +16,19 @@ import {
   parseMimoApi,
   parseMiniMaxApi,
   parseQwenApi,
+  parseOpenAiApi,
   parseSiliconFlowApi,
   parseSparkApi,
   parseStepFunApi,
   parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
+import {
+  claudeFixture,
+  geminiFixture,
+  grokFixture,
+  openAiFixture,
+  type GlobalApiFixture,
+} from "@/tests/fixtures/global-api-pricing";
 import { hashContent } from "@/lib/collectors/http-client";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
@@ -293,5 +304,60 @@ describe("maintainable API pricing rules", () => {
       raw('{"discountedPrice":"1","discountedUnit":"元/千tokens"}'),
     );
     expect(unnamedTeleai[0].modelName).toBe("TeleAI 价格项 1");
+  });
+
+  describe.each([
+    ["OpenAI", parseOpenAiApi, openAiFixture],
+    ["Claude", parseClaudeApi, claudeFixture],
+    ["Gemini", parseGeminiApi, geminiFixture],
+    ["Grok", parseGrokApi, grokFixture],
+  ] as Array<
+    [
+      string,
+      (input: RawCollectionResult) => ReturnType<typeof parseOpenAiApi>,
+      GlobalApiFixture,
+    ]
+  >)("%s global API pricing", (_name, parse, fixture) => {
+    it("keeps official USD token prices and ranking eligibility", () => {
+      const offers = parse(raw(fixture.normal));
+      expect(offers.length).toBeGreaterThanOrEqual(3);
+      expect(
+        offers.every(
+          (offer) =>
+            offer.currency === "USD" &&
+            offer.region === "全球" &&
+            offer.unit === "/百万 tokens",
+        ),
+      ).toBe(true);
+      const rankingTypes = new Set(
+        offers
+          .filter((offer) => offer.rankingEligible)
+          .map((offer) => offer.priceType),
+      );
+      expect(rankingTypes.has("cached_input")).toBe(true);
+      expect(rankingTypes.has("input")).toBe(true);
+      expect(rankingTypes.has("output")).toBe(true);
+    });
+
+    it("rejects missing fields and abnormal currency or unit", () => {
+      expect(parse(raw(fixture.missingField))).toEqual([]);
+      expect(parse(raw(fixture.invalidCurrencyUnit))).toEqual([]);
+    });
+
+    it("tracks model additions and removals by source order", () => {
+      const offers = parse(raw(fixture.modelChanges));
+      expect(new Set(offers.map((offer) => offer.modelName)).size).toBe(2);
+      expect(new Set(offers.map((offer) => offer.modelOrder))).toEqual(
+        new Set([0, 1]),
+      );
+    });
+
+    it("keeps discount tiers in details but out of ranking", () => {
+      const offers = parse(raw(fixture.mixedTiers));
+      expect(offers.some((offer) => offer.rankingEligible === true)).toBe(true);
+      expect(offers.some((offer) => offer.rankingEligible === false)).toBe(
+        true,
+      );
+    });
   });
 });
