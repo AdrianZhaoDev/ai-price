@@ -6,6 +6,20 @@ import { metadataForMode } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 export const metadata = metadataForMode("global");
 
-export default async function HomePage() {
-  return <PricingPage mode="global" />;
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  return (
+    <PricingPage
+      mode="global"
+      query={{
+        providerId:
+          typeof params.provider === "string" ? params.provider : undefined,
+        planId: typeof params.plan === "string" ? params.plan : undefined,
+      }}
+    />
+  );
 }

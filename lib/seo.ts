@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import type { PriceMode } from "@/lib/pricing/types";
 
 export const SITE_ORIGIN = "https://lowpriceradar.com";
-export const SITE_NAME = "Low Price Radar · AI 价签";
+export const SITE_NAME = "Low Price Radar";
+export const SITE_POSITIONING = "AI订阅全球比价";
 
 type ModeSeo = {
   path: string;
@@ -14,9 +15,10 @@ type ModeSeo = {
 export const modeSeo: Record<PriceMode, ModeSeo> = {
   global: {
     path: "/",
-    title: "AI 订阅价格对比：ChatGPT、Claude、Gemini、Grok 全球区价",
+    title:
+      "AI订阅全球价格对比：ChatGPT、Claude、Gemini、Grok | Low Price Radar",
     description:
-      "比较 ChatGPT、Claude、Gemini 与 Grok 等热门 AI 产品的 App Store 官方订阅价格、不同国家与地区的价差、月付与年付方案及人民币参考价，数据定时采集并保留官方来源链接。",
+      "比较 ChatGPT、Claude、Gemini、Grok 在不同 App Store 地区的官方订阅价格、人民币换算和最低价，查看核验时间、地区价差与官方来源。",
     keywords: [
       "AI 订阅价格",
       "ChatGPT 价格",
@@ -67,7 +69,7 @@ export function metadataForMode(mode: PriceMode): Metadata {
   const imageUrl = absoluteUrl("/og.png");
 
   return {
-    title: seo.title,
+    title: { absolute: seo.title },
     description: seo.description,
     keywords: seo.keywords,
     alternates: {
@@ -78,20 +80,20 @@ export function metadataForMode(mode: PriceMode): Metadata {
       locale: "zh_CN",
       url: seo.path,
       siteName: SITE_NAME,
-      title: `${seo.title}｜${SITE_NAME}`,
+      title: seo.title,
       description: seo.description,
       images: [
         {
           url: imageUrl,
           width: 1731,
           height: 909,
-          alt: "Low Price Radar · AI 价签官方价格参考",
+          alt: "Low Price Radar AI 订阅官方价格参考",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${seo.title}｜${SITE_NAME}`,
+      title: seo.title,
       description: seo.description,
       images: [imageUrl],
     },
@@ -116,20 +118,20 @@ export function metadataForDocument(input: {
       locale: "zh_CN",
       url: input.path,
       siteName: SITE_NAME,
-      title: `${input.title}｜${SITE_NAME}`,
+      title: `${input.title} | ${SITE_NAME}`,
       description: input.description,
       images: [
         {
           url: imageUrl,
           width: 1731,
           height: 909,
-          alt: "Low Price Radar · AI 价签官方价格参考",
+          alt: "Low Price Radar AI 订阅官方价格参考",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${input.title}｜${SITE_NAME}`,
+      title: `${input.title} | ${SITE_NAME}`,
       description: input.description,
       images: [imageUrl],
     },

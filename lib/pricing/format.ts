@@ -27,6 +27,18 @@ export function formatCny(value?: number): string {
   }).format(value);
 }
 
+export function formatApiCny(value?: number): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 6,
+  }).format(value);
+}
+
 export function formatOfferPrice(offer: PriceOffer): string {
   if (offer.amountMinor === null || offer.currency === null) {
     return offer.displayPrice;
@@ -69,6 +81,11 @@ export function formatFxRate(offer: PriceOffer): string {
     maximumFractionDigits,
   }).format(rate);
   return `1 ${offer.currency} ≈ ¥${formatted}`;
+}
+
+export function formatFxDate(offer: PriceOffer): string {
+  const date = offer.fxRateObservedAt?.slice(0, 10);
+  return date ? `汇率 ${date}` : "汇率日期未知";
 }
 
 export function compareCnyPrice(

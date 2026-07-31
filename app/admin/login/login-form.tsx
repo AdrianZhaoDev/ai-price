@@ -52,7 +52,7 @@ export function AdminLoginForm() {
       <div className="admin-login-mark" aria-hidden="true">
         A
       </div>
-      <p className="admin-eyebrow">AI 价签 · 管理入口</p>
+      <p className="admin-eyebrow">Low Price Radar · 管理入口</p>
       <h1>订阅通知管理</h1>
       <p className="admin-login-copy">
         登录验证码只发送到服务器配置的管理员邮箱。

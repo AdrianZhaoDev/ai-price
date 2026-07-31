@@ -7,7 +7,7 @@ export const metadata = metadataForDocument({
   path: "/privacy",
   title: "隐私说明",
   description:
-    "了解 AI 价签在价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界；同时说明 Cloudflare 性能监测涉及的匿名访问数据、保留原则和用户权利。",
+    "了解 Low Price Radar 在价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界。",
 });
 
 export default function PrivacyPage() {

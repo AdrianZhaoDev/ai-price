@@ -14,6 +14,15 @@ export type FxRate = {
   sourceUrl: string;
 };
 
+export function fxRateEffectiveAt(rate: FxRate | undefined): Date | undefined {
+  if (!rate) return undefined;
+  const effectiveAt = new Date(`${rate.rateDate}T00:00:00.000Z`);
+  if (!Number.isFinite(effectiveAt.getTime())) {
+    throw new Error(`Invalid FX rate date for ${rate.currency}.`);
+  }
+  return effectiveAt;
+}
+
 type FrankfurterRate = {
   date: string;
   base: string;

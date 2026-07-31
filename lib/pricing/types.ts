@@ -26,6 +26,7 @@ export type PriceOffer = {
   note?: string;
   status: PriceStatus;
   observedAt?: string;
+  lastCheckedAt?: string;
   modelName?: string;
   modelSlug?: string;
   modelOrder?: number;
@@ -33,6 +34,7 @@ export type PriceOffer = {
   priceTier?: string;
   tierOrder?: number;
   category?: string;
+  rankingEligible?: boolean;
 };
 
 export type ProviderCatalogItem = {

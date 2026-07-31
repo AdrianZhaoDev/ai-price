@@ -87,10 +87,23 @@ JavaScript 中解析；登录后才能看到且没有公开价目表的会员不
 讯飞未公开统一按量后付费价，因此页面明确展示“标准成员折算”，不描述为按量价。
 TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 
+## 海外 API 来源（4）
+
+| 排名 | 产品       | 采集范围                                          | 官方入口                                                   |
+| ---: | ---------- | ------------------------------------------------- | ---------------------------------------------------------- |
+|   17 | OpenAI API | 标准实时、短上下文的输入、缓存输入与输出 Token 价 | `https://developers.openai.com/api/docs/pricing`           |
+|   18 | Claude API | Base Input、Cache Hits 与 Output Token 价         | `https://platform.claude.com/docs/en/about-claude/pricing` |
+|   19 | Gemini API | Paid Tier 的 Standard 输入、缓存与输出 Token 价   | `https://ai.google.dev/gemini-api/docs/pricing`            |
+|   20 | xAI Grok   | Text API 的短上下文输入、缓存与输出 Token 价      | `https://docs.x.ai/developers/pricing`                     |
+
+四家海外 API 只使用各平台官方公开价目表。官方 USD 原价与汇率日期一并保留，
+页面以人民币换算值作为主要展示与排序口径。Batch、Flex、Priority、长上下文、
+免费层、退役或限量模型，以及图片、音频、工具调用等非 Token 项目不进入排行榜。
+
 ### API 规则维护
 
 - 平台入口与调度仍在 `lib/collectors/adapters/official-pages.ts`。
-- 16 个平台各自的规则集中在
+- 20 个平台各自的规则集中在
   `lib/collectors/adapters/api-pricing/rules.ts`，每个平台只有一个具名函数；官网
   列名、DOM 选择器或公开 JavaScript 结构变化时，只修改对应函数。
 - `lib/collectors/adapters/api-pricing/shared.ts` 只负责跨平台通用能力：展开
@@ -141,6 +154,7 @@ type NormalizedOffer = {
   priceTier?: string;
   tierOrder?: number;
   category?: string;
+  rankingEligible?: boolean; // 缺省为可排行
 };
 ```
 

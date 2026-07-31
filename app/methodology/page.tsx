@@ -5,9 +5,9 @@ export const revalidate = 86400;
 
 export const metadata = metadataForDocument({
   path: "/methodology",
-  title: "价格采集方法",
+  title: "官方价格采集与核验方法",
   description:
-    "了解 AI 价签如何从 App Store、产品官网、帮助中心和开放平台采集 AI 订阅及 API 价格，以及数据核验、异常隔离、汇率换算、更新频率、来源追溯和纠错处理规则，并说明采集失败、过期价格与异常波动如何影响前台展示和价格变化通知。",
+    "了解 Low Price Radar 如何从 App Store、产品官网、帮助中心和开放平台采集 AI 订阅及 API 价格，以及数据核验、异常隔离、汇率换算、更新频率、来源追溯和纠错处理规则。",
 });
 
 export default function MethodologyPage() {
@@ -17,16 +17,16 @@ export default function MethodologyPage() {
         ← 返回价格页
       </Link>
       <p className="eyebrow">方法与边界</p>
-      <h1>价格怎样进入 AI 价签</h1>
+      <h1>官方价格怎样进入 Low Price Radar</h1>
       <p className="document-lead">
         我们只发布可以追溯到官方页面的价格。国际订阅读取 Apple App Store 的公开
         storefront 页面；国内价格读取产品官网、帮助中心或开放平台文档。
       </p>
       <section>
-        <h2>每天两次</h2>
+        <h2>每 4 小时核验一次</h2>
         <p>
-          采集任务在北京时间 06:00 和 18:00
-          运行。网页本身不临时抓取第三方页面，只读取已经完成核验的记录。
+          价格与汇率任务通常每 4
+          小时同轮运行。网页本身不临时抓取第三方页面，只读取已经完成核验的记录。
         </p>
       </section>
       <section>
@@ -55,10 +55,12 @@ export default function MethodologyPage() {
         <h2>先标准化，再比较</h2>
         <p>
           订阅价格保留官方币种、计费周期和地区，同时换算人民币参考价；API
-          报价则保留模型、价格层级、缓存输入、非缓存输入、输出及官方计费单位。只有单位和范围可比的数据才进入排行榜。
+          报价保留官方原币价、模型、价格层级、缓存输入、非缓存输入、输出及官方计费单位，并统一换算为人民币排序。只有标准实时、短上下文、付费且按百万
+          tokens 计价的数据进入排行榜。
         </p>
         <p>
-          汇率带有独立观察时间。换算结果不包含银行卡汇率、跨境手续费、增值税、应用商店税费或企业合同折扣，因此只适合做横向参考。
+          Batch、Flex、Priority、长上下文、免费层和非 Token
+          项目可以保留在明细中，但不参与排行。汇率带有独立观察时间；没有实时或历史汇率时，不发布对应外币来源。
         </p>
       </section>
       <section>

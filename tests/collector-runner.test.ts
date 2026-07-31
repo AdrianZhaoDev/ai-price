@@ -369,6 +369,35 @@ describe("collector runner", () => {
     expect(state.recordSuccessfulCollection).toHaveBeenCalledOnce();
   });
 
+  it("requests adapter quote currencies before publishing USD offers", async () => {
+    state.databaseConfigured = true;
+    await runCollectors([
+      adapter("global-usd", {
+        quoteCurrencies: ["USD"],
+      }),
+    ]);
+    expect(state.refreshFxRates).toHaveBeenCalledWith(
+      expect.arrayContaining(["CNY", "USD"]),
+      expect.any(Date),
+    );
+    expect(state.recordSuccessfulCollection).toHaveBeenCalledOnce();
+  });
+
+  it("does not publish when no live or historical USD rate exists", async () => {
+    state.databaseConfigured = true;
+    state.refreshFxRates.mockRejectedValueOnce(
+      new Error("No live or persisted RMB exchange rate for: USD."),
+    );
+    await expect(
+      runCollectors([
+        adapter("global-usd", {
+          quoteCurrencies: ["USD"],
+        }),
+      ]),
+    ).rejects.toThrow("No live or persisted RMB exchange rate for: USD.");
+    expect(state.recordSuccessfulCollection).not.toHaveBeenCalled();
+  });
+
   it("does not treat a partial App Store purchase list as a source collapse", async () => {
     state.databaseConfigured = true;
     state.ensureSource.mockResolvedValueOnce({

@@ -6,6 +6,9 @@ import {
   parseDeepSeekApi,
   parseDoubaoApi,
   parseGlmApi,
+  parseGrokApi,
+  parseClaudeApi,
+  parseGeminiApi,
   parseHuaweiMaaSApi,
   parseHunyuanApi,
   parseKimiApi,
@@ -13,11 +16,19 @@ import {
   parseMimoApi,
   parseMiniMaxApi,
   parseQwenApi,
+  parseOpenAiApi,
   parseSiliconFlowApi,
   parseSparkApi,
   parseStepFunApi,
   parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
+import {
+  claudeFixture,
+  geminiFixture,
+  grokFixture,
+  openAiFixture,
+  type GlobalApiFixture,
+} from "@/tests/fixtures/global-api-pricing";
 import { hashContent } from "@/lib/collectors/http-client";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
@@ -293,5 +304,121 @@ describe("maintainable API pricing rules", () => {
       raw('{"discountedPrice":"1","discountedUnit":"元/千tokens"}'),
     );
     expect(unnamedTeleai[0].modelName).toBe("TeleAI 价格项 1");
+  });
+
+  describe.each([
+    ["OpenAI", parseOpenAiApi, openAiFixture],
+    ["Claude", parseClaudeApi, claudeFixture],
+    ["Gemini", parseGeminiApi, geminiFixture],
+    ["Grok", parseGrokApi, grokFixture],
+  ] as Array<
+    [
+      string,
+      (input: RawCollectionResult) => ReturnType<typeof parseOpenAiApi>,
+      GlobalApiFixture,
+    ]
+  >)("%s global API pricing", (_name, parse, fixture) => {
+    it("keeps official USD token prices and ranking eligibility", () => {
+      const offers = parse(raw(fixture.normal));
+      expect(offers.length).toBeGreaterThanOrEqual(3);
+      expect(
+        offers.every(
+          (offer) =>
+            offer.currency === "USD" &&
+            offer.region === "全球" &&
+            offer.unit === "/百万 tokens",
+        ),
+      ).toBe(true);
+      const rankingTypes = new Set(
+        offers
+          .filter((offer) => offer.rankingEligible)
+          .map((offer) => offer.priceType),
+      );
+      expect(rankingTypes.has("cached_input")).toBe(true);
+      expect(rankingTypes.has("input")).toBe(true);
+      expect(rankingTypes.has("output")).toBe(true);
+    });
+
+    it("rejects missing fields and abnormal currency or unit", () => {
+      expect(parse(raw(fixture.missingField))).toEqual([]);
+      expect(parse(raw(fixture.invalidCurrencyUnit))).toEqual([]);
+    });
+
+    it("tracks model additions and removals by source order", () => {
+      const offers = parse(raw(fixture.modelChanges));
+      expect(new Set(offers.map((offer) => offer.modelName)).size).toBe(2);
+      expect(new Set(offers.map((offer) => offer.modelOrder))).toEqual(
+        new Set([0, 1]),
+      );
+    });
+
+    it("keeps discount tiers in details but out of ranking", () => {
+      const offers = parse(raw(fixture.mixedTiers));
+      expect(offers.some((offer) => offer.rankingEligible === true)).toBe(true);
+      expect(offers.some((offer) => offer.rankingEligible === false)).toBe(
+        true,
+      );
+    });
+  });
+
+  it("keeps short-context batch rows out of the standard ranking", () => {
+    const offers = parseGrokApi(
+      raw(`### Batch API Pricing
+| Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
+| --- | --- | --- | --- |
+| grok-example (< 200k prompt tokens) | $1.00 | $0.15 | $3.00 |`),
+    );
+
+    expect(offers).toHaveLength(3);
+    expect(offers.every((offer) => offer.priceTier === "Batch")).toBe(true);
+    expect(offers.every((offer) => offer.rankingEligible === false)).toBe(true);
+  });
+
+  it("preserves Gemini long-context details and excludes storage charges", () => {
+    const offers = parseGeminiApi(
+      raw(`<h2>Gemini 3.6 Example</h2><h3>Standard</h3><table>
+        <tr><th></th><th>Paid Tier, per 1M tokens in USD</th></tr>
+        <tr><td>Input price</td><td>1.25 美元 for prompts &lt;= 200k tokens; 2.50 USD for prompts &gt; 200k tokens</td></tr>
+        <tr><td>Context caching storage price per hour</td><td>$4.50</td></tr>
+      </table>`),
+    );
+
+    const inputOffers = offers.filter((offer) => offer.priceType === "input");
+    expect(inputOffers.map((offer) => offer.displayPrice)).toEqual([
+      "$1.25",
+      "$2.5",
+    ]);
+    expect(inputOffers.map((offer) => offer.rankingEligible)).toEqual([
+      true,
+      false,
+    ]);
+    expect(inputOffers[1].priceTier).toBe("长上下文");
+
+    const storage = offers.find((offer) => offer.priceTier === "存储费");
+    expect(storage).toMatchObject({
+      priceType: "cached_input",
+      unit: "/百万 tokens /小时",
+      rankingEligible: false,
+    });
+  });
+
+  it("does not reuse token-unit evidence across unrelated tables", () => {
+    const offers = parseOpenAiApi(
+      raw(`## Token pricing
+Prices per 1M tokens.
+| Model | Input | Cached input | Output |
+| --- | --- | --- | --- |
+| gpt-token | $2.00 | $0.20 | $12.00 |
+
+## Per-request tools
+Prices per request.
+| Model | Input | Cached input | Output |
+| --- | --- | --- | --- |
+| gpt-request | $0.01 | $0.01 | $0.02 |`),
+    );
+
+    expect(new Set(offers.map((offer) => offer.modelName))).toEqual(
+      new Set(["gpt-token"]),
+    );
   });
 });

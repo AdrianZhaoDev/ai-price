@@ -13,7 +13,7 @@ import { AdminHeader } from "../admin-header";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "采集错误｜AI 价签",
+  title: "采集错误｜Low Price Radar",
 };
 
 const channelLabels: Record<AdminErrorChannel, string> = {

@@ -8,9 +8,7 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
   await waitForPricingHydration(page);
-  await expect(page.locator("h1.sr-only")).toHaveText(
-    "同一份订阅，不同的地区价格",
-  );
+  await expect(page.locator("h1.sr-only")).toHaveText("AI订阅全球价格对比");
   await expect(page.locator(".workspace-heading")).toHaveCount(0);
   await expect(page.locator(".section-meta .freshness-block")).toBeVisible();
   await expect(page.locator(".official-source-count")).toContainText(
@@ -210,6 +208,54 @@ test("shows an already-subscribed notice for an identical subscription", async (
   expect(requestCount).toBe(1);
 });
 
+test("uses provider query links for landing-page handoff", async ({ page }) => {
+  await page.goto("/glm-price");
+  await expect(
+    page.getByRole("heading", { name: "智谱 GLM 订阅与 API 价格" }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: /比较 智谱 GLM 的订阅价格/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(
+    /\/china-ai-subscriptions\?provider=glm-resource-package$/,
+  );
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator('.provider-button[data-provider-id="glm-resource-package"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("uses stable model query links for API landing-page handoff", async ({
+  page,
+}) => {
+  await page.goto("/deepseek-price");
+  const modelLink = page.locator(".landing-model-link").first();
+  if ((await modelLink.count()) === 0) {
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      /noindex,\s*follow/,
+    );
+    return;
+  }
+  await expect(modelLink).toBeVisible();
+  const href = await modelLink.getAttribute("href");
+  expect(href).toMatch(
+    /^\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,
+  );
+  await modelLink.click();
+  await expect(page).toHaveURL(
+    /\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,
+  );
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator('.provider-button[data-provider-id="deepseek-api"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.price-row[data-highlighted="true"]')).toHaveCount(
+    1,
+  );
+});
+
 test("shows ranked RMB prices without duplicate or status-only plans", async ({
   page,
   isMobile,
@@ -230,6 +276,18 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     "data-active",
     "true",
   );
+  const secondPlan = page.locator(".plan-button").nth(1);
+  const secondPlanId = await secondPlan.getAttribute("data-plan-id");
+  expect(secondPlanId).toBeTruthy();
+  await secondPlan.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("plan"))
+    .toBe(secondPlanId);
+  await page.reload();
+  await waitForPricingHydration(page);
+  await expect(
+    page.locator(`.plan-button[data-plan-id="${secondPlanId}"]`),
+  ).toHaveAttribute("data-active", "true");
   await expect(page.getByText("App Store 上架状态")).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "状态" })).toHaveCount(0);
 
@@ -301,22 +359,41 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   }
 
   const firstRankingEntry = page
-    .locator(".api-ranking-desktop .api-ranking-entry")
+    .locator(
+      '.api-ranking-desktop .api-ranking-entry[data-provider-id="openai-api"]',
+    )
     .first();
   const targetProviderId =
     await firstRankingEntry.getAttribute("data-provider-id");
   const targetOfferId = await firstRankingEntry.getAttribute("data-offer-id");
+  const targetModelSlug =
+    await firstRankingEntry.getAttribute("data-model-slug");
   expect(targetProviderId).toBeTruthy();
   expect(targetOfferId).toBeTruthy();
+  expect(targetModelSlug).toBeTruthy();
   await firstRankingEntry.click();
   await expect(
     page.locator(`.provider-button[data-provider-id="${targetProviderId}"]`),
   ).toHaveAttribute("aria-pressed", "true");
-  const targetRow = page.locator(
-    `.price-row[data-offer-id="${targetOfferId}"]`,
-  );
-  await expect(targetRow).toHaveAttribute("data-highlighted", "true");
+  const targetRow = page
+    .locator(
+      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"], ` +
+        `.price-row[data-highlighted="true"][data-model-slug="${targetModelSlug}"]`,
+    )
+    .first();
+  await expect(targetRow).toBeVisible();
   await expect(targetRow).toBeInViewport();
+
+  await expect(page.getByRole("heading", { name: "OpenAI API" })).toBeVisible();
+  const openAiRow = page.locator(".price-list > .price-row").first();
+  await expect(openAiRow.locator(".official-price strong")).toContainText("¥");
+  await expect(openAiRow.locator(".official-price small")).toContainText("$");
+  await expect(openAiRow.locator(".official-price small")).toContainText(
+    "1 USD ≈ ¥",
+  );
+  await expect(openAiRow.locator(".official-price small")).toContainText(
+    "汇率 2026-07-31",
+  );
 });
 
 test("mobile navigation and sheet remain usable", async ({
@@ -364,6 +441,19 @@ test("mobile navigation and sheet remain usable", async ({
       (entry) => entry.scrollWidth <= entry.clientWidth,
     ),
   ).toBe(true);
+  const globalRankingEntry = page
+    .locator(
+      '.api-ranking-mobile .api-ranking-entry[data-provider-id="openai-api"]',
+    )
+    .first();
+  await expect(globalRankingEntry).toBeVisible();
+  await globalRankingEntry.click();
+  await expect(
+    page.locator('.provider-button[data-provider-id="openai-api"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator('.price-row[data-model-slug="gpt-5-6-sol"]').first(),
+  ).toBeInViewport();
   expect(
     await page.evaluate(
       () =>

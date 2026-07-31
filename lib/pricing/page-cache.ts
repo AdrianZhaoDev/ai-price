@@ -6,6 +6,7 @@ import type { PriceMode } from "@/lib/pricing/types";
 import { unstable_cache } from "next/cache";
 
 export const PRICING_PAGE_CACHE_TAG = "pricing-page-data";
+export const PRICING_PAGE_REVALIDATE_SECONDS = 900;
 
 export const loadCachedPricingPageData = unstable_cache(
   async (mode: PriceMode) => {
@@ -21,6 +22,11 @@ export const loadCachedPricingPageData = unstable_cache(
         .filter((value): value is string => Boolean(value))
         .sort()
         .at(-1),
+      priceModifiedAt: modeProviders
+        .flatMap((provider) => provider.offers.map((offer) => offer.observedAt))
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1),
       hasDisplayableMode: modeProviders.some(
         (provider) => displayableOffers(provider.offers).length > 0,
       ),
@@ -31,9 +37,9 @@ export const loadCachedPricingPageData = unstable_cache(
       })),
     };
   },
-  ["pricing-page-data-v2"],
+  ["pricing-page-data-v3"],
   {
-    revalidate: 900,
+    revalidate: PRICING_PAGE_REVALIDATE_SECONDS,
     tags: [PRICING_PAGE_CACHE_TAG],
   },
 );

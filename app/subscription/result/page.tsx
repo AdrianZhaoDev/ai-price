@@ -45,7 +45,7 @@ export default async function SubscriptionResultPage({
         <span className="result-icon" aria-hidden="true">
           <Icon size={26} />
         </span>
-        <p className="eyebrow">AI 价签</p>
+        <p className="eyebrow">Low Price Radar</p>
         <h1>{content.title}</h1>
         <p>{content.description}</p>
         <Link href="/" className="primary-button pressable">

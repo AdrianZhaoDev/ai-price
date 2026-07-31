@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { convertMinorToCny, type FxRate } from "@/lib/collectors/fx";
+import {
+  convertMinorToCny,
+  fxRateEffectiveAt,
+  type FxRate,
+} from "@/lib/collectors/fx";
 
 function rate(currency: string, cnyPerUnit: number): FxRate {
   return {
@@ -12,6 +16,19 @@ function rate(currency: string, cnyPerUnit: number): FxRate {
 }
 
 describe("RMB conversion", () => {
+  it("uses the market rate date as the displayed effective date", () => {
+    expect(fxRateEffectiveAt(rate("USD", 6.8))?.toISOString()).toBe(
+      "2026-07-24T00:00:00.000Z",
+    );
+    expect(fxRateEffectiveAt(undefined)).toBeUndefined();
+    expect(() =>
+      fxRateEffectiveAt({
+        ...rate("USD", 6.8),
+        rateDate: "not-a-date",
+      }),
+    ).toThrow("Invalid FX rate date");
+  });
+
   it("respects decimal and zero-decimal currencies", () => {
     expect(convertMinorToCny(1999, "USD", rate("USD", 6.8))).toBe(135.932);
     expect(convertMinorToCny(3000, "JPY", rate("JPY", 0.045))).toBe(135);
