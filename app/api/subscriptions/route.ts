@@ -30,9 +30,9 @@ function rateLimitMessage(
 ): string {
   switch (rateLimit.reason) {
     case "same_scope_different_email":
-      return `同一关注使用不同邮箱时需间隔 60 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
+      return `同一关注使用不同邮箱时需间隔 20 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
     case "different_scope_different_email":
-      return `同时更换关注和邮箱时需间隔 120 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
+      return `同时更换关注和邮箱时需间隔 300 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
     case "different_scope_same_email":
       return `同一邮箱更换关注时需间隔 10 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
     case "ip_daily":
