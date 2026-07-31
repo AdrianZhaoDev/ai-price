@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   settleEmailDelivery: vi.fn(),
   sendMail: vi.fn(),
 }));
+const deliveryReservation = {
+  id: "delivery-id",
+  reservedAt: new Date("2026-07-31T00:00:00.000Z"),
+};
 
 vi.mock("@/lib/subscriptions/repository", () => ({
   claimSubscriptionCreatedEmail: mocks.claimSubscriptionCreatedEmail,
@@ -59,7 +63,7 @@ describe("subscription service", () => {
     });
     mocks.createUnsubscribeToken.mockResolvedValue("unsubscribe-token");
     mocks.listPendingSubscriptionEmailIds.mockResolvedValue([]);
-    mocks.reserveEmailDelivery.mockResolvedValue("delivery-id");
+    mocks.reserveEmailDelivery.mockResolvedValue(deliveryReservation);
     mocks.sendMail.mockResolvedValue({ messageId: "test-message" });
   });
 
@@ -105,10 +109,13 @@ describe("subscription service", () => {
     expect(mocks.sendMail.mock.calls[0][0].html).toContain(
       "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token",
     );
-    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
-      status: "sent",
-      providerMessageId: "test-message",
-    });
+    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith(
+      deliveryReservation,
+      {
+        status: "sent",
+        providerMessageId: "test-message",
+      },
+    );
     expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
       "subscription-id",
       { status: "sent", attempt: 1 },
@@ -174,10 +181,13 @@ describe("subscription service", () => {
     await expect(
       sendSubscriptionCreatedEmail("subscription-id"),
     ).rejects.toThrow("SMTP timeout");
-    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith("delivery-id", {
-      status: "failed",
-      error: "SMTP timeout",
-    });
+    expect(mocks.settleEmailDelivery).toHaveBeenCalledWith(
+      deliveryReservation,
+      {
+        status: "failed",
+        error: "SMTP timeout",
+      },
+    );
     expect(mocks.settleSubscriptionCreatedEmail).toHaveBeenCalledWith(
       "subscription-id",
       { status: "failed", attempt: 1 },

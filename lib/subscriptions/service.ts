@@ -1,6 +1,7 @@
 import {
   reserveEmailDelivery,
   settleEmailDelivery,
+  type EmailDeliveryReservation,
 } from "@/lib/email/delivery";
 import { subscriptionCreatedEmail } from "@/lib/email/templates";
 import { getEmailTransport } from "@/lib/email/transport";
@@ -92,7 +93,7 @@ export async function sendSubscriptionCreatedEmail(
   const claim = await claimSubscriptionCreatedEmail(subscriptionId);
   if (!claim) return false;
 
-  let deliveryId: string | null = null;
+  let deliveryId: EmailDeliveryReservation | null = null;
 
   try {
     const rankingScope = isApiRankingScope(claim.providerSlug, claim.planSlug);
