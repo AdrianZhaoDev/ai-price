@@ -223,6 +223,42 @@ describe("SEO landing page registry", () => {
     ).toMatchObject({ indexable: true, reason: "indexable" });
   });
 
+  it("excludes an expired storefront even when its provider remains fresh", () => {
+    const page = landingPageBySlug.get("chatgpt-plus-price")!;
+    const chatgpt = provider("chatgpt", "global", [
+      {
+        ...globalOffer("plus-us", "chatgpt-plus-monthly", "month", "US", 145),
+        lastCheckedAt: "2026-07-31T08:00:00.000Z",
+      },
+      {
+        ...globalOffer("plus-jp", "chatgpt-plus-monthly", "month", "JP", 132),
+        lastCheckedAt: "2026-07-31T08:00:00.000Z",
+      },
+      {
+        ...globalOffer("plus-in", "chatgpt-plus-monthly", "month", "IN", 120),
+        lastCheckedAt: "2026-07-20T08:00:00.000Z",
+      },
+    ]);
+    const data = buildLandingPageData(
+      page,
+      snapshot([chatgpt]),
+      new Date("2026-07-31T10:00:00.000Z"),
+    );
+
+    expect(
+      data.globalProviders[0]?.offers.map((offer) => offer.regionCode),
+    ).toEqual(["US", "JP"]);
+    expect(data.summary.subscriptionGroups[0]).toMatchObject({
+      regionCount: 2,
+      minimum: { regionCode: "JP" },
+    });
+    expect(data.quality).toMatchObject({
+      indexable: false,
+      reason: "insufficient_global_regions",
+      freshness: "fresh",
+    });
+  });
+
   it("indexes a real domestic subscription offer and expires it after seven days", () => {
     const page = landingPageBySlug.get("trae-price")!;
     const trae = provider("trae-subscription", "china-subscription", [
@@ -444,7 +480,10 @@ describe("SEO landing page registry", () => {
         status: "verified",
       },
     ]);
-    const entries = buildSitemap(snapshot([chatgpt, trae]));
+    const entries = buildSitemap(
+      snapshot([chatgpt, trae]),
+      new Date("2026-07-31T10:00:00.000Z"),
+    );
     const landingEntries = entries.slice(5);
 
     expect(landingEntries.map((entry) => entry.url)).toEqual([

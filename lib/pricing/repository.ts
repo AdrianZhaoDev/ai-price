@@ -108,6 +108,7 @@ export async function loadProviderCatalog(
         unit: observation.unit ?? undefined,
         status,
         observedAt: observation.observedAt.toISOString(),
+        lastCheckedAt: observation.lastSeenAt.toISOString(),
         modelName:
           typeof metadata.modelName === "string"
             ? metadata.modelName

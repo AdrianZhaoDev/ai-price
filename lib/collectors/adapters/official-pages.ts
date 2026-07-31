@@ -19,6 +19,7 @@ import {
   parseStepFunApi,
   parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
+import { priceTypeFrom } from "@/lib/collectors/adapters/api-pricing/shared";
 import {
   parseLocalizedPrice,
   slugifyPlan,
@@ -98,6 +99,9 @@ function usageOffers(input: {
       observedAt: input.observedAt,
       parserVersion: input.parserVersion,
       unit: input.unit ?? "/百万 tokens",
+      modelName: input.modelName,
+      modelSlug: input.modelSlug,
+      priceType: priceTypeFrom(price.label),
     }),
   );
 }
@@ -113,6 +117,9 @@ function cnyOffer(input: {
   observedAt: string;
   parserVersion: string;
   unit?: string;
+  modelName?: string;
+  modelSlug?: string;
+  priceType?: NormalizedOffer["priceType"];
 }): NormalizedOffer {
   return {
     providerSlug: input.providerSlug,
@@ -133,6 +140,9 @@ function cnyOffer(input: {
     sourceUrl: input.sourceUrl,
     observedAt: input.observedAt,
     parserVersion: input.parserVersion,
+    modelName: input.modelName,
+    modelSlug: input.modelSlug,
+    priceType: input.priceType,
   };
 }
 

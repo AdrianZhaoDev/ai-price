@@ -302,15 +302,35 @@ function freshnessFor(
   return "stale";
 }
 
-function providerHasCurrentObservations(
-  provider: ProviderCatalogItem,
+function checkedWithinIndexWindow(
+  checkedAt: string | undefined,
   now: Date,
 ): boolean {
-  if (!provider.lastCheckedAt) return false;
-  const checkedAt = new Date(provider.lastCheckedAt).getTime();
+  if (!checkedAt) return false;
+  const checkedTime = new Date(checkedAt).getTime();
   return (
-    Number.isFinite(checkedAt) && now.getTime() - checkedAt <= SEVEN_DAYS_MS
+    Number.isFinite(checkedTime) && now.getTime() - checkedTime <= SEVEN_DAYS_MS
   );
+}
+
+function providerWithCurrentOffers(
+  provider: ProviderCatalogItem,
+  now: Date,
+): ProviderCatalogItem | undefined {
+  const offers = provider.offers.filter((offer) =>
+    checkedWithinIndexWindow(
+      offer.lastCheckedAt ?? provider.lastCheckedAt,
+      now,
+    ),
+  );
+  if (offers.length === 0) return undefined;
+  return {
+    ...provider,
+    offers,
+    lastCheckedAt: earliestIso(
+      offers.map((offer) => offer.lastCheckedAt ?? provider.lastCheckedAt),
+    ),
+  };
 }
 
 function pageQuality(
@@ -413,21 +433,25 @@ export function buildLandingPageData(
     ...rawSubscriptionProviders,
     ...rawApiProviders,
   ];
-  const currentProviders = sourceProviders.filter((provider) =>
-    providerHasCurrentObservations(provider, now),
+  const currentProviders = sourceProviders.flatMap((provider) => {
+    const current = providerWithCurrentOffers(provider, now);
+    return current ? [current] : [];
+  });
+  const currentProvidersById = new Map(
+    currentProviders.map((provider) => [provider.id, provider]),
   );
-  const currentProviderIds = new Set(
-    currentProviders.map((provider) => provider.id),
-  );
-  const currentGlobalProviders = globalProviders.filter((provider) =>
-    currentProviderIds.has(provider.id),
-  );
-  const subscriptionProviders = rawSubscriptionProviders.filter((provider) =>
-    currentProviderIds.has(provider.id),
-  );
-  const apiProviders = rawApiProviders.filter((provider) =>
-    currentProviderIds.has(provider.id),
-  );
+  const currentGlobalProviders = globalProviders.flatMap((provider) => {
+    const current = currentProvidersById.get(provider.id);
+    return current ? [current] : [];
+  });
+  const subscriptionProviders = rawSubscriptionProviders.flatMap((provider) => {
+    const current = currentProvidersById.get(provider.id);
+    return current ? [current] : [];
+  });
+  const apiProviders = rawApiProviders.flatMap((provider) => {
+    const current = currentProvidersById.get(provider.id);
+    return current ? [current] : [];
+  });
   const groupedSubscriptions = subscriptionGroups(
     [...currentGlobalProviders, ...subscriptionProviders],
     page,

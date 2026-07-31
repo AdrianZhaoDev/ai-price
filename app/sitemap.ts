@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 export function buildSitemap(
   snapshot: LandingCatalogSnapshot,
+  now = new Date(),
 ): MetadataRoute.Sitemap {
   const corePages: MetadataRoute.Sitemap = [
     {
@@ -43,7 +44,7 @@ export function buildSitemap(
     },
   ];
   const indexablePages = landingPages
-    .map((page) => buildLandingPageData(page, snapshot))
+    .map((page) => buildLandingPageData(page, snapshot, now))
     .filter((data) => data.quality.indexable);
 
   return [

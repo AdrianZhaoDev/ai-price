@@ -58,11 +58,14 @@ describe("SEO routes", () => {
   });
 
   it("publishes public pages in the sitemap without duplicate URLs", () => {
-    const urls = buildSitemap({
-      global: providersForMode("global"),
-      "china-subscription": providersForMode("china-subscription"),
-      api: providersForMode("api"),
-    }).map((entry) => entry.url);
+    const urls = buildSitemap(
+      {
+        global: providersForMode("global"),
+        "china-subscription": providersForMode("china-subscription"),
+        api: providersForMode("api"),
+      },
+      new Date("2026-07-24T00:00:00.000Z"),
+    ).map((entry) => entry.url);
 
     expect(urls.slice(0, 5)).toEqual([
       absoluteUrl("/"),

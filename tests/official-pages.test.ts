@@ -110,6 +110,18 @@ describe("official table adapters", () => {
       </table>`),
     );
     expect(api.map((item) => item.amountMinor)).toEqual([240, 960]);
+    expect(api).toMatchObject([
+      {
+        modelName: "Qwen Max",
+        modelSlug: "qwen-max",
+        priceType: "input",
+      },
+      {
+        modelName: "Qwen Max",
+        modelSlug: "qwen-max",
+        priceType: "output",
+      },
+    ]);
     expect(plans.map((item) => item.amountMinor)).toEqual([3900, 13900, 49900]);
   });
 
@@ -180,6 +192,12 @@ describe("official table adapters", () => {
     expect(minimax).toHaveLength(4);
     expect(kimi.map((item) => item.amountMinor)).toEqual([200, 2000, 10000]);
     expect(glm.map((item) => item.amountMinor)).toEqual([800, 200, 2800]);
+    expect(glm.map((item) => item.priceType)).toEqual([
+      "input",
+      "cached_input",
+      "output",
+    ]);
+    expect(glm.every((item) => item.modelSlug === "glm-5-2")).toBe(true);
     expect(packages[0].amountMinor).toBe(3990);
     expect(doubao.map((item) => item.amountMinor)).toEqual([600, 3000]);
   });
