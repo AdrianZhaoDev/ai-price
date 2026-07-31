@@ -184,6 +184,7 @@ export function PricingExplorer({
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
+        timeZone: "Asia/Shanghai",
       }).format(new Date(selectedProvider.lastCheckedAt))
     : "等待首次采集";
 
