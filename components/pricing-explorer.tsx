@@ -47,6 +47,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 type PricingExplorerProps = {
@@ -67,6 +68,10 @@ type PricingExplorerProps = {
     description: string;
   }>;
 };
+
+const subscribeToHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerHydratedSnapshot = () => false;
 
 type PendingApiTarget = ApiRankingSelection & {
   requestId: number;
@@ -143,7 +148,11 @@ export function PricingExplorer({
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydratedSnapshot,
+  );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [expandedProviderIds, setExpandedProviderIds] = useState<Set<string>>(
     () => new Set(),
@@ -158,10 +167,6 @@ export function PricingExplorer({
   const rankingRequestIdRef = useRef(0);
   const providerSelectionIdRef = useRef(0);
   const initialQueryAppliedRef = useRef(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
 
   const modeProviders = useMemo(
     () =>
