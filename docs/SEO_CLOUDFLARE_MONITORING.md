@@ -49,11 +49,15 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 - Google Search Console 域名资源已通过 Cloudflare DNS 自动验证；
 - `https://lowpriceradar.com/sitemap.xml` 已提交成功，Google 首次读取发现 5 个页面；
 - Search Console 新资源正在处理首批索引与效果数据，控制台提示约 1 天后可查看；
-- Ahrefs 项目已通过 DNS TXT 验证，首次 Site Audit 已开始抓取；
-- Ahrefs 初始基线为 DR 0、250 个引用域（30 天变化 +57）、自然流量 0、自然关键词
-  0；这是项目刚建立时的 Ahrefs 当前值，不代表 Search Console 指标；
-- Cloudflare Web Analytics/RUM 已全球启用，公开 HTML 已确认注入
-  `cloudflareinsights` beacon，首批数据需要等待真实访问产生；
+- Ahrefs 项目已通过 DNS TXT 验证；修复前 Site Audit 为 Health Score 86、8 个错误，
+  修复后复爬为 Health Score 100、Errors 0、27/27 个 URL 无错误；
+- Ahrefs 当前基线为 DR 0、253 个引用域（30 天变化 +58）、自然流量 0、自然关键词
+  0；这是 Ahrefs 当前值，不代表 Search Console 指标；
+- IndexNow 校验文件
+  `public/a73d0c70889247afad00e059e00716e8.txt` 已部署到站点根目录，Ahrefs 已确认
+  “有效文本校验文件”，2026-07-31 已手动提交 4 个发生正向变化的 URL；
+- Cloudflare Web Analytics/RUM 已全球启用。过去 24 小时基线为 38 次访问、51
+  次页面浏览；LCP 良好率 82%、P75 2,004 ms，INP 与 CLS 良好率均为 100%；
 - Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 已启用；
   `Always Use HTTPS` 为避免 `http://www` 两跳而关闭，HTTP 主域和 `ai` 继续由
   Nginx 一跳到规范 HTTPS 主域；
@@ -156,6 +160,14 @@ canonical、robots 或 Sitemap。
 - 与 AI 订阅/API 价格站点的关键词差距。
 
 不要为了增加外链购买垃圾链接。优先来自 GitHub、技术文章、产品目录和真实引用。
+
+IndexNow 使用规则：
+
+- 根目录校验文件是公开验证键，不是生产密钥；删除或改名会导致 Ahrefs 无法提交；
+- 只提交本次抓取中内容、标题、描述或重要结构发生正向变化的可索引页面；
+- 免费套餐不支持自动提交时，在修复复爬后使用 `Pages to submit to IndexNow` 手动
+  提交；提交成功提示是“`N URLs were submitted to IndexNow`”；
+- IndexNow 只是变更通知，不等于页面已收录。收录结果仍以 Search Console 为准。
 
 ## 6. Cloudflare 每周观察
 
