@@ -27,6 +27,18 @@ export function formatCny(value?: number): string {
   }).format(value);
 }
 
+export function formatApiCny(value?: number): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 6,
+  }).format(value);
+}
+
 export function formatOfferPrice(offer: PriceOffer): string {
   if (offer.amountMinor === null || offer.currency === null) {
     return offer.displayPrice;

@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import {
   compareCnyPrice,
   API_INITIAL_VISIBLE_COUNT,
+  formatApiCny,
   formatFxRate,
   formatFxDate,
   formatCny,
@@ -844,7 +845,7 @@ export function PricingExplorer({
                           <strong>
                             {activeMode === "api" &&
                             offer.convertedCny !== undefined
-                              ? formatCny(offer.convertedCny)
+                              ? formatApiCny(offer.convertedCny)
                               : formatOfferPrice(offer)}
                           </strong>
                           {offer.currency ? (

@@ -793,9 +793,6 @@ function globalTier(text: string): {
   rankingEligible: boolean;
 } {
   const normalized = text.toLowerCase();
-  if (/(?:<|≤)\s*[2-9]\d{2}k/.test(normalized)) {
-    return { label: "标准实时", order: 0, rankingEligible: true };
-  }
   if (/batch|批量/.test(normalized)) {
     return { label: "Batch", order: 10, rankingEligible: false };
   }
@@ -808,9 +805,6 @@ function globalTier(text: string): {
   if (/free|免费/.test(normalized)) {
     return { label: "免费层", order: 40, rankingEligible: false };
   }
-  if (/≥|>=|over|above|long|长上下文|[2-9]\d{2}k/.test(normalized)) {
-    return { label: "长上下文", order: 50, rankingEligible: false };
-  }
   if (
     /retired|deprecated|legacy|limited|preview|live|audio|image|nano banana|退役|限量|预览|实时翻译|音频|映像|图像/.test(
       normalized,
@@ -818,15 +812,33 @@ function globalTier(text: string): {
   ) {
     return { label: "非通用模型", order: 60, rankingEligible: false };
   }
+  if (/(?:<=?|≤)\s*[2-9]\d{2}k/.test(normalized)) {
+    return { label: "标准实时", order: 0, rankingEligible: true };
+  }
+  if (/≥|>=|over|above|long|长上下文|[2-9]\d{2}k/.test(normalized)) {
+    return { label: "长上下文", order: 50, rankingEligible: false };
+  }
   return { label: "标准实时", order: 0, rankingEligible: true };
 }
 
 function globalModelName(value: string): string {
   return compactLabel(
     value
-      .replace(/\((?:<|≤|>=|≥|>|over|above)[^)]+\)/gi, "")
-      .replace(/\[(?:<|≤|>=|≥|>|over|above)[^\]]+]/gi, ""),
+      .replace(/\((?:<=?|≤|>=|≥|>|over|above)[^)]+\)/gi, "")
+      .replace(/\[(?:<=?|≤|>=|≥|>|over|above)[^\]]+]/gi, ""),
   );
+}
+
+function usdValuesFrom(value: string): number[] {
+  return [
+    ...value
+      .replace(/,/g, "")
+      .matchAll(
+        /(?:\$\s*|usd\s*|美元\s*)(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:usd|美元)/gi,
+      ),
+  ]
+    .map((match) => Number(match[1] ?? match[2]))
+    .filter(validPrice);
 }
 
 function parseGlobalUsdTables(
@@ -921,21 +933,21 @@ function parseGlobalUsdTables(
 export function parseOpenAiApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "openai-api",
-    parserVersion: "openai-api-v1",
+    parserVersion: "openai-api-v2",
   });
 }
 
 export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "claude-api",
-    parserVersion: "claude-api-v1",
+    parserVersion: "claude-api-v2",
   });
 }
 
 export function parseGrokApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "grok-api",
-    parserVersion: "grok-api-v1",
+    parserVersion: "grok-api-v2",
   });
 }
 
@@ -944,7 +956,7 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
   if ($("table").length === 0) {
     return parseGlobalUsdTables(raw, {
       providerSlug: "gemini-api",
-      parserVersion: "gemini-api-v1",
+      parserVersion: "gemini-api-v2",
     });
   }
 
@@ -990,6 +1002,9 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
       const label = compactLabel(row[0] ?? "");
       const type = priceTypeFrom(label);
       const cell = row[paidIndex] ?? "";
+      const storageCharge =
+        /storage|存储|per\s*hour|每小时|\/\s*hour/i.test(label) ||
+        /per\s*hour|每小时|\/\s*hour/i.test(cell);
       if (
         type === "other" ||
         !/\$|usd|美元/i.test(cell) ||
@@ -997,27 +1012,35 @@ export function parseGeminiApi(raw: RawCollectionResult): NormalizedOffer[] {
       ) {
         continue;
       }
-      const value = firstNumberFrom(cell);
-      if (!validPrice(value)) continue;
       const rowTier = globalTier(`${section} ${label} ${cell} ${modelName}`);
-      offers.push(
-        apiOffer({
-          raw,
-          providerSlug: "gemini-api",
-          parserVersion: "gemini-api-v1",
-          modelName,
-          modelOrder: orderFor(modelName),
-          priceLabel: label,
-          priceType: type,
-          value,
-          currency: "USD",
-          region: "全球",
-          category: section,
-          tier: rowTier.label,
-          tierOrder: rowTier.order,
-          rankingEligible: tier.rankingEligible && rowTier.rankingEligible,
-        }),
-      );
+      const values = usdValuesFrom(cell);
+      for (const [valueIndex, value] of values.entries()) {
+        const compoundLongContext = valueIndex > 0;
+        const priceTier = storageCharge
+          ? { label: "存储费", order: 70, rankingEligible: false }
+          : compoundLongContext
+            ? { label: "长上下文", order: 50, rankingEligible: false }
+            : rowTier;
+        offers.push(
+          apiOffer({
+            raw,
+            providerSlug: "gemini-api",
+            parserVersion: "gemini-api-v2",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel: label,
+            priceType: type,
+            value,
+            currency: "USD",
+            region: "全球",
+            category: section,
+            tier: priceTier.label,
+            tierOrder: priceTier.order,
+            unit: storageCharge ? "/百万 tokens /小时" : undefined,
+            rankingEligible: tier.rankingEligible && priceTier.rankingEligible,
+          }),
+        );
+      }
     }
   });
   return dedupeOffers(offers);

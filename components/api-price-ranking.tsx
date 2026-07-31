@@ -7,7 +7,7 @@ import {
   type ApiRankingEntry,
   type ApiRankingMetric,
 } from "@/lib/pricing/api-ranking";
-import { formatCny, formatOfferPrice } from "@/lib/pricing/format";
+import { formatApiCny, formatOfferPrice } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 import { useId, useMemo, useState } from "react";
 
@@ -33,7 +33,7 @@ function CompactPrice({ offer }: { offer: PriceOffer | undefined }) {
   const value = rankingCnyValue(offer);
   return (
     <>
-      <strong>{formatCny(value)}</strong>
+      <strong>{formatApiCny(value)}</strong>
       {offer.currency?.toUpperCase() !== "CNY" ? (
         <small>{formatOfferPrice(offer)}</small>
       ) : null}

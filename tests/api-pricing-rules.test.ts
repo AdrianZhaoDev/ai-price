@@ -360,4 +360,45 @@ describe("maintainable API pricing rules", () => {
       );
     });
   });
+
+  it("keeps short-context batch rows out of the standard ranking", () => {
+    const offers = parseGrokApi(
+      raw(`### Batch API Pricing
+| Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
+| --- | --- | --- | --- |
+| grok-example (< 200k prompt tokens) | $1.00 | $0.15 | $3.00 |`),
+    );
+
+    expect(offers).toHaveLength(3);
+    expect(offers.every((offer) => offer.priceTier === "Batch")).toBe(true);
+    expect(offers.every((offer) => offer.rankingEligible === false)).toBe(true);
+  });
+
+  it("preserves Gemini long-context details and excludes storage charges", () => {
+    const offers = parseGeminiApi(
+      raw(`<h2>Gemini 3.6 Example</h2><h3>Standard</h3><table>
+        <tr><th></th><th>Paid Tier, per 1M tokens in USD</th></tr>
+        <tr><td>Input price</td><td>1.25 美元 for prompts &lt;= 200k tokens; 2.50 USD for prompts &gt; 200k tokens</td></tr>
+        <tr><td>Context caching storage price per hour</td><td>$4.50</td></tr>
+      </table>`),
+    );
+
+    const inputOffers = offers.filter((offer) => offer.priceType === "input");
+    expect(inputOffers.map((offer) => offer.displayPrice)).toEqual([
+      "$1.25",
+      "$2.5",
+    ]);
+    expect(inputOffers.map((offer) => offer.rankingEligible)).toEqual([
+      true,
+      false,
+    ]);
+    expect(inputOffers[1].priceTier).toBe("长上下文");
+
+    const storage = offers.find((offer) => offer.priceTier === "存储费");
+    expect(storage).toMatchObject({
+      priceType: "cached_input",
+      unit: "/百万 tokens /小时",
+      rankingEligible: false,
+    });
+  });
 });
