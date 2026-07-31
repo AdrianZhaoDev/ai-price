@@ -30,12 +30,10 @@ import {
   ArrowUpRight,
   ArrowDownUp,
   Bell,
-  CheckCircle2,
   Clock3,
   Database,
   Globe2,
   Info,
-  Menu,
   RefreshCw,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -117,7 +115,6 @@ export function PricingExplorer({
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     getHydratedSnapshot,
@@ -135,6 +132,7 @@ export function PricingExplorer({
     null,
   );
   const rankingRequestIdRef = useRef(0);
+  const providerSelectionIdRef = useRef(0);
 
   const modeProviders = useMemo(
     () =>
@@ -234,7 +232,11 @@ export function PricingExplorer({
   }
 
   async function selectProvider(provider: ProviderCatalogItem) {
+    const selectionId = ++providerSelectionIdRef.current;
+    setSelectedProviderId(provider.id);
+    setSelectedPlanId(defaultPlanId(provider));
     const loadedProvider = await ensureProviderLoaded(provider);
+    if (selectionId !== providerSelectionIdRef.current) return;
     setSelectedProviderId(loadedProvider.id);
     setSelectedPlanId(defaultPlanId(loadedProvider));
   }
@@ -244,7 +246,11 @@ export function PricingExplorer({
       (item) => item.id === selection.providerId,
     );
     if (!provider) return;
+    const selectionId = ++providerSelectionIdRef.current;
+    setSelectedProviderId(provider.id);
+    setSelectedPlanId(defaultPlanId(provider));
     const loadedProvider = await ensureProviderLoaded(provider);
+    if (selectionId !== providerSelectionIdRef.current) return;
 
     const targetOffers = sortOffersByCny(
       displayableOffers(loadedProvider.offers),
@@ -396,42 +402,7 @@ export function PricingExplorer({
             <span className="sync-dot" />每 4 小时
           </div>
           <ThemeToggle />
-          <button
-            type="button"
-            className="icon-button mobile-menu-button pressable"
-            aria-label="打开价格模式菜单"
-            aria-expanded={mobileMenuOpen}
-            onClick={() => setMobileMenuOpen((value) => !value)}
-          >
-            <Menu size={19} />
-          </button>
         </div>
-
-        <AnimatePresence>
-          {mobileMenuOpen ? (
-            <motion.nav
-              className="mobile-menu"
-              aria-label="移动端价格模式"
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.98 }}
-              transition={{ duration: 0.18 }}
-            >
-              {modes.map((mode) => (
-                <a
-                  key={mode.id}
-                  href={modeHref(mode.id)}
-                  className="mobile-menu-item"
-                  aria-current={activeMode === mode.id ? "page" : undefined}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <span>{mode.label}</span>
-                  {activeMode === mode.id ? <CheckCircle2 size={17} /> : null}
-                </a>
-              ))}
-            </motion.nav>
-          ) : null}
-        </AnimatePresence>
       </header>
 
       <main

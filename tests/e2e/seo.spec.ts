@@ -107,7 +107,9 @@ test("publishes crawler controls without blocking the API pricing page", async (
   expect(socialCardResponse.ok()).toBe(true);
   expect(socialCardResponse.headers()["content-type"]).toContain("image/png");
 
-  const faviconResponse = await request.get("/favicon.ico");
+  const faviconResponse = await request.get("/favicon.ico", {
+    maxRedirects: 0,
+  });
   expect(faviconResponse.ok()).toBe(true);
   expect(faviconResponse.headers()["content-type"]).toContain("image/svg+xml");
 });

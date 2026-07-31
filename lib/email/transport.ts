@@ -16,10 +16,14 @@ export function getEmailTransport(): Transporter {
   if (transporter) return transporter;
 
   if (isSmtpConfigured()) {
+    const port = Number(process.env.SMTP_PORT);
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: process.env.SMTP_SECURE !== "false",
+      port,
+      secure:
+        process.env.SMTP_SECURE === undefined
+          ? port === 465
+          : process.env.SMTP_SECURE === "true",
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASSWORD,

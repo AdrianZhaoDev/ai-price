@@ -306,11 +306,6 @@ input:focus-visible {
   background: var(--surface-muted);
 }
 
-.mobile-menu-button,
-.mobile-menu {
-  display: none;
-}
-
 .main-content {
   width: min(calc(100% - 40px), var(--content-width));
   margin: 0 auto;
@@ -1425,7 +1420,11 @@ input:focus-visible {
 
 .subscription-sheet {
   width: min(100%, 440px);
+  max-height: calc(100dvh - 48px);
   padding: 22px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid color-mix(in srgb, var(--separator) 70%, white);
   border-radius: 26px;
   background: var(--surface-solid);
@@ -1530,14 +1529,6 @@ input:focus-visible {
   font-size: 12px;
 }
 
-.honeypot {
-  position: absolute;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
 .sheet-success {
   display: grid;
   padding: 30px 6px 8px;
@@ -1553,6 +1544,19 @@ input:focus-visible {
 .sheet-success .primary-button {
   width: 100%;
   margin-top: 24px;
+}
+
+.preview-confirm-link {
+  display: flex;
+  min-height: 44px;
+  margin-top: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--tint-soft);
+  color: var(--tint);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .result-page {
@@ -1618,46 +1622,24 @@ input:focus-visible {
 @media (max-width: 840px) {
   .site-header {
     grid-template-columns: 1fr auto;
+    gap: 4px 8px;
   }
 
   .desktop-nav {
-    display: none;
-  }
-
-  .mobile-menu-button {
-    display: inline-grid;
-  }
-
-  .mobile-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
     display: grid;
-    width: min(300px, calc(100vw - 32px));
-    padding: 7px;
-    border: 1px solid var(--separator);
-    border-radius: 18px;
-    background: var(--surface-solid);
-    box-shadow: var(--shadow-floating);
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
   }
 
-  .mobile-menu-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 46px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 12px;
-    background: transparent;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .mobile-menu-item[aria-current="page"] {
-    background: var(--tint-soft);
-    color: var(--tint);
+  .nav-item {
+    min-width: 0;
+    justify-content: center;
+    padding: 0 8px;
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
   }
 
   .workspace-heading {
@@ -1710,9 +1692,9 @@ input:focus-visible {
   .site-header {
     top: 8px;
     width: calc(100% - 16px);
-    min-height: 58px;
+    min-height: 0;
     margin-top: 8px;
-    padding: 6px 6px 6px 12px;
+    padding: 6px;
     border-radius: 18px;
   }
 
@@ -1723,6 +1705,12 @@ input:focus-visible {
 
   .header-actions {
     gap: 2px;
+  }
+
+  .nav-item {
+    min-height: 36px;
+    padding: 0 5px;
+    font-size: 11px;
   }
 
   .main-content {
@@ -1798,7 +1786,7 @@ input:focus-visible {
     display: none;
   }
 
-  .api-ranking-list li {
+  .api-ranking-entry {
     grid-template-columns: 24px repeat(3, minmax(0, 1fr));
     gap: 10px 6px;
     min-height: 104px;
@@ -1817,29 +1805,29 @@ input:focus-visible {
     grid-row: 1;
   }
 
-  .api-ranking-list li > span[data-label] {
+  .api-ranking-entry > span[data-label] {
     display: grid;
     grid-row: 2;
     gap: 2px;
     font-size: 12px;
   }
 
-  .api-ranking-list li > span[data-label]::before {
+  .api-ranking-entry > span[data-label]::before {
     color: var(--ink-tertiary);
     content: attr(data-label);
     font-size: 9px;
     font-weight: 650;
   }
 
-  .api-ranking-list li > span[data-label]:nth-of-type(2) {
+  .api-ranking-entry > span[data-label]:nth-of-type(3) {
     grid-column: 2;
   }
 
-  .api-ranking-list li > span[data-label]:nth-of-type(3) {
+  .api-ranking-entry > span[data-label]:nth-of-type(4) {
     grid-column: 3;
   }
 
-  .api-ranking-list li > span[data-label]:nth-of-type(4) {
+  .api-ranking-entry > span[data-label]:nth-of-type(5) {
     grid-column: 4;
   }
 
@@ -1988,6 +1976,7 @@ input:focus-visible {
 
   .subscription-sheet {
     width: 100%;
+    max-height: calc(100dvh - 8px);
     padding: 12px 18px calc(18px + env(safe-area-inset-bottom));
     border-right: 0;
     border-bottom: 0;

@@ -9,7 +9,6 @@ const requestSchema = z.object({
   email: z.email("请输入有效邮箱。").max(254),
   providerId: z.string().min(1).max(80),
   planId: z.string().min(1).max(120).nullable().optional(),
-  website: z.string().max(200).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -40,12 +39,6 @@ export async function POST(request: NextRequest) {
       { message: parsed.error.issues[0]?.message ?? "请求内容无效。" },
       { status: 400 },
     );
-  }
-
-  if (parsed.data.website) {
-    return NextResponse.json({
-      message: "确认邮件已经发送，请检查收件箱。",
-    });
   }
 
   const emailRateLimit = checkRateLimit(
@@ -87,6 +80,11 @@ export async function POST(request: NextRequest) {
       ...result,
     });
   } catch (error) {
+    console.error("Subscription request failed.", {
+      providerId: parsed.data.providerId,
+      planId: parsed.data.planId ?? null,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     const message =
       error instanceof Error && process.env.NODE_ENV !== "production"
         ? error.message

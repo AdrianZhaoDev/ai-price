@@ -47,6 +47,39 @@ test("opens the price alert sheet", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 
+test("submits a real subscription payload without an autofill honeypot", async ({
+  page,
+}) => {
+  let requestPayload: Record<string, unknown> | undefined;
+  await page.route("**/api/subscriptions", async (route) => {
+    requestPayload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "确认邮件已经发送，请检查收件箱。",
+        previewConfirmUrl: "/api/subscriptions/confirm?token=local-preview",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("reader@example.com");
+  await page.getByRole("button", { name: "发送确认邮件" }).click();
+
+  await expect(page.getByRole("heading", { name: "还差一步" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "本地测试：打开确认链接" }),
+  ).toBeVisible();
+  expect(requestPayload).toMatchObject({
+    email: "reader@example.com",
+    providerId: "chatgpt",
+  });
+  expect(requestPayload).not.toHaveProperty("website");
+});
+
 test("shows ranked RMB prices without duplicate or status-only plans", async ({
   page,
   isMobile,
@@ -162,10 +195,21 @@ test("mobile navigation and sheet remain usable", async ({
   await page.goto("/");
   await waitForPricingHydration(page);
   await expect(page.locator(".mobile-global-details").first()).toBeVisible();
-  await page.getByRole("button", { name: "打开价格模式菜单" }).click();
-  await page
-    .getByRole("navigation", { name: "移动端价格模式" })
-    .getByRole("link", { name: /API 价格排行榜/ })
+  const modeNavigation = page.getByRole("navigation", { name: "价格模式" });
+  await expect(
+    modeNavigation.getByRole("link", { name: "全球区价", exact: true }),
+  ).toBeVisible();
+  await expect(
+    modeNavigation.getByRole("link", { name: "国内订阅", exact: true }),
+  ).toBeVisible();
+  await expect(
+    modeNavigation.getByRole("link", {
+      name: "API 价格排行榜",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await modeNavigation
+    .getByRole("link", { name: "API 价格排行榜", exact: true })
     .click();
   await expect(page).toHaveURL(/\/api-pricing$/);
   await expect(
@@ -174,8 +218,29 @@ test("mobile navigation and sheet remain usable", async ({
     }),
   ).toBeVisible();
   await waitForPricingHydration(page);
+  const firstRankingEntry = page.locator(".api-ranking-entry").first();
+  await expect(firstRankingEntry).toBeVisible();
+  expect(
+    await firstRankingEntry.evaluate(
+      (entry) => entry.scrollWidth <= entry.clientWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
   await page.getByRole("button", { name: "关注价格" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  expect(
+    await page
+      .getByRole("dialog")
+      .evaluate(
+        (dialog) => dialog.getBoundingClientRect().right <= window.innerWidth,
+      ),
+  ).toBe(true);
 });
 
 test("small phone and landscape layouts do not overflow", async ({ page }) => {
@@ -189,7 +254,9 @@ test("small phone and landscape layouts do not overflow", async ({ page }) => {
     ),
   ).toBe(true);
   await expect(
-    page.getByRole("button", { name: "打开价格模式菜单" }),
+    page
+      .getByRole("navigation", { name: "价格模式" })
+      .getByRole("link", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
 
   await page.setViewportSize({ width: 812, height: 375 });

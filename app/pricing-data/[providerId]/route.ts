@@ -23,7 +23,7 @@ export async function GET(
     );
   }
 
-  const providers = await loadProviderCatalog(catalogProvider.mode);
+  const providers = await loadProviderCatalog(catalogProvider.mode, providerId);
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) {
     return NextResponse.json(

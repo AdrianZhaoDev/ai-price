@@ -1,6 +1,7 @@
 import { confirmationEmail } from "@/lib/email/templates";
 import { getEmailTransport } from "@/lib/email/transport";
 import { providerCatalog } from "@/lib/data/catalog";
+import { loadProviderCatalog } from "@/lib/pricing/repository";
 import { hashEmail } from "@/lib/security/tokens";
 import { createPendingSubscription } from "./repository";
 import { z } from "zod";
@@ -15,12 +16,18 @@ export async function requestPriceSubscription(
   input: RequestSubscriptionInput,
 ): Promise<{ previewConfirmUrl?: string }> {
   const email = z.email("请输入有效邮箱。").max(254).parse(input.email);
-  const provider = providerCatalog.find(
+  const catalogProvider = providerCatalog.find(
     (candidate) => candidate.id === input.providerId,
   );
-  if (!provider) {
+  if (!catalogProvider) {
     throw new Error("未找到要关注的产品。");
   }
+
+  const [liveProvider] = await loadProviderCatalog(
+    catalogProvider.mode,
+    input.providerId,
+  );
+  const provider = liveProvider ?? catalogProvider;
 
   if (
     input.planId &&

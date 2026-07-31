@@ -9,9 +9,16 @@ import type {
 } from "@/lib/pricing/types";
 import { and, desc, eq } from "drizzle-orm";
 
-function cloneCatalog(mode?: PriceMode): ProviderCatalogItem[] {
+function cloneCatalog(
+  mode?: PriceMode,
+  providerId?: string,
+): ProviderCatalogItem[] {
   return providerCatalog
-    .filter((provider) => !mode || provider.mode === mode)
+    .filter(
+      (provider) =>
+        (!mode || provider.mode === mode) &&
+        (!providerId || provider.id === providerId),
+    )
     .map((provider) => ({
       ...provider,
       offers: provider.offers.map((offer) => ({ ...offer })),
@@ -24,8 +31,9 @@ function databaseMode(mode: PriceMode) {
 
 export async function loadProviderCatalog(
   mode?: PriceMode,
+  providerId?: string,
 ): Promise<ProviderCatalogItem[]> {
-  const catalog = cloneCatalog(mode);
+  const catalog = cloneCatalog(mode, providerId);
   if (!isReadDatabaseConfigured()) return catalog;
 
   try {
@@ -40,9 +48,11 @@ export async function loadProviderCatalog(
       .innerJoin(products, eq(products.id, plans.productId))
       .innerJoin(sources, eq(sources.id, priceObservations.sourceId))
       .where(
-        mode
-          ? and(eq(plans.active, true), eq(products.mode, databaseMode(mode)))
-          : eq(plans.active, true),
+        and(
+          eq(plans.active, true),
+          mode ? eq(products.mode, databaseMode(mode)) : undefined,
+          providerId ? eq(products.slug, providerId) : undefined,
+        ),
       )
       .orderBy(
         priceObservations.planId,

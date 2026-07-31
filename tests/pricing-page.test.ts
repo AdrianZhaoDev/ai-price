@@ -14,6 +14,13 @@ describe("pricing page payload", () => {
     ).toBe(true);
   });
 
+  it("loads only the requested provider when a provider is supplied", async () => {
+    const providers = await loadProviderCatalog("api", "deepseek-api");
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]?.id).toBe("deepseek-api");
+  });
+
   it("defers oversized API provider details while retaining ranking data", () => {
     const providers = providerCatalog
       .filter((provider) => provider.mode === "api")

@@ -23,12 +23,14 @@ export function SubscriptionSheet({
 }: SubscriptionSheetProps) {
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
+  const [previewConfirmUrl, setPreviewConfirmUrl] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
   const closeSheet = useCallback(() => {
     setState("idle");
     setMessage("");
+    setPreviewConfirmUrl("");
     onClose();
   }, [onClose]);
 
@@ -80,13 +82,13 @@ export function SubscriptionSheet({
     event.preventDefault();
     setState("submitting");
     setMessage("");
+    setPreviewConfirmUrl("");
 
     const form = new FormData(event.currentTarget);
     const payload = {
       email: form.get("email"),
       providerId,
       planId: planId || null,
-      website: form.get("website"),
     };
 
     try {
@@ -95,7 +97,10 @@ export function SubscriptionSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { message?: string };
+      const result = (await response.json()) as {
+        message?: string;
+        previewConfirmUrl?: string;
+      };
 
       if (!response.ok) {
         throw new Error(result.message || "暂时无法创建订阅，请稍后重试。");
@@ -103,6 +108,7 @@ export function SubscriptionSheet({
 
       setState("success");
       setMessage(result.message || "确认邮件已经发送，请检查收件箱。");
+      setPreviewConfirmUrl(result.previewConfirmUrl ?? "");
     } catch (error) {
       setState("error");
       setMessage(
@@ -160,6 +166,11 @@ export function SubscriptionSheet({
                 </div>
                 <h2 id="subscription-title">还差一步</h2>
                 <p>{message}</p>
+                {previewConfirmUrl ? (
+                  <a className="preview-confirm-link" href={previewConfirmUrl}>
+                    本地测试：打开确认链接
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   className="primary-button pressable"
@@ -191,16 +202,6 @@ export function SubscriptionSheet({
                       state === "error" ? "subscription-error" : undefined
                     }
                   />
-                  <div className="honeypot" aria-hidden="true">
-                    <label htmlFor="website">Website</label>
-                    <input
-                      id="website"
-                      name="website"
-                      type="text"
-                      tabIndex={-1}
-                      autoComplete="off"
-                    />
-                  </div>
                   {state === "error" ? (
                     <p
                       id="subscription-error"
