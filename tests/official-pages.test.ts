@@ -284,6 +284,49 @@ describe("official table adapters", () => {
     ]);
   });
 
+  it("selects the latest compact GLM plan version and uses billed totals", () => {
+    const glm = parseGlmCodingPlan(
+      raw(
+        [
+          '{type:"lite",unitKey:"month",productId:"lite-v2",salePrice:49,renewAmount:49}',
+          '{type:"pro",unitKey:"month",productId:"pro-v2",salePrice:149,renewAmount:149}',
+          '{type:"max",unitKey:"month",productId:"max-v2",salePrice:469,renewAmount:469}',
+          '{type:"lite",unitKey:"quarter",productId:"lite-quarter-v2",salePrice:132.3,renewAmount:132.3}',
+          '{type:"pro",unitKey:"quarter",productId:"pro-quarter-v2",salePrice:402.3,renewAmount:402.3}',
+          '{type:"max",unitKey:"quarter",productId:"max-quarter-v2",salePrice:1266.3,renewAmount:1266.3}',
+          '{type:"lite",unitKey:"month",productId:"lite-v3",salePrice:118,renewAmount:118}',
+          '{type:"pro",unitKey:"month",productId:"pro-v3",salePrice:538,renewAmount:538}',
+          '{type:"max",unitKey:"month",productId:"max-v3",salePrice:1078,renewAmount:1078}',
+          '{type:"lite",unitKey:"quarter",productId:"lite-quarter-v3",salePrice:94.4,renewAmount:283.2}',
+          '{type:"pro",unitKey:"quarter",productId:"pro-quarter-v3",salePrice:430.4,renewAmount:1291.2}',
+          '{type:"max",unitKey:"quarter",productId:"max-quarter-v3",salePrice:862.4,renewAmount:2587.2}',
+          '{type:"lite",unitKey:"year",productId:"lite-year-v3",salePrice:82.6,renewAmount:991.2}',
+          '{type:"pro",unitKey:"year",productId:"pro-year-v3",salePrice:376.6,renewAmount:4519.2}',
+          '{type:"max",unitKey:"year",productId:"max-year-v3",salePrice:754.6,renewAmount:9055.2}',
+        ].join(","),
+      ),
+    );
+
+    expect(glm).toHaveLength(9);
+    expect(glm.map((offer) => offer.amountMinor)).toEqual([
+      11800, 53800, 107800, 28320, 129120, 258720, 99120, 451920, 905520,
+    ]);
+    expect(glm.map((offer) => offer.billingPeriod)).toEqual([
+      "month",
+      "month",
+      "month",
+      "quarter",
+      "quarter",
+      "quarter",
+      "year",
+      "year",
+      "year",
+    ]);
+    expect(
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v5"),
+    ).toBe(true);
+  });
+
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
     const glm = parseGlmCodingPlan(
       raw(`

@@ -865,6 +865,37 @@ export function parseGlmCodingPlan(
     quarter: "季付",
     year: "年付",
   } as const;
+  const compactOffers = new Map<string, NormalizedOffer>();
+  for (const product of raw.body.matchAll(
+    /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
+  )) {
+    const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
+    const unit = product[2] as keyof typeof periodNames;
+    const salePrice = Number(product[0].match(/salePrice:([\d.]+)/)?.[1]);
+    const renewalTotal = Number(product[0].match(/renewAmount:([\d.]+)/)?.[1]);
+    const price =
+      unit === "month" || !Number.isFinite(renewalTotal)
+        ? salePrice
+        : renewalTotal;
+    if (!Number.isFinite(price)) continue;
+
+    compactOffers.set(
+      `${plan}-${unit}`,
+      cnyOffer({
+        providerSlug: "glm-coding-plan",
+        planSlug: `glm-coding-${plan.toLowerCase()}-${unit}`,
+        planName: `${plan} · ${periodNames[unit]}`,
+        displayPrice: `¥${price}`,
+        billingPeriod: unit,
+        channel: "official_web",
+        sourceUrl: raw.sourceUrl,
+        observedAt: raw.observedAt,
+        parserVersion: "glm-coding-plan-v5",
+      }),
+    );
+  }
+  if (compactOffers.size > 0) return [...compactOffers.values()];
+
   const dynamicOffers = [
     ...raw.body.matchAll(
       /\{productId:"[^"]+",productName:"(Lite|Pro|Max)"[^}]{0,1000}\}/g,
@@ -885,7 +916,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v4",
+        parserVersion: "glm-coding-plan-v5",
       }),
     ];
   });
@@ -918,7 +949,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v4",
+        parserVersion: "glm-coding-plan-v5",
       }),
       cnyOffer({
         providerSlug: "glm-coding-plan",
@@ -929,7 +960,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v4",
+        parserVersion: "glm-coding-plan-v5",
       }),
     ];
   });
@@ -1229,7 +1260,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   readonly id = "glm-coding-plan-official";
   readonly providerSlug = "glm-coding-plan";
   readonly sourceUrl = "https://www.bigmodel.cn/claude-code";
-  readonly parserVersion = "glm-coding-plan-v4";
+  readonly parserVersion = "glm-coding-plan-v5";
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
     try {
