@@ -37,6 +37,8 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 - 根域已配置空 MX、`v=spf1 -all` 与严格 DMARC，明确该域不接收或发送邮件；
 - 源站使用 Let's Encrypt ECDSA 证书，覆盖主域、`www`、`ai`；
 - HTML 保持 `DYNAMIC`，静态资源继续按文件哈希和源站缓存头处理；
+- 三个价格页只缓存页面实际需要的精简数据，15 分钟是兜底有效期；生产采集完成后
+  会立即以 tag 失效并预热三个页签，已打开页面每 30 秒检查数据版本并在变化时刷新；
 - SSL Labs 四个 Cloudflare IPv4/IPv6 边缘端点均为 A+，只支持 TLS 1.2/1.3；
 - `/_next/static/` 静态资源已验证首次 `MISS`、再次访问 `HIT`，并带一年
   `immutable` 缓存；
