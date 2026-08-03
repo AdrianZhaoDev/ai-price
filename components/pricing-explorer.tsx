@@ -6,7 +6,6 @@ import {
   ApiPriceRanking,
   type ApiRankingSelection,
 } from "@/components/api-price-ranking";
-import { SubscriptionSheet } from "@/components/subscription-sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   compareCnyPrice,
@@ -31,6 +30,7 @@ import type {
   PriceMode,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
+import { useVersionRefresh } from "@/lib/pricing/use-version-refresh";
 import {
   ArrowUpRight,
   ArrowDownUp,
@@ -42,6 +42,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -82,6 +83,28 @@ type PendingApiTarget = ApiRankingSelection & {
 };
 
 const GLOBAL_INITIAL_VISIBLE_COUNT = 24;
+
+const SubscriptionSheet = dynamic(
+  () =>
+    import("@/components/subscription-sheet").then(
+      (module) => module.SubscriptionSheet,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="sheet-layer" role="presentation">
+        <div
+          className="subscription-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="正在打开价格订阅"
+        >
+          <p role="status">正在打开价格订阅…</p>
+        </div>
+      </div>
+    ),
+  },
+);
 
 function hasDisplayableOffers(provider: ProviderCatalogItem): boolean {
   return displayableOffers(provider.offers).length > 0;
@@ -144,12 +167,12 @@ export function PricingExplorer({
   const [deferredIds, setDeferredIds] = useState(
     () => new Set(deferredProviderIds),
   );
-  const [loadingProviderId, setLoadingProviderId] = useState<string | null>(
-    null,
+  const [loadingProviderIds, setLoadingProviderIds] = useState<Set<string>>(
+    () => new Set(),
   );
-  const [providerLoadError, setProviderLoadError] = useState<string | null>(
-    null,
-  );
+  const [providerLoadErrors, setProviderLoadErrors] = useState<
+    Map<string, string>
+  >(() => new Map());
   const [selectedProviderId, setSelectedProviderId] = useState(
     initialProvider?.id ?? "",
   );
@@ -166,6 +189,7 @@ export function PricingExplorer({
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetLoaded, setSheetLoaded] = useState(false);
   const [subscriptionType, setSubscriptionType] = useState<
     "price" | "api_ranking"
   >("price");
@@ -188,6 +212,22 @@ export function PricingExplorer({
   const rankingRequestIdRef = useRef(0);
   const providerSelectionIdRef = useRef(0);
   const initialQueryAppliedRef = useRef(false);
+  const providerLoadPromisesRef = useRef(
+    new Map<string, Promise<ProviderCatalogItem>>(),
+  );
+  const refreshPricingData = useCallback(() => router.refresh(), [router]);
+
+  useVersionRefresh({
+    mode: activeMode,
+    dataVersion,
+    onVersionChange: refreshPricingData,
+  });
+
+  const openSubscriptionSheet = useCallback((type: "price" | "api_ranking") => {
+    setSubscriptionType(type);
+    setSheetLoaded(true);
+    setSheetOpen(true);
+  }, []);
 
   const modeProviders = useMemo(
     () =>
@@ -246,48 +286,72 @@ export function PricingExplorer({
   const ensureProviderLoaded = useCallback(
     async function ensureProviderLoaded(provider: ProviderCatalogItem) {
       if (!deferredIds.has(provider.id)) return provider;
+      const pending = providerLoadPromisesRef.current.get(provider.id);
+      if (pending) return pending;
 
-      setLoadingProviderId(provider.id);
-      setProviderLoadError(null);
-      try {
-        const response = await fetch(
-          `/pricing-data/${encodeURIComponent(provider.id)}`,
-        );
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const payload = (await response.json()) as {
-          provider?: ProviderCatalogItem;
-        };
-        if (
-          !payload.provider ||
-          payload.provider.id !== provider.id ||
-          payload.provider.mode !== activeMode
-        ) {
-          throw new Error("Invalid provider response");
-        }
-
-        setProviderItems((current) =>
-          current.map((item) =>
-            item.id === provider.id ? payload.provider! : item,
-          ),
-        );
-        setDeferredIds((current) => {
-          const next = new Set(current);
+      const loadPromise = (async () => {
+        setLoadingProviderIds((current) => new Set(current).add(provider.id));
+        setProviderLoadErrors((current) => {
+          const next = new Map(current);
           next.delete(provider.id);
           return next;
         });
-        return payload.provider;
-      } catch {
-        setProviderLoadError(
-          `${provider.label}完整报价暂时加载失败，请稍后重试。`,
-        );
-        return provider;
+        try {
+          const response = await fetch(
+            `/pricing-data/${encodeURIComponent(provider.id)}?v=${encodeURIComponent(dataVersion ?? "seed")}`,
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = (await response.json()) as {
+            provider?: ProviderCatalogItem;
+          };
+          if (
+            !payload.provider ||
+            payload.provider.id !== provider.id ||
+            payload.provider.mode !== activeMode
+          ) {
+            throw new Error("Invalid provider response");
+          }
+
+          setProviderItems((current) =>
+            current.map((item) =>
+              item.id === provider.id ? payload.provider! : item,
+            ),
+          );
+          setDeferredIds((current) => {
+            const next = new Set(current);
+            next.delete(provider.id);
+            return next;
+          });
+          return payload.provider;
+        } catch {
+          setProviderLoadErrors((current) =>
+            new Map(current).set(
+              provider.id,
+              `${provider.label}完整报价暂时加载失败，请稍后重试。`,
+            ),
+          );
+          return provider;
+        } finally {
+          setLoadingProviderIds((current) => {
+            const next = new Set(current);
+            next.delete(provider.id);
+            return next;
+          });
+        }
+      })();
+
+      providerLoadPromisesRef.current.set(provider.id, loadPromise);
+      try {
+        return await loadPromise;
       } finally {
-        setLoadingProviderId(null);
+        if (providerLoadPromisesRef.current.get(provider.id) === loadPromise) {
+          providerLoadPromisesRef.current.delete(provider.id);
+        }
       }
     },
-    [activeMode, deferredIds],
+    [activeMode, dataVersion, deferredIds],
   );
 
   async function selectProvider(provider: ProviderCatalogItem) {
@@ -496,39 +560,6 @@ export function PricingExplorer({
     }
   }, [activeMode, modes, router]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const checkVersion = async () => {
-      try {
-        const response = await fetch(
-          `/api/pricing/version?mode=${encodeURIComponent(activeMode)}`,
-          { cache: "no-store" },
-        );
-        if (response.ok) {
-          const payload = (await response.json()) as {
-            version?: string | null;
-          };
-          if (!cancelled && (payload.version ?? null) !== dataVersion) {
-            router.refresh();
-          }
-        }
-      } catch {
-        // A transient version check must not interrupt price browsing.
-      }
-      if (!cancelled) {
-        timer = setTimeout(checkVersion, 30_000);
-      }
-    };
-
-    timer = setTimeout(checkVersion, 30_000);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [activeMode, dataVersion, router]);
-
   const selectedPlan = availablePlans.find(
     (plan) => plan.id === selectedPlanId,
   );
@@ -610,8 +641,7 @@ export function PricingExplorer({
               providers={modeProviders}
               changes={rankingChanges}
               onSubscribe={() => {
-                setSubscriptionType("api_ranking");
-                setSheetOpen(true);
+                openSubscriptionSheet("api_ranking");
               }}
               onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
@@ -641,7 +671,7 @@ export function PricingExplorer({
           >
             {modeProviders.map((provider) => {
               const active = selectedProvider.id === provider.id;
-              const loading = loadingProviderId === provider.id;
+              const loading = loadingProviderIds.has(provider.id);
               return (
                 <button
                   key={provider.id}
@@ -675,9 +705,9 @@ export function PricingExplorer({
               );
             })}
           </div>
-          {providerLoadError ? (
+          {providerLoadErrors.get(selectedProvider.id) ? (
             <p className="provider-load-error" role="status">
-              {providerLoadError}
+              {providerLoadErrors.get(selectedProvider.id)}
             </p>
           ) : null}
         </section>
@@ -731,8 +761,7 @@ export function PricingExplorer({
                       type="button"
                       className="primary-button pressable"
                       onClick={() => {
-                        setSubscriptionType("price");
-                        setSheetOpen(true);
+                        openSubscriptionSheet("price");
                       }}
                     >
                       <Bell size={16} />
@@ -1114,8 +1143,7 @@ export function PricingExplorer({
                 providers={modeProviders}
                 changes={rankingChanges}
                 onSubscribe={() => {
-                  setSubscriptionType("api_ranking");
-                  setSheetOpen(true);
+                  openSubscriptionSheet("api_ranking");
                 }}
                 onSelectEntry={(selection) =>
                   void selectRankingEntry(selection)
@@ -1178,16 +1206,18 @@ export function PricingExplorer({
         </div>
       </footer>
 
-      <SubscriptionSheet
-        open={sheetOpen}
-        scopeLabel={subscriptionScope}
-        providerId={selectedProvider.id}
-        subscriptionType={subscriptionType}
-        planId={
-          activeMode === "global" ? (selectedPlanId ?? undefined) : undefined
-        }
-        onClose={() => setSheetOpen(false)}
-      />
+      {sheetLoaded ? (
+        <SubscriptionSheet
+          open={sheetOpen}
+          scopeLabel={subscriptionScope}
+          providerId={selectedProvider.id}
+          subscriptionType={subscriptionType}
+          planId={
+            activeMode === "global" ? (selectedPlanId ?? undefined) : undefined
+          }
+          onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

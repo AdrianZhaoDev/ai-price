@@ -38,6 +38,32 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
 });
 
+test("deduplicates repeated deferred-provider loads", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Request behavior is device-independent.");
+  let requestCount = 0;
+  await page.route("**/pricing-data/minimax-token-plan?*", async (route) => {
+    requestCount += 1;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+
+  await page.goto("/china-ai-subscriptions");
+  await waitForPricingHydration(page);
+  const provider = page.locator(
+    '.provider-button[data-provider-id="minimax-token-plan"]',
+  );
+  await provider.evaluate((element) => {
+    (element as HTMLButtonElement).click();
+    (element as HTMLButtonElement).click();
+  });
+
+  await expect(page.getByRole("heading", { name: "MiniMax" })).toBeVisible();
+  expect(requestCount).toBe(1);
+});
+
 test("pricing navigation uses one clear active state and marks API as hot", async ({
   page,
   isMobile,
