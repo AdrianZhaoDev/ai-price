@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { apiRankingEntries, rankingCnyValue } from "@/lib/pricing/api-ranking";
+import {
+  apiRankingModelIdentity,
+  apiRankingEntries,
+  findRankingFocusEntry,
+  inferredApiPriceType,
+  rankingCnyValue,
+} from "@/lib/pricing/api-ranking";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 
 function offer(
@@ -77,6 +83,26 @@ describe("API ranking", () => {
     });
   });
 
+  it("allows up to ten curated global models while domestic providers stay at two", () => {
+    const values = Array.from({ length: 12 }, (_, index) => [
+      `Model-${index + 1}`,
+      index,
+      10 + index,
+      20 + index,
+      30 + index,
+    ]) as Array<[string, number, number, number, number]>;
+    const entries = apiRankingEntries(
+      [provider("openai-api", values), provider("domestic-api", values)],
+      "input",
+    );
+    expect(
+      entries.filter((entry) => entry.providerId === "openai-api"),
+    ).toHaveLength(10);
+    expect(
+      entries.filter((entry) => entry.providerId === "domestic-api"),
+    ).toHaveLength(2);
+  });
+
   it("changes ordering with the selected price metric", () => {
     const providers = [
       provider("A", [["A", 0, 100, 10, 500]]),
@@ -126,5 +152,47 @@ describe("API ranking", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].input?.id).not.toBe("latest-batch");
     expect(entries[0].modelName).toBe("Latest");
+  });
+
+  it("only focuses the exact ranked offer for model-specific requests", () => {
+    const item = provider("global", [["Latest", 0, 10, 100, 200]]);
+    const entries = apiRankingEntries([item], "input");
+
+    expect(
+      findRankingFocusEntry(
+        entries,
+        {
+          providerId: "global",
+          modelSlug: "latest",
+          offerId: "Latest-input",
+        },
+        "input",
+      ),
+    ).toBe(entries[0]);
+    expect(
+      findRankingFocusEntry(
+        entries,
+        {
+          providerId: "global",
+          modelSlug: "latest",
+          offerId: "latest-batch",
+        },
+        "input",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("infers fallback offer metadata with the same ranking rules", () => {
+    const fallback = offer("Unused", 0, undefined, 2, {
+      planName: "DeepSeek-V4-Flash · 缓存命中",
+      modelName: undefined,
+      modelSlug: undefined,
+    });
+
+    expect(inferredApiPriceType(fallback)).toBe("cached_input");
+    expect(apiRankingModelIdentity(fallback)).toEqual({
+      slug: "deepseek-v4-flash",
+      name: "DeepSeek-V4-Flash",
+    });
   });
 });

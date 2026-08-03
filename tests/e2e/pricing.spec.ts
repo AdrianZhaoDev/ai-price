@@ -602,12 +602,19 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     page.getByRole("heading", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
   await waitForPricingHydration(page);
+  await expect(page.locator("button button")).toHaveCount(0);
   const deepSeekButton = page.getByRole("button", {
     name: "DeepSeek",
     exact: true,
   });
   await expect(deepSeekButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".status-chip")).toHaveCount(0);
+  const apiPriceTable = page.getByRole("table", { name: "官方价格" });
+  await expect(apiPriceTable).toBeVisible();
+  await expect(
+    apiPriceTable.getByRole("columnheader", { name: "方案 / 模型" }),
+  ).toBeVisible();
+  expect(await apiPriceTable.getByRole("cell").count()).toBeGreaterThan(0);
 
   const apiRows = page.locator(".price-list > .price-row");
   if ((await apiRows.count()) > 0) {
@@ -639,6 +646,57 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     ).toBeGreaterThan(collapsedApiRowCount);
   }
 
+  const siliconFlowCachedRow = page.locator(
+    '.price-row[data-offer-id="siliconflow-v4-flash-cache"]',
+  );
+  await siliconFlowCachedRow.click();
+  await expect(
+    page
+      .locator(".api-ranking-desktop .api-ranking-switch")
+      .getByRole("button", { name: "缓存输入", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="siliconflow-api"][data-model-slug="deepseek-v4-flash"][data-offer-id="siliconflow-v4-flash-cache"]',
+    ),
+  ).toBeVisible();
+
+  const geminiButton = page.locator(
+    '.provider-button[data-provider-id="gemini-api"]',
+  );
+  await geminiButton.click();
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="gemini-api"]',
+    ),
+  ).toBeInViewport({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Gemini API" })).toBeVisible();
+  await expect(page.locator(".provider-large-mark svg path")).toHaveAttribute(
+    "fill",
+    "#756AF6",
+  );
+
+  const outputMetric = page
+    .locator(".api-ranking-desktop .api-ranking-switch")
+    .getByRole("button", { name: "输出" });
+  await outputMetric.click();
+  await geminiButton.click();
+  await expect(outputMetric).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"]',
+    ),
+  ).toHaveCount(1);
+  await page
+    .locator(".api-ranking-desktop .api-ranking-switch")
+    .getByRole("button", { name: "非缓存输入" })
+    .click();
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"]',
+    ),
+  ).toHaveCount(0);
+
   const firstRankingEntry = page
     .locator(
       '.api-ranking-desktop .api-ranking-entry[data-provider-id="openai-api"]',
@@ -658,12 +716,20 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   ).toHaveAttribute("aria-pressed", "true");
   const targetRow = page
     .locator(
-      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"], ` +
-        `.price-row[data-highlighted="true"][data-model-slug="${targetModelSlug}"]`,
+      `.price-row[data-highlighted="true"][data-offer-id="${targetOfferId}"]`,
     )
     .first();
   await expect(targetRow).toBeVisible();
   await expect(targetRow).toBeInViewport();
+
+  const targetRowModelSlug = await targetRow.getAttribute("data-model-slug");
+  expect(targetRowModelSlug).toBeTruthy();
+  await targetRow.click();
+  const highlightedRankingEntry = page.locator(
+    `.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="${targetProviderId}"][data-model-slug="${targetRowModelSlug}"]`,
+  );
+  await expect(highlightedRankingEntry).toBeVisible();
+  await expect(highlightedRankingEntry).toBeInViewport();
 
   await expect(page.getByRole("heading", { name: "OpenAI API" })).toBeVisible();
   const openAiRow = page.locator(".price-list > .price-row").first();

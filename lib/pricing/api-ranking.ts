@@ -6,6 +6,13 @@ import type {
 
 export type ApiRankingMetric = "cached_input" | "input" | "output";
 
+const expandedGlobalApiProviders = new Set([
+  "openai-api",
+  "claude-api",
+  "gemini-api",
+  "grok-api",
+]);
+
 export type ApiRankingEntry = {
   id: string;
   providerId: string;
@@ -49,7 +56,7 @@ export function rankingCnyValue(offer: PriceOffer | undefined): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function inferredPriceType(offer: PriceOffer): ApiPriceType {
+export function inferredApiPriceType(offer: PriceOffer): ApiPriceType {
   if (offer.priceType) return offer.priceType;
   const text = offer.planName.toLowerCase();
   if (/缓存.*写|cache.*write/.test(text)) return "cache_write";
@@ -64,7 +71,7 @@ function metricOffer(
   type: ApiRankingMetric,
 ): PriceOffer | undefined {
   return offers
-    .filter((offer) => inferredPriceType(offer) === type)
+    .filter((offer) => inferredApiPriceType(offer) === type)
     .sort(
       (a, b) =>
         (a.tierOrder ?? 0) - (b.tierOrder ?? 0) ||
@@ -83,7 +90,25 @@ export function rankingOfferForMetric(
       : entry.output;
 }
 
-function modelIdentity(offer: PriceOffer): { slug: string; name: string } {
+export function findRankingFocusEntry(
+  entries: ApiRankingEntry[],
+  focus: { providerId: string; modelSlug?: string; offerId?: string },
+  metric: ApiRankingMetric,
+): ApiRankingEntry | undefined {
+  return entries.find((entry) => {
+    if (entry.providerId !== focus.providerId) return false;
+    if (focus.modelSlug && entry.modelSlug !== focus.modelSlug) return false;
+    if (focus.offerId) {
+      return rankingOfferForMetric(entry, metric)?.id === focus.offerId;
+    }
+    return true;
+  });
+}
+
+export function apiRankingModelIdentity(offer: PriceOffer): {
+  slug: string;
+  name: string;
+} {
   const name =
     offer.modelName ?? offer.planName.split(/\s*·\s*/)[0]?.trim() ?? "模型";
   return {
@@ -112,7 +137,7 @@ export function apiRankingEntries(
       { name: string; order: number; offers: PriceOffer[] }
     >();
     for (const offer of tokenOffers) {
-      const identity = modelIdentity(offer);
+      const identity = apiRankingModelIdentity(offer);
       const current = models.get(identity.slug);
       if (current) {
         current.offers.push(offer);
@@ -129,12 +154,13 @@ export function apiRankingEntries(
       }
     }
 
+    const modelLimit = expandedGlobalApiProviders.has(provider.id) ? 10 : 2;
     const latestModels = [...models.entries()]
       .sort(
         ([, a], [, b]) =>
           a.order - b.order || a.name.localeCompare(b.name, "zh-CN"),
       )
-      .slice(0, 2);
+      .slice(0, modelLimit);
     for (const [modelSlug, model] of latestModels) {
       entries.push({
         id: `${provider.id}-${modelSlug}`,

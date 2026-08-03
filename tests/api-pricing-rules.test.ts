@@ -361,12 +361,71 @@ describe("maintainable API pricing rules", () => {
     });
   });
 
+  it("keeps only current mainline models from each global API source", () => {
+    const openAi = parseOpenAiApi(
+      raw(`Prices per 1M tokens.
+| Model | Input | Cached input | Output |
+| --- | --- | --- | --- |
+| gpt-5.6-sol | $5 | $0.50 | $30 |
+| gpt-5.6-terra | $2 | $0.20 | $12 |
+| gpt-5.6-luna | $0.20 | $0.02 | $1.20 |
+| gpt-5.5 | $5 | $0.50 | $30 |
+| gpt-5.5-pro | $30 | $3 | $180 |
+| gpt-5.4 | $2.50 | $0.25 | $15 |`),
+    );
+    expect([...new Set(openAi.map((offer) => offer.modelName))]).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+      "gpt-5.5-pro",
+    ]);
+
+    const claude = parseClaudeApi(
+      raw(`| Model | Base Input Tokens | Cache Hits & Refreshes | Output Tokens |
+| --- | --- | --- | --- |
+| Claude Fable 5 | $10 / MTok | $1 / MTok | $50 / MTok |
+| Claude Sonnet 5through August 31, 2026 | $2 / MTok | $0.20 / MTok | $10 / MTok |
+| Claude Sonnet 5starting September 1, 2026 | $3 / MTok | $0.30 / MTok | $15 / MTok |
+| Claude Opus 5.1 | $8 / MTok | $0.80 / MTok | $40 / MTok |
+| Claude Haiku 4.5.1 | $2 / MTok | $0.20 / MTok | $10 / MTok |
+| Claude Opus 4.5 | $5 / MTok | $0.50 / MTok | $25 / MTok |`),
+    );
+    expect([...new Set(claude.map((offer) => offer.modelName))]).toEqual([
+      "Claude Fable 5",
+      "Claude Sonnet 5",
+    ]);
+
+    const gemini = parseGeminiApi(
+      raw(`${geminiFixture.normal}<h2>Gemini 2.0 Flash</h2><h3>Standard</h3><table>
+        <tr><th></th><th>Paid Tier, per 1M tokens in USD</th></tr>
+        <tr><td>Input price</td><td>$0.10</td></tr>
+        <tr><td>Output price</td><td>$0.40</td></tr>
+      </table>`),
+    );
+    expect(new Set(gemini.map((offer) => offer.modelName))).toEqual(
+      new Set(["Gemini 3.6 Flash"]),
+    );
+
+    const grok = parseGrokApi(
+      raw(`| Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
+| --- | --- | --- | --- |
+| grok-4.5 | $2 | $0.30 | $6 |
+| grok-4.3 | $1.25 | $0.20 | $2.50 |
+| grok-build-0.1 | $1 | $0.20 | $2 |`),
+    );
+    expect([...new Set(grok.map((offer) => offer.modelName))]).toEqual([
+      "grok-4.5",
+      "grok-4.3",
+    ]);
+  });
+
   it("keeps short-context batch rows out of the standard ranking", () => {
     const offers = parseGrokApi(
       raw(`### Batch API Pricing
 | Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
 | --- | --- | --- | --- |
-| grok-example (< 200k prompt tokens) | $1.00 | $0.15 | $3.00 |`),
+| grok-4.5 (< 200k prompt tokens) | $1.00 | $0.15 | $3.00 |`),
     );
 
     expect(offers).toHaveLength(3);
@@ -376,7 +435,7 @@ describe("maintainable API pricing rules", () => {
 
   it("preserves Gemini long-context details and excludes storage charges", () => {
     const offers = parseGeminiApi(
-      raw(`<h2>Gemini 3.6 Example</h2><h3>Standard</h3><table>
+      raw(`<h2>Gemini 3.6 Flash</h2><h3>Standard</h3><table>
         <tr><th></th><th>Paid Tier, per 1M tokens in USD</th></tr>
         <tr><td>Input price</td><td>1.25 美元 for prompts &lt;= 200k tokens; 2.50 USD for prompts &gt; 200k tokens</td></tr>
         <tr><td>Context caching storage price per hour</td><td>$4.50</td></tr>
@@ -408,17 +467,17 @@ describe("maintainable API pricing rules", () => {
 Prices per 1M tokens.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-token | $2.00 | $0.20 | $12.00 |
+| gpt-5.6-sol | $2.00 | $0.20 | $12.00 |
 
 ## Per-request tools
 Prices per request.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-request | $0.01 | $0.01 | $0.02 |`),
+| gpt-5.6-terra | $0.01 | $0.01 | $0.02 |`),
     );
 
     expect(new Set(offers.map((offer) => offer.modelName))).toEqual(
-      new Set(["gpt-token"]),
+      new Set(["gpt-5.6-sol"]),
     );
   });
 });
