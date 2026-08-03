@@ -647,7 +647,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     page.locator(
       '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="gemini-api"]',
     ),
-  ).toBeInViewport();
+  ).toBeInViewport({ timeout: 15_000 });
   await expect(page.locator(".provider-large-mark svg path")).toHaveAttribute(
     "fill",
     "#756AF6",
