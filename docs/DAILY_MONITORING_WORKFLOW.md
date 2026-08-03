@@ -187,13 +187,20 @@ SSL Labs 不每天启动新扫描。仅在每月第一个工作日、TLS 配置�
 
 通过 `ssh american-vps` 检查：
 
-- `ai-price.service`、Nginx、PostgreSQL、采集 timer、Certbot timer 均 active；
+- `ai-price.service`、Nginx、PostgreSQL、采集 timer、Certbot timer 均 active；最近的
+  `ai-price-collect-scheduled.service` 运行结果与日志可读；
 - Nginx 监听 80/443，应用只监听 `127.0.0.1:3100`；
 - v2ray unit 和退役路径保持不存在；
 - 应用、本机源站 HTTPS、公网 HTTPS 均为 200；
 - HTTP 为 301，后台错误页未登录时重定向；
 - Nginx 配置语法正常；
 - PostgreSQL 中来源、观察、采集运行记录大于 0；
+- 注册表基线为 219 个唯一来源；读取最近一次完整计划运行的
+  `source_count`、`success_count`、`failure_count`，不得沿用历史日报数字；
+- 同一来源连续两个 `scheduled` 运行失败，或开放错误持续达到 8 小时，升级为采集
+  故障并执行 `COLLECTION_ERROR_RUNBOOK.md`；日报须主动检查 8 小时阈值，单次瞬时
+  失败先复核，不立即修改解析器；
+- 明确区分 219/219 成功、失败数为 0、运行尚未结束、没有运行数据和数据库不可用；
 - 两个 timer 都有下一次运行时间；
 - 最近 30 分钟 Web warning 和 Nginx error 无新增持续异常。
 

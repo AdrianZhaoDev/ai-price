@@ -10,8 +10,8 @@
 
 ```bash
 ssh american-vps
-systemctl status ai-price-collect.service --no-pager
-journalctl -u ai-price-collect.service -n 350 --no-pager
+systemctl status ai-price-collect-scheduled.service --no-pager
+journalctl -u ai-price-collect-scheduled.service -n 350 --no-pager
 sudo -u postgres psql -d ai_price -x -c "
 SELECT e.id, s.slug, s.type, e.code, e.message, e.details,
        e.created_at, e.resolved_at
@@ -22,6 +22,15 @@ ORDER BY e.created_at DESC;"
 ```
 
 不得输出 `/etc/ai-price.env`、数据库连接串、SMTP 授权码或 token。
+
+只有同一来源连续两个 `scheduled` 运行失败，或开放错误持续达到 8 小时，才升级为
+采集故障。timer 触发独立的 `ai-price-collect-scheduled.service`，并通过
+`--trigger=scheduled` 标记；人工使用 `ai-price-collect.service` 或本地单来源复核，
+仍记为 `manual`，不得被误计为连续计划失败。每轮失败会计算这两个阈值并按来源去重发送
+管理员告警；日报还必须主动检查达到 8 小时但采集期间未再次触发的开放错误。成功采集
+会清零连续失败并解决该来源的开放错误。日报必须重新读取最近完整运行，不得把 219/219
+基线当作当日结果。两个 systemd 服务共享由 systemd 创建并授权的
+`/run/ai-price-collect/collector.lock`；不得绕过文件锁并发启动采集。
 
 ## 2. 根据日志判断
 

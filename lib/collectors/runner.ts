@@ -198,6 +198,7 @@ export async function runCollectors(
         const recorded = await recordCollectionFailure({
           runId,
           sourceId: source.id,
+          trigger: options.trigger ?? "manual",
           ...failure,
         });
         if (recorded.shouldAlert) {
