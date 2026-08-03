@@ -4,6 +4,7 @@ import { ProviderMark } from "@/components/icons/provider-mark";
 import { ChangeBadge } from "@/components/change-badge";
 import {
   apiRankingEntries,
+  findRankingFocusEntry,
   rankingCnyValue,
   type ApiRankingChange,
   type ApiRankingEntry,
@@ -102,25 +103,17 @@ export function ApiPriceRanking({
   );
 
   useEffect(() => {
-    if (!focusRequest) return;
-    if (focusRequest.requestId <= processedFocusRequestIdRef.current) return;
-    processedFocusRequestIdRef.current = focusRequest.requestId;
     highlightedEntryRef.current?.removeAttribute("data-highlighted");
     highlightedEntryRef.current = null;
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
       highlightTimeoutRef.current = null;
     }
+    if (!focusRequest) return;
+    if (focusRequest.requestId <= processedFocusRequestIdRef.current) return;
+    processedFocusRequestIdRef.current = focusRequest.requestId;
 
-    const entry = focusRequest.modelSlug
-      ? entries.find(
-          (candidate) =>
-            candidate.providerId === focusRequest.providerId &&
-            candidate.modelSlug === focusRequest.modelSlug,
-        )
-      : entries.find(
-          (candidate) => candidate.providerId === focusRequest.providerId,
-        );
+    const entry = findRankingFocusEntry(entries, focusRequest, metric);
     if (!entry) return;
     const node = entryRefs.current.get(entry.id);
     if (!node || node.offsetParent === null) return;

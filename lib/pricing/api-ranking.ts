@@ -90,6 +90,22 @@ export function rankingOfferForMetric(
       : entry.output;
 }
 
+export function findRankingFocusEntry(
+  entries: ApiRankingEntry[],
+  focus: { providerId: string; modelSlug?: string; offerId?: string },
+  metric: ApiRankingMetric,
+): ApiRankingEntry | undefined {
+  return entries.find((entry) => {
+    if (entry.providerId !== focus.providerId) return false;
+    if (!focus.modelSlug) return true;
+    if (entry.modelSlug !== focus.modelSlug) return false;
+    return (
+      !focus.offerId ||
+      rankingOfferForMetric(entry, metric)?.id === focus.offerId
+    );
+  });
+}
+
 function modelIdentity(offer: PriceOffer): { slug: string; name: string } {
   const name =
     offer.modelName ?? offer.planName.split(/\s*·\s*/)[0]?.trim() ?? "模型";

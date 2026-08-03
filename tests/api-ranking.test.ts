@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { apiRankingEntries, rankingCnyValue } from "@/lib/pricing/api-ranking";
+import {
+  apiRankingEntries,
+  findRankingFocusEntry,
+  rankingCnyValue,
+} from "@/lib/pricing/api-ranking";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 
 function offer(
@@ -146,5 +150,33 @@ describe("API ranking", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].input?.id).not.toBe("latest-batch");
     expect(entries[0].modelName).toBe("Latest");
+  });
+
+  it("only focuses the exact ranked offer for model-specific requests", () => {
+    const item = provider("global", [["Latest", 0, 10, 100, 200]]);
+    const entries = apiRankingEntries([item], "input");
+
+    expect(
+      findRankingFocusEntry(
+        entries,
+        {
+          providerId: "global",
+          modelSlug: "latest",
+          offerId: "Latest-input",
+        },
+        "input",
+      ),
+    ).toBe(entries[0]);
+    expect(
+      findRankingFocusEntry(
+        entries,
+        {
+          providerId: "global",
+          modelSlug: "latest",
+          offerId: "latest-batch",
+        },
+        "input",
+      ),
+    ).toBeUndefined();
   });
 });

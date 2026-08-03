@@ -649,6 +649,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
       '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="gemini-api"]',
     ),
   ).toBeInViewport({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Gemini API" })).toBeVisible();
   await expect(page.locator(".provider-large-mark svg path")).toHaveAttribute(
     "fill",
     "#756AF6",
@@ -665,7 +666,6 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
       '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"]',
     ),
   ).toHaveCount(1);
-  await page.waitForTimeout(3_100);
   await page
     .locator(".api-ranking-desktop .api-ranking-switch")
     .getByRole("button", { name: "非缓存输入" })
