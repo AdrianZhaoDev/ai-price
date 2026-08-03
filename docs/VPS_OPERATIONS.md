@@ -226,8 +226,8 @@ journalctl -u ai-price-collect.service -f
 
 `ai-price-collect.service` 始终记录为 `manual`；timer 只触发
 `ai-price-collect-scheduled.service` 并记录为 `scheduled`。两个 unit 共享
-`/run/ai-price-collect.lock`，若人工与计划任务重叠，后启动者等待前一轮结束，禁止并发
-采集破坏价格两轮确认。排查计划任务时读取：
+systemd 管理且归 `ai-price` 所有的 `/run/ai-price-collect/collector.lock`；若人工与计划
+任务重叠，后启动者等待前一轮结束，禁止并发采集破坏价格两轮确认。排查计划任务时读取：
 
 ```bash
 systemctl status ai-price-collect-scheduled.service --no-pager

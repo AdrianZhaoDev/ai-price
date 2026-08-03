@@ -238,7 +238,9 @@ Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect.lock /usr/bin/npm run collect
+RuntimeDirectory=ai-price-collect
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/bin/npm run collect
 NoNewPrivileges=true
 PrivateTmp=true
 EOF
@@ -257,7 +259,9 @@ Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect.lock /usr/bin/npm run collect -- --trigger=scheduled
+RuntimeDirectory=ai-price-collect
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/bin/npm run collect -- --trigger=scheduled
 NoNewPrivileges=true
 PrivateTmp=true
 EOF

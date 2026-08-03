@@ -16,13 +16,16 @@ describe("VPS collector schedule", () => {
     )?.[1];
 
     const sharedLock =
-      "/usr/bin/flock --exclusive /run/ai-price-collect.lock /usr/bin/npm run collect";
+      "/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/bin/npm run collect";
 
+    expect(manualUnit).toContain("RuntimeDirectory=ai-price-collect");
+    expect(manualUnit).toContain("RuntimeDirectoryMode=0750");
     expect(manualUnit).toContain(`ExecStart=${sharedLock}`);
     expect(manualUnit).not.toContain("--trigger=scheduled");
     expect(scheduledUnit).toContain(
       `ExecStart=${sharedLock} -- --trigger=scheduled`,
     );
+    expect(scheduledUnit).toContain("RuntimeDirectory=ai-price-collect");
     expect(timerUnit).toContain("Unit=ai-price-collect-scheduled.service");
   });
 });
