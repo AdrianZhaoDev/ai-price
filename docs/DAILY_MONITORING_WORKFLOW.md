@@ -187,7 +187,8 @@ SSL Labs 不每天启动新扫描。仅在每月第一个工作日、TLS 配置�
 
 通过 `ssh american-vps` 检查：
 
-- `ai-price.service`、Nginx、PostgreSQL、采集 timer、Certbot timer 均 active；
+- `ai-price.service`、Nginx、PostgreSQL、采集 timer、Certbot timer 均 active；最近的
+  `ai-price-collect-scheduled.service` 运行结果与日志可读；
 - Nginx 监听 80/443，应用只监听 `127.0.0.1:3100`；
 - v2ray unit 和退役路径保持不存在；
 - 应用、本机源站 HTTPS、公网 HTTPS 均为 200；

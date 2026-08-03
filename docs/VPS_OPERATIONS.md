@@ -18,6 +18,7 @@ SMTP 的人工配置说明见 [`SMTP_SETUP.md`](SMTP_SETUP.md)，不要在本文
 | 环境变量       | `/etc/ai-price.env`                       |
 | Web 服务       | `ai-price.service`                        |
 | 采集服务       | `ai-price-collect.service`                |
+| 定时采集服务   | `ai-price-collect-scheduled.service`      |
 | 采集 timer     | `ai-price-collect.timer`                  |
 | 应用监听       | `127.0.0.1:3100`                          |
 | Nginx          | 公网 80/443 端口                          |
@@ -221,6 +222,14 @@ systemctl list-timers ai-price-collect.timer --no-pager
 ```bash
 systemctl start ai-price-collect.service
 journalctl -u ai-price-collect.service -f
+```
+
+`ai-price-collect.service` 始终记录为 `manual`；timer 只触发
+`ai-price-collect-scheduled.service` 并记录为 `scheduled`。排查计划任务时读取：
+
+```bash
+systemctl status ai-price-collect-scheduled.service --no-pager
+journalctl -u ai-price-collect-scheduled.service -n 350 --no-pager
 ```
 
 采集结束后：

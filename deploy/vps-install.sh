@@ -238,6 +238,25 @@ Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run collect
+NoNewPrivileges=true
+PrivateTmp=true
+EOF
+
+cat >/etc/systemd/system/ai-price-collect-scheduled.service <<'EOF'
+[Unit]
+Description=Collect AI Price Atlas prices on schedule
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=ai-price
+Group=ai-price
+WorkingDirectory=/opt/ai-price/current
+EnvironmentFile=/etc/ai-price.env
+Environment=NODE_ENV=production
 ExecStart=/usr/bin/npm run collect -- --trigger=scheduled
 NoNewPrivileges=true
 PrivateTmp=true
@@ -251,7 +270,7 @@ Description=Collect AI Price Atlas prices every four hours
 OnCalendar=*-*-* 00/4:00:00
 RandomizedDelaySec=300
 Persistent=true
-Unit=ai-price-collect.service
+Unit=ai-price-collect-scheduled.service
 
 [Install]
 WantedBy=timers.target
