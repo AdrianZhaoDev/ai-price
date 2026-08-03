@@ -238,7 +238,7 @@ Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm run collect
+ExecStart=/usr/bin/npm run collect -- --trigger=scheduled
 NoNewPrivileges=true
 PrivateTmp=true
 EOF

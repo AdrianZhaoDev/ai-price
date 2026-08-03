@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import { createCollectorRegistry } from "@/lib/collectors/registry";
 import { runCollectors } from "@/lib/collectors/runner";
+import { resolveCollectionTrigger } from "@/lib/collectors/trigger";
 import { closeDatabase, isDatabaseConfigured } from "@/lib/db/client";
 import { refreshPricingCacheAfterCollection } from "@/lib/pricing/cache-refresh";
 import { deliverPendingSubscriptionCreatedEmails } from "@/lib/subscriptions/service";
@@ -14,6 +15,10 @@ async function main() {
     ?.slice("--source=".length);
   const acceptPlanCountChange = process.argv.includes(
     "--accept-plan-count-change",
+  );
+  const trigger = resolveCollectionTrigger(
+    process.argv,
+    Boolean(process.env.GITHUB_ACTIONS),
   );
   const registry = createCollectorRegistry();
   const adapters = requested
@@ -51,7 +56,7 @@ async function main() {
   }
 
   const summary = await runCollectors(adapters, {
-    trigger: process.env.GITHUB_ACTIONS ? "github_actions" : "manual",
+    trigger,
     concurrency: Number(process.env.COLLECTOR_CONCURRENCY ?? 5),
     onProgress: console.log,
     acceptPlanCountChange,

@@ -13,6 +13,7 @@ import {
   priceFingerprint,
   type StoredPriceCandidate,
 } from "@/lib/collectors/offer-stability";
+import { shouldEscalateCollectionFailure } from "@/lib/collectors/alert-policy";
 import { providerCatalog } from "@/lib/data/catalog";
 import { getDatabase } from "@/lib/db/client";
 import {
@@ -26,7 +27,7 @@ import {
   providers,
   sources,
 } from "@/lib/db/schema";
-import { and, desc, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray, sql } from "drizzle-orm";
 
 export type SourceReference = {
   id: string;
@@ -528,6 +529,7 @@ export async function recordSuccessfulCollection(input: {
 export async function recordCollectionFailure(input: {
   runId: string;
   sourceId: string;
+  trigger: string;
   code: string;
   message: string;
   details?: Record<string, unknown>;
@@ -539,33 +541,60 @@ export async function recordCollectionFailure(input: {
   const db = getDatabase();
   return db.transaction(async (tx) => {
     await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`collector:${input.sourceId}:${input.code}`}))`,
+      sql`select pg_advisory_xact_lock(hashtext(${`collector:${input.sourceId}`}))`,
     );
     const [source] = await tx
       .select({ consecutiveFailures: sources.consecutiveFailures })
       .from(sources)
       .where(eq(sources.id, input.sourceId))
       .limit(1);
-    const [alertedIncident] = await tx
-      .select({ id: collectionErrors.id })
+    const openIncidents = await tx
+      .select({
+        runId: collectionErrors.collectionRunId,
+        createdAt: collectionErrors.createdAt,
+        alertSentAt: collectionErrors.alertSentAt,
+        runTrigger: collectionRuns.trigger,
+      })
       .from(collectionErrors)
+      .leftJoin(
+        collectionRuns,
+        eq(collectionErrors.collectionRunId, collectionRuns.id),
+      )
       .where(
         and(
           eq(collectionErrors.sourceId, input.sourceId),
-          eq(collectionErrors.code, input.code),
           isNull(collectionErrors.resolvedAt),
-          isNotNull(collectionErrors.alertSentAt),
         ),
-      )
-      .limit(1);
+      );
     const consecutiveFailures = (source?.consecutiveFailures ?? 0) + 1;
-    const shouldAlert =
-      consecutiveFailures >= 3 && alertedIncident === undefined;
-    const alertClaimedAt = shouldAlert ? new Date() : null;
+    const now = new Date();
+    const scheduledRunIds = new Set(
+      openIncidents
+        .filter(
+          (incident) =>
+            incident.runTrigger === "scheduled" && incident.runId !== null,
+        )
+        .map((incident) => incident.runId),
+    );
+    if (input.trigger === "scheduled") scheduledRunIds.add(input.runId);
+    const oldestOpenErrorAt = openIncidents.reduce<Date | null>(
+      (oldest, incident) =>
+        !oldest || incident.createdAt < oldest ? incident.createdAt : oldest,
+      null,
+    );
+    const shouldAlert = shouldEscalateCollectionFailure({
+      alreadyAlerted: openIncidents.some(
+        (incident) => incident.alertSentAt !== null,
+      ),
+      consecutiveScheduledFailures: scheduledRunIds.size,
+      oldestOpenErrorAt,
+      now,
+    });
+    const alertClaimedAt = shouldAlert ? now : null;
 
     await tx
       .update(sources)
-      .set({ consecutiveFailures, updatedAt: new Date() })
+      .set({ consecutiveFailures, updatedAt: now })
       .where(eq(sources.id, input.sourceId));
     const [error] = await tx
       .insert(collectionErrors)

@@ -96,9 +96,9 @@ npm run local:db:down
 - `ADMIN_EMAIL`
 - `EMAIL_TOKEN_SECRET`
 
-仓库内 `.github/workflows/collect-prices.yml` 使用
-`0 */4 * * *`，即每 4 小时运行一次。先迁移数据库，再运行采集；任何来源失败
-会使任务以非零状态结束。
+生产采集由 VPS 的 `ai-price-collect.timer` 每 4 小时运行一次，并以 `scheduled`
+记录触发类型。仓库内 `.github/workflows/collect-prices.yml` 仅供人工触发；它先迁移
+数据库再运行采集，任何来源失败都会使任务以非零状态结束。
 
 CI 不应获得生产数据库和 SMTP 密钥。
 
