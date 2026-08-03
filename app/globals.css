@@ -1184,7 +1184,7 @@ input:focus-visible {
   outline-offset: -2px;
 }
 
-.price-row[data-clickable="true"] > :not(.price-row-action) {
+.price-row[data-clickable="true"] > :not(.price-row-action-cell) {
   position: relative;
   z-index: 2;
   pointer-events: none;

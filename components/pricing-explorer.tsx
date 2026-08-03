@@ -25,7 +25,11 @@ import {
   visibleApiOffers,
 } from "@/lib/pricing/format";
 import { modeHref } from "@/lib/seo";
-import type { ApiRankingChange } from "@/lib/pricing/api-ranking";
+import {
+  apiRankingModelIdentity,
+  inferredApiPriceType,
+  type ApiRankingChange,
+} from "@/lib/pricing/api-ranking";
 import type {
   ModeDefinition,
   PriceChangeSummary,
@@ -89,10 +93,11 @@ type PendingApiTarget = ApiRankingSelection & {
 function rankingMetricForOffer(
   offer: PriceOffer,
 ): ApiRankingMetric | undefined {
-  return offer.priceType === "cached_input" ||
-    offer.priceType === "input" ||
-    offer.priceType === "output"
-    ? offer.priceType
+  const priceType = inferredApiPriceType(offer);
+  return priceType === "cached_input" ||
+    priceType === "input" ||
+    priceType === "output"
+    ? priceType
     : undefined;
 }
 
@@ -420,7 +425,7 @@ export function PricingExplorer({
     if (offerMetric) setRankingMetric(offerMetric);
     setRankingFocusRequest({
       providerId: selectedProvider.id,
-      modelSlug: offer.modelSlug,
+      modelSlug: apiRankingModelIdentity(offer).slug,
       offerId: offer.id,
       requestId: ++rankingFocusRequestIdRef.current,
     });
@@ -917,13 +922,10 @@ export function PricingExplorer({
 
                 <div
                   className={`price-list ${activeMode === "global" ? "price-list-global" : ""}`}
-                  role={activeMode === "api" ? undefined : "table"}
+                  role="table"
                   aria-label="官方价格"
                 >
-                  <div
-                    className="price-list-header"
-                    role={activeMode === "api" ? undefined : "row"}
-                  >
+                  <div className="price-list-header" role="row">
                     {activeMode === "global" ? (
                       <>
                         <span role="columnheader">序号</span>
@@ -936,27 +938,18 @@ export function PricingExplorer({
                       </>
                     ) : (
                       <>
-                        <span
-                          role={
-                            activeMode === "api" ? undefined : "columnheader"
-                          }
-                        >
-                          方案 / 模型
-                        </span>
-                        <span
-                          role={
-                            activeMode === "api" ? undefined : "columnheader"
-                          }
-                        >
+                        <span role="columnheader">方案 / 模型</span>
+                        <span role="columnheader">
                           {activeMode === "api" ? "人民币价格" : "官方价格"}
                         </span>
-                        <span
-                          role={
-                            activeMode === "api" ? undefined : "columnheader"
-                          }
-                        >
+                        <span role="columnheader">
                           {activeMode === "api" ? "计费单位" : "人民币参考"}
                         </span>
+                        {activeMode === "api" ? (
+                          <span role="columnheader" className="sr-only">
+                            排行榜定位
+                          </span>
+                        ) : null}
                       </>
                     )}
                   </div>
@@ -1073,10 +1066,7 @@ export function PricingExplorer({
 
                     const priceCells = (
                       <>
-                        <div
-                          className="price-identity"
-                          role={activeMode === "api" ? undefined : "cell"}
-                        >
+                        <div className="price-identity" role="cell">
                           <span>
                             <strong>
                               {rank ? (
@@ -1099,7 +1089,7 @@ export function PricingExplorer({
                         </div>
                         <div
                           className="official-price"
-                          role={activeMode === "api" ? undefined : "cell"}
+                          role="cell"
                           data-rank={rank}
                         >
                           <strong>
@@ -1150,7 +1140,7 @@ export function PricingExplorer({
                         </div>
                         <div
                           className="converted-price"
-                          role={activeMode === "api" ? undefined : "cell"}
+                          role="cell"
                           data-rank={rank}
                         >
                           {activeMode === "api" ? (
@@ -1175,6 +1165,7 @@ export function PricingExplorer({
                       return (
                         <motion.div
                           className="price-row"
+                          role="row"
                           key={offer.id}
                           data-rank={rank}
                           data-offer-id={offer.id}
@@ -1190,12 +1181,14 @@ export function PricingExplorer({
                           {...rowMotion}
                         >
                           {priceCells}
-                          <button
-                            type="button"
-                            className="price-row-action"
-                            aria-label={`在排行榜中查看 ${offer.planName}`}
-                            onClick={() => focusRankingForOffer(offer)}
-                          />
+                          <div role="cell" className="price-row-action-cell">
+                            <button
+                              type="button"
+                              className="price-row-action"
+                              aria-label={`在排行榜中查看 ${offer.planName}`}
+                              onClick={() => focusRankingForOffer(offer)}
+                            />
+                          </div>
                         </motion.div>
                       );
                     }

@@ -609,6 +609,12 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   });
   await expect(deepSeekButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".status-chip")).toHaveCount(0);
+  const apiPriceTable = page.getByRole("table", { name: "官方价格" });
+  await expect(apiPriceTable).toBeVisible();
+  await expect(
+    apiPriceTable.getByRole("columnheader", { name: "方案 / 模型" }),
+  ).toBeVisible();
+  expect(await apiPriceTable.getByRole("cell").count()).toBeGreaterThan(0);
 
   const apiRows = page.locator(".price-list > .price-row");
   if ((await apiRows.count()) > 0) {
@@ -639,6 +645,21 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
       await page.locator(".price-list > .price-row").count(),
     ).toBeGreaterThan(collapsedApiRowCount);
   }
+
+  const siliconFlowCachedRow = page.locator(
+    '.price-row[data-offer-id="siliconflow-v4-flash-cache"]',
+  );
+  await siliconFlowCachedRow.click();
+  await expect(
+    page
+      .locator(".api-ranking-desktop .api-ranking-switch")
+      .getByRole("button", { name: "缓存输入", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"][data-provider-id="siliconflow-api"][data-model-slug="deepseek-v4-flash"][data-offer-id="siliconflow-v4-flash-cache"]',
+    ),
+  ).toBeVisible();
 
   const geminiButton = page.locator(
     '.provider-button[data-provider-id="gemini-api"]',

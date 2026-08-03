@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  apiRankingModelIdentity,
   apiRankingEntries,
   findRankingFocusEntry,
+  inferredApiPriceType,
   rankingCnyValue,
 } from "@/lib/pricing/api-ranking";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
@@ -178,5 +180,19 @@ describe("API ranking", () => {
         "input",
       ),
     ).toBeUndefined();
+  });
+
+  it("infers fallback offer metadata with the same ranking rules", () => {
+    const fallback = offer("Unused", 0, undefined, 2, {
+      planName: "DeepSeek-V4-Flash · 缓存命中",
+      modelName: undefined,
+      modelSlug: undefined,
+    });
+
+    expect(inferredApiPriceType(fallback)).toBe("cached_input");
+    expect(apiRankingModelIdentity(fallback)).toEqual({
+      slug: "deepseek-v4-flash",
+      name: "DeepSeek-V4-Flash",
+    });
   });
 });

@@ -56,7 +56,7 @@ export function rankingCnyValue(offer: PriceOffer | undefined): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function inferredPriceType(offer: PriceOffer): ApiPriceType {
+export function inferredApiPriceType(offer: PriceOffer): ApiPriceType {
   if (offer.priceType) return offer.priceType;
   const text = offer.planName.toLowerCase();
   if (/缓存.*写|cache.*write/.test(text)) return "cache_write";
@@ -71,7 +71,7 @@ function metricOffer(
   type: ApiRankingMetric,
 ): PriceOffer | undefined {
   return offers
-    .filter((offer) => inferredPriceType(offer) === type)
+    .filter((offer) => inferredApiPriceType(offer) === type)
     .sort(
       (a, b) =>
         (a.tierOrder ?? 0) - (b.tierOrder ?? 0) ||
@@ -97,16 +97,18 @@ export function findRankingFocusEntry(
 ): ApiRankingEntry | undefined {
   return entries.find((entry) => {
     if (entry.providerId !== focus.providerId) return false;
-    if (!focus.modelSlug) return true;
-    if (entry.modelSlug !== focus.modelSlug) return false;
-    return (
-      !focus.offerId ||
-      rankingOfferForMetric(entry, metric)?.id === focus.offerId
-    );
+    if (focus.modelSlug && entry.modelSlug !== focus.modelSlug) return false;
+    if (focus.offerId) {
+      return rankingOfferForMetric(entry, metric)?.id === focus.offerId;
+    }
+    return true;
   });
 }
 
-function modelIdentity(offer: PriceOffer): { slug: string; name: string } {
+export function apiRankingModelIdentity(offer: PriceOffer): {
+  slug: string;
+  name: string;
+} {
   const name =
     offer.modelName ?? offer.planName.split(/\s*·\s*/)[0]?.trim() ?? "模型";
   return {
@@ -135,7 +137,7 @@ export function apiRankingEntries(
       { name: string; order: number; offers: PriceOffer[] }
     >();
     for (const offer of tokenOffers) {
-      const identity = modelIdentity(offer);
+      const identity = apiRankingModelIdentity(offer);
       const current = models.get(identity.slug);
       if (current) {
         current.offers.push(offer);
