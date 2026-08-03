@@ -112,6 +112,41 @@ access log。每天报告：
 - 2xx/3xx/4xx/5xx 数量、比例与主要路径；
 - 爬虫、漏洞扫描和真人访问必须尽量分开。
 
+Nginx 统计必须解析 `ai_price` JSON access log，并分别计算过去 24 小时与前 24 小时。
+按 `uri` 统计，不得尝试恢复或报告查询参数；至少输出路径 × 状态码 Top 20、请求耗时
+P50/P75/P95，以及以下互斥分类：
+
+- `scanner_404`：404 且路径符合常见探测目标，例如 `.env`、`.git`、WordPress、PHP、
+  phpMyAdmin、cgi-bin 或随机漏洞路径；
+- `application_4xx`：已知应用路由或接口产生的 400/401/403/404/409/429；
+- `client_cancelled_499`：客户端或边缘在源站响应前断开；
+- `other_4xx`：无法归入以上类别的其他 4xx，列出主要路径供复核；
+- `origin_5xx`：Nginx access log 中的 5xx；Cloudflare 边缘 5xx 另取边缘数据，不得混算。
+
+分类依据必须随数字写入报告。随机扫描 404 和 499 不得直接判定为应用故障；已知核心
+页面或应用接口持续产生 4xx/5xx 才升级处理。`user_agent` 仅用于“浏览器型、未验证
+爬虫 UA、扫描器”粗分，搜索爬虫仍须完成双向 DNS 校验后才能标为已验证。
+日志格式切换后的首个 24 小时窗口可能同时包含旧 combined 行和新 JSON 行；旧行计入
+`legacy_format` 数据缺口，不得让解析失败，也不得与 JSON 分类结果混算。
+
+Cloudflare Zaraz 可用时，读取以下匿名 Track 事件并报告事件数和属性分布：
+
+- `pricing_provider_selected`；
+- `pricing_sort_changed`；
+- `subscription_sheet_opened`；
+- `subscription_submit_succeeded`；
+- `subscription_submit_failed`。
+
+订阅转化率固定为 `subscription_submit_succeeded / subscription_sheet_opened`，同时
+报告失败率；分母为 0 时写“无可计算样本”，不得写 0%。属性只允许页面模式、供应商
+ID、订阅类型、套餐范围、排序方向和枚举结果，禁止出现邮箱、token、自由文本错误、
+URL 或查询参数。Web Analytics/RUM 继续用于访问和 CWV，不能把它冒充 Zaraz 自定义
+事件数据。Zaraz 未启用、Monitoring API 无权限、登录失效和窗口内真实 0 次事件必须
+分别标记。
+失败原因只允许 `http`、`network`、`invalid_response` 和 `fallback_available`；
+`fallback_available` 表示原订阅失败但用户仍可改订排行榜，若之后成功应同时记录一次
+成功事件。
+
 日志口径限制必须随报告一起写明：
 
 - Nginx 记录请求，不等同于用户、会话或页面浏览；

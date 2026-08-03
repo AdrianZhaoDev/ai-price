@@ -4,6 +4,34 @@ async function waitForPricingHydration(page: import("@playwright/test").Page) {
   await expect(page.locator('.app-shell[data-hydrated="true"]')).toBeVisible();
 }
 
+type CapturedTrafficEvent = {
+  event: string;
+  properties?: Record<string, string>;
+};
+
+async function captureTrafficEvents(page: import("@playwright/test").Page) {
+  await page.addInitScript(() => {
+    const target = window as typeof window & {
+      __trafficEvents?: CapturedTrafficEvent[];
+    };
+    target.__trafficEvents = [];
+    window.zaraz = {
+      track: (event, properties) => {
+        target.__trafficEvents?.push({ event, properties });
+      },
+    };
+  });
+}
+
+async function readTrafficEvents(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const target = window as typeof window & {
+      __trafficEvents?: CapturedTrafficEvent[];
+    };
+    return target.__trafficEvents ?? [];
+  });
+}
+
 test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
@@ -171,6 +199,89 @@ test("submits a real subscription payload without an autofill honeypot", async (
   expect(requestPayload).not.toHaveProperty("website");
 });
 
+test("tracks an anonymous pricing-to-subscription conversion", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Event payloads are device-independent.");
+  await captureTrafficEvents(page);
+  await page.route("**/api/subscriptions", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "private@example.com",
+        message: "您已订阅成功！",
+      }),
+    }),
+  );
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.locator('.provider-button[data-provider-id="chatgpt"]').click();
+  await page
+    .getByRole("button", { name: "当前低价优先，点击改为高价优先" })
+    .click();
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("private@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+  await expect(
+    page.getByRole("heading", { name: "您已订阅成功！" }),
+  ).toBeVisible();
+
+  const events = await readTrafficEvents(page);
+  expect(events.map((entry) => entry.event)).toEqual([
+    "pricing_provider_selected",
+    "pricing_sort_changed",
+    "subscription_sheet_opened",
+    "subscription_submit_succeeded",
+  ]);
+  expect(events.at(-1)?.properties).toMatchObject({
+    mode: "global",
+    provider_id: "chatgpt",
+    subscription_type: "price",
+    plan_scope: "plan",
+    result: "subscribed",
+  });
+  expect(JSON.stringify(events)).not.toContain("private@example.com");
+});
+
+test("tracks subscription failures without the email or error text", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Event payloads are device-independent.");
+  await captureTrafficEvents(page);
+  await page.route("**/api/subscriptions", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "private backend diagnostic" }),
+    }),
+  );
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("private@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+  await expect(page.locator("#subscription-error")).toBeVisible();
+
+  const events = await readTrafficEvents(page);
+  expect(events.at(-1)).toEqual({
+    event: "subscription_submit_failed",
+    properties: {
+      mode: "global",
+      provider_id: "chatgpt",
+      subscription_type: "price",
+      plan_scope: "plan",
+      failure_kind: "http",
+    },
+  });
+  expect(JSON.stringify(events)).not.toContain("private@example.com");
+  expect(JSON.stringify(events)).not.toContain("private backend diagnostic");
+});
+
 test("shows the remaining cooldown measured from the previous accepted click", async ({
   page,
 }) => {
@@ -200,6 +311,7 @@ test("shows the remaining cooldown measured from the previous accepted click", a
 test("offers one-click ranking fallback and reuses the entered email", async ({
   page,
 }) => {
+  await captureTrafficEvents(page);
   const payloads: Array<Record<string, unknown>> = [];
   await page.route("**/api/subscriptions", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -240,6 +352,48 @@ test("offers one-click ranking fallback and reuses the entered email", async ({
     email: "reader@example.com",
     rankingFallback: true,
   });
+  const events = await readTrafficEvents(page);
+  expect(events.map((entry) => entry.event)).toEqual([
+    "subscription_sheet_opened",
+    "subscription_submit_failed",
+    "subscription_submit_succeeded",
+  ]);
+  expect(events[1]?.properties).toMatchObject({
+    failure_kind: "fallback_available",
+  });
+  expect(events[2]?.properties).toMatchObject({
+    result: "fallback_subscribed",
+  });
+  expect(JSON.stringify(events)).not.toContain("reader@example.com");
+});
+
+test("classifies an invalid subscription response without exposing it", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Event payloads are device-independent.");
+  await captureTrafficEvents(page);
+  await page.route("**/api/subscriptions", (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: "text/html",
+      body: "<p>private upstream response</p>",
+    }),
+  );
+
+  await page.goto("/");
+  await waitForPricingHydration(page);
+  await page.getByRole("button", { name: "关注价格" }).click();
+  await page.getByLabel("邮箱").fill("private@example.com");
+  await page.getByRole("button", { name: "立即订阅" }).click();
+  await expect(page.locator("#subscription-error")).toBeVisible();
+
+  const events = await readTrafficEvents(page);
+  expect(events.at(-1)?.properties).toMatchObject({
+    failure_kind: "invalid_response",
+  });
+  expect(JSON.stringify(events)).not.toContain("private@example.com");
+  expect(JSON.stringify(events)).not.toContain("private upstream response");
 });
 
 test("submits the regular ranking subscription", async ({ page }) => {
