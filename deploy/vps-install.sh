@@ -260,10 +260,31 @@ EOF
 install -d -o root -g root -m 0755 /var/www/html/.well-known/acme-challenge
 
 cat >/etc/nginx/sites-available/ai-price <<'EOF'
+map $http_referer $ai_price_referer {
+    ~^(?<ai_price_referer_without_query>[^?]*) $ai_price_referer_without_query;
+    default "-";
+}
+
+log_format ai_price escape=json
+    '{"time":"$time_iso8601",'
+    '"remote_addr":"$remote_addr",'
+    '"method":"$request_method",'
+    '"uri":"$uri",'
+    '"status":$status,'
+    '"bytes":$body_bytes_sent,'
+    '"referer":"$ai_price_referer",'
+    '"user_agent":"$http_user_agent",'
+    '"request_time":$request_time,'
+    '"upstream_response_time":"$upstream_response_time",'
+    '"upstream_status":"$upstream_status",'
+    '"cf_ray":"$http_cf_ray",'
+    '"request_id":"$request_id"}';
+
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+    access_log /var/log/nginx/access.log ai_price;
 
     return 444;
 }
@@ -272,6 +293,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name lowpriceradar.com www.lowpriceradar.com ai.lowpriceradar.com;
+    access_log /var/log/nginx/access.log ai_price;
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -288,6 +310,7 @@ server {
     listen 443 ssl http2 default_server;
     listen [::]:443 ssl http2 default_server;
     server_name _;
+    access_log /var/log/nginx/access.log ai_price;
 
     ssl_reject_handshake on;
 }
@@ -296,6 +319,7 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name lowpriceradar.com;
+    access_log /var/log/nginx/access.log ai_price;
 
     ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/lowpriceradar.com/privkey.pem;
@@ -345,6 +369,7 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name www.lowpriceradar.com ai.lowpriceradar.com;
+    access_log /var/log/nginx/access.log ai_price;
 
     ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/lowpriceradar.com/privkey.pem;

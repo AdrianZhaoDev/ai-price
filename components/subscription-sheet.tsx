@@ -2,12 +2,15 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { Bell, Check, X } from "lucide-react";
+import { trackTrafficEvent } from "@/lib/analytics/traffic";
+import type { PriceMode } from "@/lib/pricing/types";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type SubscriptionSheetProps = {
   open: boolean;
   scopeLabel: string;
   providerId: string;
+  mode: PriceMode;
   planId?: string;
   subscriptionType?: "price" | "api_ranking";
   onClose: () => void;
@@ -21,11 +24,32 @@ type SubmitState =
   | "fallback_confirm"
   | "fallback_submitting";
 type SubscriptionResultStatus = "subscribed" | "already_subscribed";
+type SubscriptionFailureKind =
+  "http" | "network" | "invalid_response" | "fallback_available";
+
+class SubscriptionRequestError extends Error {
+  constructor(
+    readonly failureKind: Exclude<
+      SubscriptionFailureKind,
+      "fallback_available"
+    >,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function failureKind(error: unknown): SubscriptionFailureKind {
+  return error instanceof SubscriptionRequestError
+    ? error.failureKind
+    : "invalid_response";
+}
 
 export function SubscriptionSheet({
   open,
   scopeLabel,
   providerId,
+  mode,
   planId,
   subscriptionType = "price",
   onClose,
@@ -107,18 +131,39 @@ export function SubscriptionSheet({
     code?: string;
     rankingFallbackAllowed?: boolean;
   }> {
-    const response = await fetch("/api/subscriptions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const result = (await response.json()) as {
+    let response: Response;
+    try {
+      response = await fetch("/api/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new SubscriptionRequestError(
+        "network",
+        "网络连接失败，请稍后重试。",
+      );
+    }
+
+    let result: {
       message?: string;
-      status?: SubscriptionResultStatus;
+      status?: unknown;
       code?: string;
       rankingFallbackAllowed?: boolean;
     };
-    return { ok: response.ok, ...result };
+    try {
+      result = (await response.json()) as typeof result;
+    } catch {
+      throw new SubscriptionRequestError(
+        "invalid_response",
+        "服务响应异常，请稍后重试。",
+      );
+    }
+    const status: SubscriptionResultStatus | undefined =
+      result.status === "subscribed" || result.status === "already_subscribed"
+        ? result.status
+        : undefined;
+    return { ok: response.ok, ...result, status };
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -157,19 +202,58 @@ export function SubscriptionSheet({
         result.code === "subscription_limit" &&
         result.rankingFallbackAllowed
       ) {
+        trackTrafficEvent("subscription_submit_failed", {
+          mode,
+          provider_id: providerId,
+          subscription_type: subscriptionType,
+          plan_scope:
+            subscriptionType === "api_ranking"
+              ? "api_ranking"
+              : planId
+                ? "plan"
+                : "provider",
+          failure_kind: "fallback_available",
+        });
         setState("fallback_confirm");
         setMessage(result.message ?? "");
         return;
       }
       if (!result.ok) {
-        throw new Error(result.message || "暂时无法创建订阅，请稍后重试。");
+        throw new SubscriptionRequestError(
+          "http",
+          result.message || "暂时无法创建订阅，请稍后重试。",
+        );
       }
 
       setState("success");
       setMessage(result.message || "您已订阅成功！");
       setResultStatus("subscribed");
       lastSuccessfulSubscriptionRef.current = subscriptionKey;
+      trackTrafficEvent("subscription_submit_succeeded", {
+        mode,
+        provider_id: providerId,
+        subscription_type: subscriptionType,
+        plan_scope:
+          subscriptionType === "api_ranking"
+            ? "api_ranking"
+            : planId
+              ? "plan"
+              : "provider",
+        result: result.status ?? "subscribed",
+      });
     } catch (error) {
+      trackTrafficEvent("subscription_submit_failed", {
+        mode,
+        provider_id: providerId,
+        subscription_type: subscriptionType,
+        plan_scope:
+          subscriptionType === "api_ranking"
+            ? "api_ranking"
+            : planId
+              ? "plan"
+              : "provider",
+        failure_kind: failureKind(error),
+      });
       setState("error");
       setMessage(
         error instanceof Error
@@ -189,13 +273,30 @@ export function SubscriptionSheet({
         rankingFallback: true,
       });
       if (!result.ok) {
-        throw new Error(result.message || "暂时无法创建订阅，请稍后重试。");
+        throw new SubscriptionRequestError(
+          "http",
+          result.message || "暂时无法创建订阅，请稍后重试。",
+        );
       }
       setState("success");
       setMessage(result.message || "您已订阅成功！");
       setResultStatus("subscribed");
       lastSuccessfulSubscriptionRef.current = `${email.trim().toLowerCase()}:api_ranking:api-ranking:*`;
+      trackTrafficEvent("subscription_submit_succeeded", {
+        mode,
+        provider_id: providerId,
+        subscription_type: "api_ranking",
+        plan_scope: "api_ranking",
+        result: "fallback_subscribed",
+      });
     } catch (error) {
+      trackTrafficEvent("subscription_submit_failed", {
+        mode,
+        provider_id: providerId,
+        subscription_type: "api_ranking",
+        plan_scope: "api_ranking",
+        failure_kind: failureKind(error),
+      });
       setState("error");
       setMessage(
         error instanceof Error

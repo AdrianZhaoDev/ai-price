@@ -64,6 +64,8 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
   `Always Use HTTPS` 为避免 `http://www` 两跳而关闭，HTTP 主域和 `ai` 继续由
   Nginx 一跳到规范 HTTPS 主域；
 - 项目代码未发现 Google Analytics、Plausible、Umami、PostHog 或 Clarity；
+- 价格页使用 Cloudflare Zaraz Track 记录匿名交互和订阅漏斗；只有 Zaraz 在生产 Zone
+  启用且 Monitoring 数据可读时才能报告事件值，Web Analytics 不替代自定义事件；
 - Nginx access log 可用于请求级估算，但不能替代用户、会话和参与度分析；
 - 因 Cloudflare 代理和静态缓存存在，源站日志既可能看到边缘 IP，也可能遗漏缓存
   命中请求，所有“访客”字段必须标为估算。

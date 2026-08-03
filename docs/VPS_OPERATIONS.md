@@ -137,6 +137,16 @@ sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'runs=' || count(*) FROM collection_runs"
 systemctl list-timers ai-price-collect.timer --no-pager
 journalctl -u ai-price.service --since "-10 minutes" --no-pager
+nginx -t
+tail -n 1 /var/log/nginx/access.log | python3 -c '
+import json, sys
+row = json.load(sys.stdin)
+required = {"time", "remote_addr", "method", "uri", "status", "bytes", "referer", "user_agent", "request_time", "upstream_response_time", "upstream_status", "cf_ray", "request_id"}
+missing = required - row.keys()
+assert not missing, f"missing access-log fields: {sorted(missing)}"
+assert "?" not in row["uri"], "access log URI unexpectedly contains a query string"
+print("access-log-schema=ok")
+'
 ```
 
 启用 Neon 同步时还要执行：
@@ -153,7 +163,13 @@ sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
 
 验收条件：五个服务/timer 均为 `active`，源站 HTTPS 和公网均为 `200`，HTTP
 一跳 `301` 到主站 HTTPS，错误页未登录时重定向，数据库记录大于 0，timer 有
-下次运行时间，证书剩余至少 14 天，Web 日志无持续重启或连接错误。
+下次运行时间，证书剩余至少 14 天，Web 日志无持续重启或连接错误，Nginx 配置
+检查通过且最新 access log 是符合上述字段要求的 JSON。
+
+生产 access log 使用站点级 `ai_price` JSON 格式。`uri` 和 `referer` 均不记录查询
+参数；字段包含请求方法、状态、响应字节、User-Agent、请求/上游耗时、上游状态、
+Cloudflare Ray ID 和 Nginx request ID。`remote_addr` 在 Cloudflare 代理下通常是边缘
+节点地址，不能直接当作访客 IP；上游字段为 `-` 表示该请求没有进入应用上游。
 
 ### 3.4 GitHub 不可用时的手工回退
 

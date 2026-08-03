@@ -7,6 +7,7 @@ import {
   type ApiRankingSelection,
 } from "@/components/api-price-ranking";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { trackTrafficEvent } from "@/lib/analytics/traffic";
 import {
   compareCnyPrice,
   API_INITIAL_VISIBLE_COUNT,
@@ -223,11 +224,25 @@ export function PricingExplorer({
     onVersionChange: refreshPricingData,
   });
 
-  const openSubscriptionSheet = useCallback((type: "price" | "api_ranking") => {
-    setSubscriptionType(type);
-    setSheetLoaded(true);
-    setSheetOpen(true);
-  }, []);
+  const openSubscriptionSheet = useCallback(
+    (type: "price" | "api_ranking") => {
+      trackTrafficEvent("subscription_sheet_opened", {
+        mode: activeMode,
+        provider_id: selectedProviderId,
+        subscription_type: type,
+        plan_scope:
+          type === "api_ranking"
+            ? "api_ranking"
+            : activeMode === "global" && selectedPlanId
+              ? "plan"
+              : "provider",
+      });
+      setSubscriptionType(type);
+      setSheetLoaded(true);
+      setSheetOpen(true);
+    },
+    [activeMode, selectedPlanId, selectedProviderId],
+  );
 
   const modeProviders = useMemo(
     () =>
@@ -355,6 +370,10 @@ export function PricingExplorer({
   );
 
   async function selectProvider(provider: ProviderCatalogItem) {
+    trackTrafficEvent("pricing_provider_selected", {
+      mode: activeMode,
+      provider_id: provider.id,
+    });
     const selectionId = ++providerSelectionIdRef.current;
     setSelectedProviderId(provider.id);
     setSelectedPlanId(defaultPlanId(provider));
@@ -389,6 +408,10 @@ export function PricingExplorer({
       (item) => item.id === selection.providerId,
     );
     if (!provider) return;
+    trackTrafficEvent("pricing_provider_selected", {
+      mode: activeMode,
+      provider_id: provider.id,
+    });
     const selectionId = ++providerSelectionIdRef.current;
     setSelectedProviderId(provider.id);
     setSelectedPlanId(defaultPlanId(provider));
@@ -567,6 +590,16 @@ export function PricingExplorer({
     activeMode === "global" && selectedPlan
       ? `${selectedProvider.name} · ${selectedPlan.name}`
       : selectedProvider.name;
+
+  function toggleSortDirection() {
+    const nextDirection = sortDirection === "desc" ? "asc" : "desc";
+    trackTrafficEvent("pricing_sort_changed", {
+      mode: activeMode,
+      provider_id: selectedProvider.id,
+      sort_direction: nextDirection,
+    });
+    setSortDirection(nextDirection);
+  }
 
   return (
     <div className="app-shell" data-hydrated={hydrated}>
@@ -815,11 +848,7 @@ export function PricingExplorer({
                     <button
                       type="button"
                       className="sort-button pressable"
-                      onClick={() =>
-                        setSortDirection((value) =>
-                          value === "desc" ? "asc" : "desc",
-                        )
-                      }
+                      onClick={toggleSortDirection}
                       aria-label={
                         sortDirection === "desc"
                           ? "当前高价优先，点击改为低价优先"
@@ -1211,6 +1240,7 @@ export function PricingExplorer({
           open={sheetOpen}
           scopeLabel={subscriptionScope}
           providerId={selectedProvider.id}
+          mode={activeMode}
           subscriptionType={subscriptionType}
           planId={
             activeMode === "global" ? (selectedPlanId ?? undefined) : undefined
