@@ -2960,9 +2960,29 @@ input:focus-visible {
   color: var(--tint);
 }
 
+.price-index-links a[data-pending="true"] {
+  cursor: progress;
+  background: var(--tint-soft);
+  color: var(--tint);
+}
+
+.price-index-links a[data-pending="true"] small {
+  color: var(--tint);
+}
+
+.price-index-spinner {
+  animation: price-index-spin 700ms linear infinite;
+}
+
 .price-index-links a:hover svg,
 .price-index-links a:focus-visible svg {
   transform: translate(4px, -4px);
+}
+
+@keyframes price-index-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .landing-footer {
