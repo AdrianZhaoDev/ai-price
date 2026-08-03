@@ -387,6 +387,8 @@ describe("maintainable API pricing rules", () => {
 | Claude Fable 5 | $10 / MTok | $1 / MTok | $50 / MTok |
 | Claude Sonnet 5through August 31, 2026 | $2 / MTok | $0.20 / MTok | $10 / MTok |
 | Claude Sonnet 5starting September 1, 2026 | $3 / MTok | $0.30 / MTok | $15 / MTok |
+| Claude Opus 5.1 | $8 / MTok | $0.80 / MTok | $40 / MTok |
+| Claude Haiku 4.5.1 | $2 / MTok | $0.20 / MTok | $10 / MTok |
 | Claude Opus 4.5 | $5 / MTok | $0.50 / MTok | $25 / MTok |`),
     );
     expect([...new Set(claude.map((offer) => offer.modelName))]).toEqual([
