@@ -374,7 +374,7 @@ function RelatedPricePages({ data }: { data: LandingPageData }) {
       </div>
       <div className="landing-related-links">
         {related.map((page) => (
-          <Link key={page.slug} href={`/${page.slug}`}>
+          <Link key={page.slug} href={`/${page.slug}`} prefetch={false}>
             <span>{page.heading}</span>
             <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
@@ -598,6 +598,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                       key={`${model.providerId}-${model.slug}`}
                       href={`/api-pricing?provider=${encodeURIComponent(model.providerId)}&model=${encodeURIComponent(model.slug)}`}
                       className="landing-model-link"
+                      prefetch={false}
                     >
                       <span>
                         <strong>{model.name}</strong>

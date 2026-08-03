@@ -1142,7 +1142,7 @@ export function PricingExplorer({
             </div>
             <div className="price-index-links">
               {priceIndexLinks.map((link) => (
-                <Link key={link.href} href={link.href}>
+                <Link key={link.href} href={link.href} prefetch={false}>
                   <span>
                     <strong>{link.label}</strong>
                     <small>{link.description}</small>

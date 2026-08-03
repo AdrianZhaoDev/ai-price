@@ -55,6 +55,27 @@ const landingPaths = [
   "/teleai-price",
 ] as const;
 
+const crawlablePaths = [
+  ...publicPages.map((entry) => entry.path),
+  ...landingPaths,
+  "/methodology",
+  "/privacy",
+] as const;
+
+function internalPath(href: string): string | undefined {
+  if (
+    href.startsWith("#") ||
+    href.startsWith("mailto:") ||
+    href.startsWith("tel:")
+  ) {
+    return undefined;
+  }
+  const url = new URL(href, "http://127.0.0.1");
+  return url.origin === "http://127.0.0.1"
+    ? `${url.pathname}${url.search}`
+    : undefined;
+}
+
 test("publishes distinct indexable pricing pages and structured data", async ({
   page,
   isMobile,
@@ -245,4 +266,80 @@ test("publishes crawler controls without blocking the API pricing page", async (
   });
   expect(faviconResponse.ok()).toBe(true);
   expect(faviconResponse.headers()["content-type"]).toContain("image/svg+xml");
+});
+
+test("all public pages expose valid internal link targets", async ({
+  page,
+  request,
+  isMobile,
+}) => {
+  test.setTimeout(180_000);
+  test.skip(isMobile, "The link graph is device-independent.");
+  const targets = new Set<string>();
+
+  for (const path of crawlablePaths) {
+    const response = await page.goto(path);
+    expect(response?.ok(), `page ${path} should load`).toBe(true);
+    const hrefs = await page
+      .locator("a[href]")
+      .evaluateAll((links) =>
+        links.map((link) => link.getAttribute("href") ?? ""),
+      );
+    for (const href of hrefs) {
+      expect(href, `${path} contains an empty link`).not.toBe("");
+      expect(href, `${path} contains a JavaScript link`).not.toMatch(
+        /^javascript:/i,
+      );
+      const target = internalPath(href);
+      if (target) targets.add(target);
+    }
+  }
+
+  for (const target of targets) {
+    const response = await request.get(target);
+    expect(
+      response.status(),
+      `internal link target ${target} should return a non-error response`,
+    ).toBeLessThan(400);
+  }
+});
+
+test("repeated navigation components perform real browser navigation", async ({
+  page,
+  isMobile,
+}) => {
+  test.setTimeout(120_000);
+  test.skip(isMobile, "Desktop covers the shared link components.");
+
+  await page.goto("/api-pricing");
+  const priceIndexLink = page.locator(".price-index-links a").first();
+  const priceIndexTarget = await priceIndexLink.getAttribute("href");
+  expect(priceIndexTarget).toBeTruthy();
+  await priceIndexLink.click();
+  await expect(page).toHaveURL(new RegExp(`${priceIndexTarget}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.goto("/chatgpt-plus-price");
+  const relatedLink = page.locator(".landing-related-links a").first();
+  const relatedTarget = await relatedLink.getAttribute("href");
+  expect(relatedTarget).toBeTruthy();
+  await relatedLink.click();
+  await expect(page).toHaveURL(new RegExp(`${relatedTarget}$`));
+
+  await page.goto("/deepseek-price");
+  const ctaLink = page.locator(".landing-cta-link").first();
+  const ctaTarget = await ctaLink.getAttribute("href");
+  expect(ctaTarget).toBeTruthy();
+  await ctaLink.click();
+  await expect(page).toHaveURL(new RegExp(ctaTarget!.replace("?", "\\?")));
+  await expect(
+    page.locator('.provider-button[data-provider-id="deepseek-api"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto("/methodology");
+  await page.locator(".document-back").click();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.locator('.footer-links a[href="/privacy"]').click();
+  await expect(page).toHaveURL(/\/privacy$/);
 });
