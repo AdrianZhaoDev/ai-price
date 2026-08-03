@@ -64,4 +64,12 @@ describe("catalog contract", () => {
       }
     }
   });
+
+  it("keeps the Grok fallback catalog on the current mainline allowlist", () => {
+    const grok = providerCatalog.find((provider) => provider.id === "grok-api");
+    expect(grok).toBeDefined();
+    expect(new Set(grok?.offers.map((offer) => offer.modelSlug))).toEqual(
+      new Set(["grok-4-5", "grok-4-3"]),
+    );
+  });
 });

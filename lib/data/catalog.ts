@@ -2040,7 +2040,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
     lastCheckedAt: globalApiObservedAt,
     offers: globalApiOffers("grok-api", [
       { name: "grok-4.5", cached: 0.3, input: 2, output: 6 },
-      { name: "grok-build-0.1", cached: 0.2, input: 1, output: 2 },
+      { name: "grok-4.3", cached: 0.2, input: 1.25, output: 2.5 },
     ]),
   },
 ];

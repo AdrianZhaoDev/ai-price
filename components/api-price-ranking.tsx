@@ -83,6 +83,7 @@ export function ApiPriceRanking({
   const titleId = useId();
   const entryRefs = useRef(new Map<string, HTMLButtonElement>());
   const highlightedEntryRef = useRef<HTMLButtonElement | null>(null);
+  const processedFocusRequestIdRef = useRef(0);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -102,6 +103,8 @@ export function ApiPriceRanking({
 
   useEffect(() => {
     if (!focusRequest) return;
+    if (focusRequest.requestId <= processedFocusRequestIdRef.current) return;
+    processedFocusRequestIdRef.current = focusRequest.requestId;
     highlightedEntryRef.current?.removeAttribute("data-highlighted");
     highlightedEntryRef.current = null;
     if (highlightTimeoutRef.current) {

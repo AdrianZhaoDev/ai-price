@@ -659,6 +659,21 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
   await outputMetric.click();
   await geminiButton.click();
   await expect(outputMetric).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"]',
+    ),
+  ).toHaveCount(1);
+  await page.waitForTimeout(3_100);
+  await page
+    .locator(".api-ranking-desktop .api-ranking-switch")
+    .getByRole("button", { name: "非缓存输入" })
+    .click();
+  await expect(
+    page.locator(
+      '.api-ranking-desktop .api-ranking-entry[data-highlighted="true"]',
+    ),
+  ).toHaveCount(0);
 
   const firstRankingEntry = page
     .locator(
