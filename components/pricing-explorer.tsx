@@ -1173,16 +1173,13 @@ export function PricingExplorer({
 
                     if (activeMode === "api") {
                       return (
-                        <motion.button
-                          type="button"
+                        <motion.div
                           className="price-row"
                           key={offer.id}
                           data-rank={rank}
                           data-offer-id={offer.id}
                           data-model-slug={offer.modelSlug}
                           data-clickable="true"
-                          aria-label={`在排行榜中查看 ${offer.planName}`}
-                          onClick={() => focusRankingForOffer(offer)}
                           ref={(node) => {
                             if (node) {
                               priceRowRefs.current.set(offer.id, node);
@@ -1193,7 +1190,13 @@ export function PricingExplorer({
                           {...rowMotion}
                         >
                           {priceCells}
-                        </motion.button>
+                          <button
+                            type="button"
+                            className="price-row-action"
+                            aria-label={`在排行榜中查看 ${offer.planName}`}
+                            onClick={() => focusRankingForOffer(offer)}
+                          />
+                        </motion.div>
                       );
                     }
 

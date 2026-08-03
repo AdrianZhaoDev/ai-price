@@ -602,6 +602,7 @@ test("shows ranked RMB prices without duplicate or status-only plans", async ({
     page.getByRole("heading", { name: "API 价格排行榜", exact: true }),
   ).toBeVisible();
   await waitForPricingHydration(page);
+  await expect(page.locator("button button")).toHaveCount(0);
   const deepSeekButton = page.getByRole("button", {
     name: "DeepSeek",
     exact: true,

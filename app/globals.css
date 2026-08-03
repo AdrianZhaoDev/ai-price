@@ -1151,6 +1151,7 @@ input:focus-visible {
 }
 
 .price-row[data-clickable="true"] {
+  position: relative;
   width: 100%;
   border-right: 0;
   border-bottom: 0;
@@ -1164,13 +1165,33 @@ input:focus-visible {
 }
 
 .price-row[data-clickable="true"]:hover,
-.price-row[data-clickable="true"]:focus-visible {
+.price-row[data-clickable="true"]:focus-within {
   background-color: color-mix(in srgb, var(--tint-soft) 36%, transparent);
 }
 
-.price-row[data-clickable="true"]:focus-visible {
+.price-row-action {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.price-row-action:focus-visible {
   outline: 2px solid var(--tint);
   outline-offset: -2px;
+}
+
+.price-row[data-clickable="true"] > :not(.price-row-action) {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.price-row[data-clickable="true"] .change-badge-wrap {
+  pointer-events: auto;
 }
 
 @keyframes price-row-target-pulse {
