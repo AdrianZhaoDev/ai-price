@@ -17,31 +17,36 @@ const rankingMetrics: ApiRankingMetric[] = ["cached_input", "input", "output"];
 export function prepareProvidersForClient(
   providers: ProviderCatalogItem[],
   mode: PriceMode,
+  preferredProviderId?: string,
 ): {
   providers: ProviderCatalogItem[];
   deferredProviderIds: string[];
 } {
-  if (mode !== "api") {
-    return { providers, deferredProviderIds: [] };
-  }
-
   const sortedProviders = [...providers].sort(
     (a, b) =>
       (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER),
   );
-  const primaryProvider = sortedProviders.find(
-    (provider) => displayableOffers(provider.offers).length > 0,
-  );
+  const primaryProvider =
+    sortedProviders.find(
+      (provider) =>
+        provider.id === preferredProviderId &&
+        displayableOffers(provider.offers).length > 0,
+    ) ??
+    sortedProviders.find(
+      (provider) => displayableOffers(provider.offers).length > 0,
+    );
   const rankingOffers = new Map<string, Map<string, PriceOffer>>();
 
-  for (const metric of rankingMetrics) {
-    for (const entry of apiRankingEntries(providers, metric)) {
-      const providerOffers =
-        rankingOffers.get(entry.providerId) ?? new Map<string, PriceOffer>();
-      for (const offer of [entry.cachedInput, entry.input, entry.output]) {
-        if (offer) providerOffers.set(offer.id, offer);
+  if (mode === "api") {
+    for (const metric of rankingMetrics) {
+      for (const entry of apiRankingEntries(providers, metric)) {
+        const providerOffers =
+          rankingOffers.get(entry.providerId) ?? new Map<string, PriceOffer>();
+        for (const offer of [entry.cachedInput, entry.input, entry.output]) {
+          if (offer) providerOffers.set(offer.id, offer);
+        }
+        rankingOffers.set(entry.providerId, providerOffers);
       }
-      rankingOffers.set(entry.providerId, providerOffers);
     }
   }
 
@@ -49,14 +54,12 @@ export function prepareProvidersForClient(
   const clientProviders = sortedProviders.map((provider) => {
     if (provider.id === primaryProvider?.id) return provider;
 
+    const displayable = displayableOffers(provider.offers);
     const summaries = [...(rankingOffers.get(provider.id)?.values() ?? [])];
     const offers =
       summaries.length > 0
         ? summaries
-        : displayableOffers(provider.offers).slice(
-            0,
-            API_INITIAL_VISIBLE_COUNT,
-          );
+        : displayable.slice(0, mode === "api" ? API_INITIAL_VISIBLE_COUNT : 1);
 
     if (offers.length < provider.offers.length) {
       deferredProviderIds.push(provider.id);

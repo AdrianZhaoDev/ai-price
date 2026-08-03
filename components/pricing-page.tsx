@@ -3,6 +3,7 @@ import { StructuredData } from "@/components/structured-data";
 import { modes } from "@/lib/data/catalog";
 import { landingPagePath, landingPagesForMode } from "@/lib/landing-pages";
 import { loadCachedPricingPageData } from "@/lib/pricing/page-cache";
+import { prepareProvidersForClient } from "@/lib/pricing/client-catalog";
 import type { PriceMode } from "@/lib/pricing/types";
 import { absoluteUrl, modeSeo, SITE_NAME, SITE_ORIGIN } from "@/lib/seo";
 import Link from "next/link";
@@ -21,10 +22,15 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
     lastCheckedAt,
     priceModifiedAt,
     hasDisplayableMode,
-    clientCatalog,
+    providers,
     rankingChanges,
     providerSources,
   } = await loadCachedPricingPageData(mode);
+  const clientCatalog = prepareProvidersForClient(
+    providers,
+    mode,
+    query?.providerId,
+  );
   const seo = modeSeo[mode];
   const priceIndexLinks = landingPagesForMode(mode).map((page) => ({
     href: landingPagePath(page),

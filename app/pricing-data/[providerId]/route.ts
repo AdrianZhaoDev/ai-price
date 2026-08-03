@@ -39,7 +39,8 @@ export async function GET(
     { provider },
     {
       headers: {
-        "Cache-Control": "private, no-store, max-age=0",
+        "Cache-Control":
+          "public, max-age=0, s-maxage=900, stale-while-revalidate=60",
         "X-Robots-Tag": "noindex, nofollow",
       },
     },

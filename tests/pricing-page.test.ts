@@ -83,4 +83,51 @@ describe("pricing page payload", () => {
     expect(compactQwen?.offers.length).toBeGreaterThan(0);
     expect(primary?.offers).toEqual(originalPrimary?.offers);
   });
+
+  it.each(["global", "china-subscription"] as const)(
+    "keeps only the preferred %s provider complete",
+    (mode) => {
+      const providers = providerCatalog
+        .filter((provider) => provider.mode === mode)
+        .map((provider) => ({
+          ...provider,
+          offers: provider.offers.map((offer) => ({ ...offer })),
+        }));
+      const preferred = providers.at(-1);
+      expect(preferred).toBeDefined();
+
+      const result = prepareProvidersForClient(providers, mode, preferred!.id);
+      const completePreferred = result.providers.find(
+        (provider) => provider.id === preferred!.id,
+      );
+
+      expect(completePreferred?.offers).toEqual(preferred!.offers);
+      for (const provider of result.providers) {
+        if (provider.id === preferred!.id) continue;
+        expect(provider.offers.length).toBeLessThanOrEqual(1);
+        if (
+          provider.offers.length <
+          providers.find((item) => item.id === provider.id)!.offers.length
+        ) {
+          expect(result.deferredProviderIds).toContain(provider.id);
+        }
+      }
+    },
+  );
+
+  it("falls back to the first displayable provider for an invalid preference", () => {
+    const providers = providerCatalog.filter(
+      (provider) => provider.mode === "global",
+    );
+    const first = providers.find((provider) => provider.offers.length > 0);
+    const result = prepareProvidersForClient(
+      providers,
+      "global",
+      "not-a-provider",
+    );
+
+    expect(
+      result.providers.find((provider) => provider.id === first?.id)?.offers,
+    ).toEqual(first?.offers);
+  });
 });

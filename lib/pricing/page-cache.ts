@@ -1,5 +1,4 @@
 import { modes } from "@/lib/data/catalog";
-import { prepareProvidersForClient } from "@/lib/pricing/client-catalog";
 import { displayableOffers } from "@/lib/pricing/format";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
 import { loadLatestApiRankingChanges } from "@/lib/pricing/ranking-history";
@@ -31,7 +30,7 @@ export const loadCachedPricingPageData = unstable_cache(
       hasDisplayableMode: modeProviders.some(
         (provider) => displayableOffers(provider.offers).length > 0,
       ),
-      clientCatalog: prepareProvidersForClient(modeProviders, mode),
+      providers: modeProviders,
       rankingChanges: mode === "api" ? await loadLatestApiRankingChanges() : [],
       providerSources: modeProviders.map((provider) => ({
         name: provider.name,

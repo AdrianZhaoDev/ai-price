@@ -33,4 +33,11 @@ test("serves security headers and does not cache private routes", async ({
   const apiPricingResponse = await request.get("/api-pricing");
   expect(apiPricingResponse.ok()).toBe(true);
   expect(apiPricingResponse.headers()["x-robots-tag"]).toBeUndefined();
+
+  const pricingDataResponse = await request.get("/pricing-data/chatgpt?v=e2e");
+  expect(pricingDataResponse.ok()).toBe(true);
+  expect(pricingDataResponse.headers()["cache-control"]).toContain(
+    "s-maxage=900",
+  );
+  expect(pricingDataResponse.headers()["x-robots-tag"]).toContain("noindex");
 });
