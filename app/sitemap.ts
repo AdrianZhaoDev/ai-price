@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import {
   buildLandingPageData,
-  loadCachedLandingCatalogSnapshot,
+  loadLandingCatalogSnapshot,
   type LandingCatalogSnapshot,
 } from "@/lib/landing-page-data";
 import { landingPages, landingPagePath } from "@/lib/landing-pages";
@@ -57,5 +57,5 @@ export function buildSitemap(
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  return buildSitemap(await loadCachedLandingCatalogSnapshot());
+  return buildSitemap(await loadLandingCatalogSnapshot());
 }

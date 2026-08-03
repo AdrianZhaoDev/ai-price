@@ -3,7 +3,7 @@ import {
   PRICING_PAGE_CACHE_TAG,
   warmPricingPageData,
 } from "@/lib/pricing/page-cache";
-import { loadCachedLandingCatalogSnapshot } from "@/lib/landing-page-data";
+import { loadLandingCatalogSnapshot } from "@/lib/landing-page-data";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
@@ -34,10 +34,7 @@ export async function POST(request: Request) {
   revalidatePath("/[landingSlug]", "page");
   revalidatePath("/sitemap.xml");
 
-  await Promise.all([
-    warmPricingPageData(),
-    loadCachedLandingCatalogSnapshot(),
-  ]);
+  await Promise.all([warmPricingPageData(), loadLandingCatalogSnapshot()]);
   const versions = await Promise.all(
     (["global", "china-subscription", "api"] as const).map(async (mode) => ({
       mode,

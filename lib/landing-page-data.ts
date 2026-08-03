@@ -1,4 +1,4 @@
-import type { LandingPageDefinition } from "@/lib/landing-pages";
+import { landingPages, type LandingPageDefinition } from "@/lib/landing-pages";
 import { displayableOffers } from "@/lib/pricing/format";
 import {
   PRICING_PAGE_CACHE_TAG,
@@ -484,37 +484,71 @@ export function buildLandingPageData(
   };
 }
 
-export const loadCachedLandingCatalogSnapshot = unstable_cache(
-  async (): Promise<LandingCatalogSnapshot> => {
+const loadCachedLandingProvider = unstable_cache(
+  async (mode: PriceMode, providerId: string) => {
     const strict = process.env.NODE_ENV === "production";
-    const [global, chinaSubscription, api] = await Promise.all([
-      loadProviderCatalog("global", undefined, {
-        fallbackOnError: !strict,
-      }),
-      loadProviderCatalog("china-subscription", undefined, {
-        fallbackOnError: !strict,
-      }),
-      loadProviderCatalog("api", undefined, {
-        fallbackOnError: !strict,
-      }),
-    ]);
-    return {
-      global,
-      "china-subscription": chinaSubscription,
-      api,
-    };
+    return loadProviderCatalog(mode, providerId, {
+      fallbackOnError: !strict,
+    });
   },
-  ["seo-landing-catalog-v2"],
+  ["seo-landing-provider-v1"],
   {
     revalidate: PRICING_PAGE_REVALIDATE_SECONDS,
     tags: [PRICING_PAGE_CACHE_TAG],
   },
 );
 
+export async function loadLandingCatalogSnapshot(): Promise<LandingCatalogSnapshot> {
+  const providersByMode = new Map<PriceMode, Set<string>>(
+    (["global", "china-subscription", "api"] as const).map((mode) => [
+      mode,
+      new Set<string>(),
+    ]),
+  );
+  for (const page of landingPages) {
+    for (const mode of ["global", "china-subscription", "api"] as const) {
+      for (const providerId of page.providerIds[mode] ?? []) {
+        providersByMode.get(mode)?.add(providerId);
+      }
+    }
+  }
+
+  const entries = await Promise.all(
+    [...providersByMode].flatMap(([mode, providerIds]) =>
+      [...providerIds].map(async (providerId) => ({
+        mode,
+        providers: await loadCachedLandingProvider(mode, providerId),
+      })),
+    ),
+  );
+  return entries.reduce<LandingCatalogSnapshot>(
+    (snapshot, { mode, providers }) => {
+      snapshot[mode].push(...providers);
+      return snapshot;
+    },
+    { global: [], "china-subscription": [], api: [] },
+  );
+}
+
 export async function loadLandingPageData(
   page: LandingPageDefinition,
 ): Promise<LandingPageData> {
-  return buildLandingPageData(page, await loadCachedLandingCatalogSnapshot());
+  const entries = await Promise.all(
+    (["global", "china-subscription", "api"] as const).flatMap((mode) =>
+      (page.providerIds[mode] ?? []).map(async (providerId) => ({
+        mode,
+        providers: await loadCachedLandingProvider(mode, providerId),
+      })),
+    ),
+  );
+  const snapshot = entries.reduce<LandingCatalogSnapshot>(
+    (result, { mode, providers }) => {
+      result[mode].push(...providers);
+      return result;
+    },
+    { global: [], "china-subscription": [], api: [] },
+  );
+  return buildLandingPageData(page, snapshot);
 }
 
 export function offersForLandingPage(
