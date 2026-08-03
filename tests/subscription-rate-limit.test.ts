@@ -24,7 +24,7 @@ describe("subscription rate limits", () => {
         ...baseInput,
         now: new Date("2026-07-31T00:00:00Z"),
       }),
-    ).resolves.toEqual({ allowed: true, retryAfterSeconds: 0 });
+    ).resolves.toMatchObject({ allowed: true, retryAfterSeconds: 0 });
 
     await expect(
       checkSubscriptionRateLimit({
@@ -159,7 +159,7 @@ describe("subscription rate limits", () => {
     });
   });
 
-  it("caps every IP at ten valid submission attempts in 24 hours", async () => {
+  it("caps every IP at ten submission attempts in five hours", async () => {
     const start = Date.parse("2026-07-31T00:00:00Z");
     for (let index = 0; index < 10; index += 1) {
       await checkSubscriptionRateLimit({
@@ -174,7 +174,61 @@ describe("subscription rate limits", () => {
     });
     expect(blocked.allowed).toBe(false);
     if (blocked.allowed) throw new Error("Expected the IP limit to apply.");
-    expect(blocked.reason).toBe("ip_daily");
-    expect(blocked.retryAfterSeconds).toBe(86_390);
+    expect(blocked.reason).toBe("ip_window");
+    expect(blocked.retryAfterSeconds).toBe(17_990);
+    expect(blocked.rankingFallbackAllowed).toBe(true);
+  });
+
+  it("allows exactly one ranking fallback after the IP cap", async () => {
+    const start = Date.parse("2026-07-31T00:00:00Z");
+    for (let index = 0; index < 10; index += 1) {
+      await checkSubscriptionRateLimit({
+        ...baseInput,
+        now: new Date(start + index * 1000),
+      });
+    }
+
+    const [firstFallback, concurrentFallback] = await Promise.all([
+      checkSubscriptionRateLimit({
+        ...baseInput,
+        providerSlug: "api-ranking",
+        planSlug: "*",
+        rankingFallback: true,
+        now: new Date(start + 11_000),
+      }),
+      checkSubscriptionRateLimit({
+        ...baseInput,
+        providerSlug: "api-ranking",
+        planSlug: "*",
+        rankingFallback: true,
+        now: new Date(start + 11_000),
+      }),
+    ]);
+    expect(firstFallback).toMatchObject({
+      allowed: true,
+      retryAfterSeconds: 0,
+    });
+    expect(concurrentFallback).toMatchObject({
+      allowed: false,
+      reason: "ip_window",
+      rankingFallbackAllowed: false,
+    });
+  });
+
+  it("opens a new ten-attempt window after five hours", async () => {
+    const start = Date.parse("2026-07-31T00:00:00Z");
+    for (let index = 0; index < 10; index += 1) {
+      await checkSubscriptionRateLimit({
+        ...baseInput,
+        now: new Date(start + index * 1000),
+      });
+    }
+
+    await expect(
+      checkSubscriptionRateLimit({
+        ...baseInput,
+        now: new Date(start + 5 * 60 * 60 * 1000 + 1),
+      }),
+    ).resolves.toEqual({ allowed: true, retryAfterSeconds: 0 });
   });
 });

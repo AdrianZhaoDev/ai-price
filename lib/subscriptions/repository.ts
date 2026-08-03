@@ -11,7 +11,7 @@ import {
   hashToken,
   normalizeEmail,
 } from "@/lib/security/tokens";
-import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 type ActiveSubscriptionInput = {
   email: string;
@@ -27,6 +27,7 @@ type ActiveSubscriptionResult = {
 
 type MemoryToken = {
   subscriptionId: string;
+  relatedSubscriptionIds: string[];
   purpose: "confirm_subscription" | "unsubscribe";
   expiresAt: number;
   consumed: boolean;
@@ -421,9 +422,17 @@ async function consumeMemoryToken(
   subscription.status =
     purpose === "confirm_subscription" ? "active" : "unsubscribed";
   if (purpose === "unsubscribe") {
-    subscription.successEmailPending = false;
-    subscription.successEmailLockedAt = null;
-    subscription.successEmailNextAttemptAt = null;
+    const targetIds = new Set([
+      token.subscriptionId,
+      ...token.relatedSubscriptionIds,
+    ]);
+    for (const target of memorySubscriptions.values()) {
+      if (!targetIds.has(target.id)) continue;
+      target.status = "unsubscribed";
+      target.successEmailPending = false;
+      target.successEmailLockedAt = null;
+      target.successEmailNextAttemptAt = null;
+    }
   }
   return true;
 }
@@ -512,6 +521,10 @@ export async function unsubscribe(rawToken: string): Promise<boolean> {
       .update(confirmationTokens)
       .set({ consumedAt: now })
       .where(eq(confirmationTokens.id, token.id));
+    const subscriptionIds = [
+      token.subscriptionId,
+      ...token.relatedSubscriptionIds,
+    ];
     await tx
       .update(subscriptions)
       .set({
@@ -522,7 +535,7 @@ export async function unsubscribe(rawToken: string): Promise<boolean> {
         successEmailLockedAt: null,
         updatedAt: now,
       })
-      .where(eq(subscriptions.id, token.subscriptionId));
+      .where(inArray(subscriptions.id, subscriptionIds));
 
     return true;
   });
@@ -577,13 +590,18 @@ export async function listActivePriceSubscribers(
 
 export async function createUnsubscribeToken(
   subscriptionId: string,
+  relatedSubscriptionIds: string[] = [],
 ): Promise<string> {
   const rawToken = createOpaqueToken();
   const expiresAt = addHours(new Date(), 24 * 365);
+  const relatedIds = [...new Set(relatedSubscriptionIds)].filter(
+    (id) => id !== subscriptionId,
+  );
 
   if (!isDatabaseConfigured()) {
     memoryTokens.set(hashToken(rawToken, emailTokenSecret()), {
       subscriptionId,
+      relatedSubscriptionIds: relatedIds,
       purpose: "unsubscribe",
       expiresAt: expiresAt.getTime(),
       consumed: false,
@@ -597,6 +615,7 @@ export async function createUnsubscribeToken(
       subscriptionId,
       purpose: "unsubscribe",
       tokenHash: hashToken(rawToken, emailTokenSecret()),
+      relatedSubscriptionIds: relatedIds,
       expiresAt,
     });
   return rawToken;

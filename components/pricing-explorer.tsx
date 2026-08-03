@@ -1,6 +1,7 @@
 "use client";
 
 import { ProviderMark } from "@/components/icons/provider-mark";
+import { ChangeBadge } from "@/components/change-badge";
 import {
   ApiPriceRanking,
   type ApiRankingSelection,
@@ -23,8 +24,10 @@ import {
   visibleApiOffers,
 } from "@/lib/pricing/format";
 import { modeHref } from "@/lib/seo";
+import type { ApiRankingChange } from "@/lib/pricing/api-ranking";
 import type {
   ModeDefinition,
+  PriceChangeSummary,
   PriceMode,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
@@ -55,6 +58,7 @@ type PricingExplorerProps = {
   modes: ModeDefinition[];
   providers: ProviderCatalogItem[];
   deferredProviderIds?: string[];
+  rankingChanges?: ApiRankingChange[];
   contactEmail: string;
   dataVersion: string | null;
   initialQuery?: {
@@ -98,11 +102,25 @@ function defaultPlanId(provider: ProviderCatalogItem): string | null {
   return offers[0]?.planId ?? null;
 }
 
+function priceChangeDetails(change: PriceChangeSummary): string[] {
+  const cnyReference =
+    change.previousCny !== undefined && change.currentCny !== undefined
+      ? `人民币参考 ${formatCny(change.previousCny)} → ${formatCny(change.currentCny)}`
+      : "人民币参考暂不可用";
+  return [
+    `原价格 ${change.previousDisplayPrice}`,
+    `现价格 ${change.currentDisplayPrice}`,
+    cnyReference,
+    `确认时间 ${new Date(change.changedAt).toLocaleString("zh-CN", { hour12: false })}`,
+  ];
+}
+
 export function PricingExplorer({
   initialMode,
   modes,
   providers,
   deferredProviderIds = [],
+  rankingChanges = [],
   contactEmail,
   dataVersion,
   initialQuery,
@@ -148,6 +166,9 @@ export function PricingExplorer({
     return initialProvider ? defaultPlanId(initialProvider) : null;
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [subscriptionType, setSubscriptionType] = useState<
+    "price" | "api_ranking"
+  >("price");
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     getHydratedSnapshot,
@@ -584,9 +605,14 @@ export function PricingExplorer({
         </h1>
 
         {activeMode === "api" ? (
-          <div className="api-ranking-mobile">
+          <div className="api-ranking-mobile" id="api-ranking">
             <ApiPriceRanking
               providers={modeProviders}
+              changes={rankingChanges}
+              onSubscribe={() => {
+                setSubscriptionType("api_ranking");
+                setSheetOpen(true);
+              }}
               onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
           </div>
@@ -704,7 +730,10 @@ export function PricingExplorer({
                     <button
                       type="button"
                       className="primary-button pressable"
-                      onClick={() => setSheetOpen(true)}
+                      onClick={() => {
+                        setSubscriptionType("price");
+                        setSheetOpen(true);
+                      }}
                     >
                       <Bell size={16} />
                       关注价格
@@ -850,6 +879,24 @@ export function PricingExplorer({
                             data-rank={rank}
                           >
                             <strong>{offer.displayPrice}</strong>
+                            {offer.lastPriceChange ? (
+                              <ChangeBadge
+                                label={
+                                  offer.lastPriceChange.direction === "decrease"
+                                    ? "降价"
+                                    : "涨价"
+                                }
+                                tone={
+                                  offer.lastPriceChange.direction === "decrease"
+                                    ? "positive"
+                                    : "negative"
+                                }
+                                ariaLabel={`${offer.regionName ?? offer.planName}${offer.lastPriceChange.direction === "decrease" ? "降价" : "涨价"}`}
+                                details={priceChangeDetails(
+                                  offer.lastPriceChange,
+                                )}
+                              />
+                            ) : null}
                             <small>{offer.planName}</small>
                             <span className="mobile-global-details">
                               {formatCny(offer.convertedCny)}
@@ -961,6 +1008,24 @@ export function PricingExplorer({
                               ? formatApiCny(offer.convertedCny)
                               : formatOfferPrice(offer)}
                           </strong>
+                          {offer.lastPriceChange ? (
+                            <ChangeBadge
+                              label={
+                                offer.lastPriceChange.direction === "decrease"
+                                  ? "降价"
+                                  : "涨价"
+                              }
+                              tone={
+                                offer.lastPriceChange.direction === "decrease"
+                                  ? "positive"
+                                  : "negative"
+                              }
+                              ariaLabel={`${offer.planName}${offer.lastPriceChange.direction === "decrease" ? "降价" : "涨价"}`}
+                              details={priceChangeDetails(
+                                offer.lastPriceChange,
+                              )}
+                            />
+                          ) : null}
                           {offer.currency ? (
                             <small>
                               {activeMode === "api" &&
@@ -1047,6 +1112,11 @@ export function PricingExplorer({
             <div className="api-ranking-desktop">
               <ApiPriceRanking
                 providers={modeProviders}
+                changes={rankingChanges}
+                onSubscribe={() => {
+                  setSubscriptionType("api_ranking");
+                  setSheetOpen(true);
+                }}
                 onSelectEntry={(selection) =>
                   void selectRankingEntry(selection)
                 }
@@ -1112,6 +1182,7 @@ export function PricingExplorer({
         open={sheetOpen}
         scopeLabel={subscriptionScope}
         providerId={selectedProvider.id}
+        subscriptionType={subscriptionType}
         planId={
           activeMode === "global" ? (selectedPlanId ?? undefined) : undefined
         }

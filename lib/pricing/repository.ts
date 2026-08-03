@@ -1,13 +1,23 @@
 import { providerCatalog } from "@/lib/data/catalog";
-import { getReadDatabase, isReadDatabaseConfigured } from "@/lib/db/client";
-import { plans, priceObservations, products, sources } from "@/lib/db/schema";
+import {
+  getReadDatabase,
+  isReadDatabaseConfigured,
+  type Database,
+} from "@/lib/db/client";
+import {
+  plans,
+  priceChangeEvents,
+  priceObservations,
+  products,
+  sources,
+} from "@/lib/db/schema";
 import type {
   PriceMode,
   PriceOffer,
   PriceStatus,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 function cloneCatalog(
   mode?: PriceMode,
@@ -41,6 +51,7 @@ export function latestProviderCheckAt(
 
 type LoadProviderCatalogOptions = {
   fallbackOnError?: boolean;
+  database?: Database;
 };
 
 export async function loadProviderCatalog(
@@ -49,10 +60,12 @@ export async function loadProviderCatalog(
   options: LoadProviderCatalogOptions = {},
 ): Promise<ProviderCatalogItem[]> {
   const catalog = cloneCatalog(mode, providerId);
-  if (!isReadDatabaseConfigured()) return catalog;
+  const database =
+    options.database ?? (isReadDatabaseConfigured() ? getReadDatabase() : null);
+  if (!database) return catalog;
 
   try {
-    const observations = await getReadDatabase()
+    const observations = await database
       .selectDistinctOn([
         priceObservations.planId,
         priceObservations.sourceId,
@@ -76,6 +89,39 @@ export async function loadProviderCatalog(
         desc(priceObservations.observedAt),
       );
 
+    const observationIds = observations.map((row) => row.price_observations.id);
+    const changeRows = observationIds.length
+      ? await database
+          .select({
+            currentObservationId: priceChangeEvents.currentObservationId,
+            previousObservationId: priceChangeEvents.previousObservationId,
+            createdAt: priceChangeEvents.createdAt,
+          })
+          .from(priceChangeEvents)
+          .where(
+            inArray(priceChangeEvents.currentObservationId, observationIds),
+          )
+      : [];
+    const previousObservationIds = changeRows
+      .map((row) => row.previousObservationId)
+      .filter((value): value is string => Boolean(value));
+    const previousRows = previousObservationIds.length
+      ? await database
+          .select({
+            id: priceObservations.id,
+            amountMinor: priceObservations.amountMinor,
+            currency: priceObservations.currency,
+            displayPrice: priceObservations.displayPrice,
+            convertedCny: priceObservations.convertedCny,
+          })
+          .from(priceObservations)
+          .where(inArray(priceObservations.id, previousObservationIds))
+      : [];
+    const changeByCurrentObservation = new Map(
+      changeRows.map((row) => [row.currentObservationId, row]),
+    );
+    const previousById = new Map(previousRows.map((row) => [row.id, row]));
+
     const hydratedProviderIds = new Set<string>();
     for (const row of observations) {
       const provider = catalog.find((item) => item.id === row.products.slug);
@@ -88,6 +134,34 @@ export async function loadProviderCatalog(
       const plan = row.plans;
       const metadata = plan.metadata ?? {};
       const source = row.sources;
+      const latestChange = changeByCurrentObservation.get(observation.id);
+      const previousObservation = latestChange?.previousObservationId
+        ? previousById.get(latestChange.previousObservationId)
+        : undefined;
+      const currentAmount = observation.amountMinor;
+      const previousAmount = previousObservation?.amountMinor;
+      const priceDirection = (() => {
+        if (
+          currentAmount !== null &&
+          previousAmount !== null &&
+          previousAmount !== undefined &&
+          observation.currency === previousObservation?.currency &&
+          currentAmount !== previousAmount
+        ) {
+          return currentAmount > previousAmount ? "increase" : "decrease";
+        }
+        if (
+          observation.convertedCny !== null &&
+          previousObservation?.convertedCny !== null &&
+          previousObservation?.convertedCny !== undefined &&
+          observation.convertedCny !== previousObservation.convertedCny
+        ) {
+          return observation.convertedCny > previousObservation.convertedCny
+            ? "increase"
+            : "decrease";
+        }
+        return undefined;
+      })();
       const status: PriceStatus =
         source.consecutiveFailures > 0 ? "stale" : observation.status;
       const offer: PriceOffer = {
@@ -142,6 +216,17 @@ export async function loadProviderCatalog(
         rankingEligible:
           typeof metadata.rankingEligible === "boolean"
             ? metadata.rankingEligible
+            : undefined,
+        lastPriceChange:
+          latestChange && previousObservation && priceDirection
+            ? {
+                direction: priceDirection,
+                previousDisplayPrice: previousObservation.displayPrice,
+                currentDisplayPrice: observation.displayPrice,
+                previousCny: previousObservation.convertedCny ?? undefined,
+                currentCny: observation.convertedCny ?? undefined,
+                changedAt: latestChange.createdAt.toISOString(),
+              }
             : undefined,
       };
       const matchingIndex = provider.offers.findIndex(

@@ -8,6 +8,15 @@ export type ApiPriceType =
 export type BillingPeriod =
   "week" | "month" | "quarter" | "year" | "one_time" | "usage";
 
+export type PriceChangeSummary = {
+  direction: "increase" | "decrease";
+  previousDisplayPrice: string;
+  currentDisplayPrice: string;
+  previousCny?: number;
+  currentCny?: number;
+  changedAt: string;
+};
+
 export type PriceOffer = {
   id: string;
   planId: string;
@@ -35,6 +44,7 @@ export type PriceOffer = {
   tierOrder?: number;
   category?: string;
   rankingEligible?: boolean;
+  lastPriceChange?: PriceChangeSummary;
 };
 
 export type ProviderCatalogItem = {

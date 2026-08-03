@@ -19,6 +19,21 @@ export type ApiRankingEntry = {
   output?: PriceOffer;
 };
 
+export type ApiRankingChange = {
+  metric: ApiRankingMetric;
+  entryId: string;
+  previousRank: number | null;
+  currentRank: number;
+  rankDelta: number | null;
+  previousPriceCny: number | null;
+  currentPriceCny: number | null;
+  previousDisplayPrice: string | null;
+  currentDisplayPrice: string | null;
+  priceDirection: "increase" | "decrease" | null;
+  isNew: boolean;
+  changedAt: string;
+};
+
 export function rankingCnyValue(offer: PriceOffer | undefined): number {
   if (!offer) return Number.POSITIVE_INFINITY;
   if (offer.convertedCny !== undefined && Number.isFinite(offer.convertedCny)) {
@@ -55,6 +70,17 @@ function metricOffer(
         (a.tierOrder ?? 0) - (b.tierOrder ?? 0) ||
         rankingCnyValue(a) - rankingCnyValue(b),
     )[0];
+}
+
+export function rankingOfferForMetric(
+  entry: ApiRankingEntry,
+  metric: ApiRankingMetric,
+): PriceOffer | undefined {
+  return metric === "cached_input"
+    ? entry.cachedInput
+    : metric === "input"
+      ? entry.input
+      : entry.output;
 }
 
 function modelIdentity(offer: PriceOffer): { slug: string; name: string } {
@@ -125,20 +151,17 @@ export function apiRankingEntries(
     }
   }
 
-  const selectedOffer = (entry: ApiRankingEntry) =>
-    metric === "cached_input"
-      ? entry.cachedInput
-      : metric === "input"
-        ? entry.input
-        : entry.output;
-
-  return entries.sort((a, b) => {
-    const aValue = rankingCnyValue(selectedOffer(a));
-    const bValue = rankingCnyValue(selectedOffer(b));
-    return (
-      aValue - bValue ||
-      a.providerName.localeCompare(b.providerName, "zh-CN") ||
-      a.modelOrder - b.modelOrder
-    );
-  });
+  return entries
+    .filter((entry) =>
+      Number.isFinite(rankingCnyValue(rankingOfferForMetric(entry, metric))),
+    )
+    .sort((a, b) => {
+      const aValue = rankingCnyValue(rankingOfferForMetric(a, metric));
+      const bValue = rankingCnyValue(rankingOfferForMetric(b, metric));
+      return (
+        aValue - bValue ||
+        a.providerName.localeCompare(b.providerName, "zh-CN") ||
+        a.modelOrder - b.modelOrder
+      );
+    });
 }

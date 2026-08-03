@@ -54,7 +54,8 @@
 
 默认同步 `providers`、`products`、`plans`、`sources`、`collection_runs`、
 `fx_rates`、`price_observations`、`price_change_events`、
-`price_change_candidates` 和 `collection_errors`。包含邮箱或 token 的订阅与邮件
+`price_change_candidates`、`api_ranking_state`、`api_ranking_events` 和
+`collection_errors`。包含邮箱或 token 的订阅与邮件
 表不参与同步。
 
 主要实体：
@@ -73,6 +74,8 @@
 - `confirmation_tokens`
 - `price_change_events`
 - `price_change_candidates`
+- `api_ranking_state`
+- `api_ranking_events`
 - `email_deliveries`
 
 `latest_prices` 不单独存表。当前价由
@@ -82,6 +85,11 @@
 每轮先从 Frankfurter v2 获取人民币基准汇率并写入 `fx_rates`。报价观察同时保存
 `converted_cny`、`fx_rate` 与汇率观察时间；原币价未变时只刷新人民币换算，不生成
 价格变化事件。
+
+每轮采集结束后使用网页同一排序函数计算 API 三榜。首次运行只建立
+`api_ranking_state` 基线；后续把价格、名次、加入及移出变化写入
+`api_ranking_events`。网页读取每个项目的最近事件持续展示角标，直到下一次正式
+变化覆盖；排行榜状态和事件参与公共 PostgreSQL/Neon 镜像。
 
 ## 目录结构
 

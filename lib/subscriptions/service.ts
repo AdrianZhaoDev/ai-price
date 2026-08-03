@@ -1,12 +1,14 @@
 import {
   reserveEmailDelivery,
   settleEmailDelivery,
+  type EmailDeliveryReservation,
 } from "@/lib/email/delivery";
 import { subscriptionCreatedEmail } from "@/lib/email/templates";
 import { getEmailTransport } from "@/lib/email/transport";
 import { providerCatalog } from "@/lib/data/catalog";
 import { loadProviderCatalog } from "@/lib/pricing/repository";
 import { hashEmail } from "@/lib/security/tokens";
+import { modeHref } from "@/lib/seo";
 import {
   claimSubscriptionCreatedEmail,
   createActiveSubscription,
@@ -15,6 +17,11 @@ import {
   settleSubscriptionCreatedEmail,
 } from "./repository";
 import { getApplicationBaseUrl } from "./urls";
+import {
+  API_RANKING_PLAN_SLUG,
+  API_RANKING_PROVIDER_SLUG,
+  isApiRankingScope,
+} from "./scopes";
 import { z } from "zod";
 
 type RequestSubscriptionInput = {
@@ -64,15 +71,32 @@ export async function requestPriceSubscription(
   };
 }
 
+export async function requestApiRankingSubscription(
+  emailInput: string,
+): Promise<RequestSubscriptionResult> {
+  const email = z.email("请输入有效邮箱。").max(254).parse(emailInput);
+  const subscription = await createActiveSubscription({
+    email,
+    providerSlug: API_RANKING_PROVIDER_SLUG,
+    planSlug: API_RANKING_PLAN_SLUG,
+  });
+  return {
+    notificationId: subscription.emailNotificationPending
+      ? subscription.subscriptionId
+      : undefined,
+  };
+}
+
 export async function sendSubscriptionCreatedEmail(
   subscriptionId: string,
 ): Promise<boolean> {
   const claim = await claimSubscriptionCreatedEmail(subscriptionId);
   if (!claim) return false;
 
-  let deliveryId: string | null = null;
+  let deliveryId: EmailDeliveryReservation | null = null;
 
   try {
+    const rankingScope = isApiRankingScope(claim.providerSlug, claim.planSlug);
     const catalogProvider = providerCatalog.find(
       (candidate) => candidate.id === claim.providerSlug,
     );
@@ -83,8 +107,9 @@ export async function sendSubscriptionCreatedEmail(
     const selectedPlan = provider?.offers.find(
       (offer) => offer.planId === claim.planSlug,
     );
-    const scopeLabel =
-      provider && selectedPlan
+    const scopeLabel = rankingScope
+      ? "API 价格排行榜"
+      : provider && selectedPlan
         ? `${provider.name} · ${selectedPlan.planName}`
         : (provider?.name ?? claim.providerSlug);
 
@@ -94,6 +119,17 @@ export async function sendSubscriptionCreatedEmail(
       getApplicationBaseUrl(),
     );
     unsubscribeUrl.searchParams.set("token", unsubscribeToken);
+    const viewPath = rankingScope
+      ? "/api-pricing#api-ranking"
+      : modeHref(provider?.mode ?? "global");
+    const viewUrl = new URL(viewPath, getApplicationBaseUrl()).toString();
+    const ctaLabel = rankingScope
+      ? "查看完整榜单"
+      : provider?.mode === "china-subscription"
+        ? "看看还有更便宜的订阅吗？"
+        : provider?.mode === "api"
+          ? "查看当前模型价格"
+          : "查看当前最低价格";
 
     deliveryId = await reserveEmailDelivery({
       type: "subscription_created",
@@ -109,6 +145,8 @@ export async function sendSubscriptionCreatedEmail(
       to: claim.email,
       ...subscriptionCreatedEmail({
         scopeLabel,
+        viewUrl,
+        ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
       }),
       headers: {

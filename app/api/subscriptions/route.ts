@@ -1,20 +1,34 @@
 import { providerCatalog } from "@/lib/data/catalog";
 import {
   checkSubscriptionRateLimit,
+  releaseRankingFallbackAttempt,
   type SubscriptionRateLimitResult,
 } from "@/lib/security/subscription-rate-limit";
 import {
+  requestApiRankingSubscription,
   requestPriceSubscription,
   sendSubscriptionCreatedEmail,
 } from "@/lib/subscriptions/service";
+import {
+  API_RANKING_PLAN_SLUG,
+  API_RANKING_PROVIDER_SLUG,
+} from "@/lib/subscriptions/scopes";
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-const requestSchema = z.object({
-  email: z.email("请输入有效邮箱。").max(254),
+const emailSchema = z.email("请输入有效邮箱。").max(254);
+const priceRequestSchema = z.object({
+  subscriptionType: z.literal("price").optional().default("price"),
+  email: emailSchema,
   providerId: z.string().min(1).max(80),
   planId: z.string().min(1).max(120).nullable().optional(),
 });
+const rankingRequestSchema = z.object({
+  subscriptionType: z.literal("api_ranking"),
+  email: emailSchema,
+  rankingFallback: z.boolean().optional().default(false),
+});
+const requestSchema = z.union([rankingRequestSchema, priceRequestSchema]);
 
 function clientIp(request: NextRequest): string {
   return (
@@ -35,12 +49,15 @@ function rateLimitMessage(
       return `同时更换关注和邮箱时需间隔 300 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
     case "different_scope_same_email":
       return `同一邮箱更换关注时需间隔 10 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
-    case "ip_daily":
-      return "同一 IP 24 小时内最多提交 10 次订阅，请稍后再试。";
+    case "ip_window":
+      return rateLimit.rankingFallbackAllowed
+        ? "您近期提交了较多订阅。要不要改为一次订阅 API 价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。"
+        : "您近期提交的订阅较多，请过段时间再试。";
   }
 }
 
 export async function POST(request: NextRequest) {
+  let fallbackAttemptId: string | undefined;
   let body: unknown;
   try {
     body = await request.json();
@@ -56,10 +73,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const provider = providerCatalog.find(
-    (candidate) => candidate.id === parsed.data.providerId,
-  );
-  if (!provider) {
+  const data = parsed.data;
+  const rankingRequest = data.subscriptionType === "api_ranking";
+  const provider =
+    data.subscriptionType === "price"
+      ? providerCatalog.find((candidate) => candidate.id === data.providerId)
+      : undefined;
+  const scopeProviderSlug =
+    data.subscriptionType === "api_ranking"
+      ? API_RANKING_PROVIDER_SLUG
+      : data.providerId;
+  const scopePlanSlug =
+    data.subscriptionType === "api_ranking"
+      ? API_RANKING_PLAN_SLUG
+      : (data.planId ?? null);
+  if (!rankingRequest && !provider) {
     return NextResponse.json(
       { message: "未找到要关注的产品。" },
       { status: 404 },
@@ -69,13 +97,26 @@ export async function POST(request: NextRequest) {
   try {
     const rateLimit = await checkSubscriptionRateLimit({
       ipAddress: clientIp(request),
-      email: parsed.data.email,
-      providerSlug: parsed.data.providerId,
-      planSlug: parsed.data.planId ?? null,
+      email: data.email,
+      providerSlug: scopeProviderSlug,
+      planSlug: scopePlanSlug,
+      rankingFallback:
+        data.subscriptionType === "api_ranking" && data.rankingFallback,
     });
     if (!rateLimit.allowed) {
+      const isWindowLimit = rateLimit.reason === "ip_window";
       return NextResponse.json(
-        { message: rateLimitMessage(rateLimit) },
+        {
+          message: rateLimitMessage(rateLimit),
+          ...(isWindowLimit
+            ? {
+                code: "subscription_limit",
+                retryAfterSeconds: rateLimit.retryAfterSeconds,
+                rankingFallbackAllowed:
+                  rateLimit.rankingFallbackAllowed === true,
+              }
+            : {}),
+        },
         {
           status: 429,
           headers: {
@@ -84,12 +125,16 @@ export async function POST(request: NextRequest) {
         },
       );
     }
+    fallbackAttemptId = rateLimit.fallbackAttemptId;
 
-    const result = await requestPriceSubscription({
-      email: parsed.data.email,
-      providerId: parsed.data.providerId,
-      planId: parsed.data.planId ?? null,
-    });
+    const result =
+      data.subscriptionType === "api_ranking"
+        ? await requestApiRankingSubscription(data.email)
+        : await requestPriceSubscription({
+            email: data.email,
+            providerId: data.providerId,
+            planId: data.planId ?? null,
+          });
 
     const notificationId = result.notificationId;
     if (notificationId) {
@@ -99,8 +144,8 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error("Subscription email delivery failed.", {
             subscriptionId: notificationId,
-            providerId: parsed.data.providerId,
-            planId: parsed.data.planId ?? null,
+            providerId: scopeProviderSlug,
+            planId: scopePlanSlug,
             error: error instanceof Error ? error.message : "Unknown error",
           });
         }
@@ -112,9 +157,20 @@ export async function POST(request: NextRequest) {
       message: "您已订阅成功！",
     });
   } catch (error) {
+    if (fallbackAttemptId) {
+      await releaseRankingFallbackAttempt(fallbackAttemptId).catch(
+        (releaseError) =>
+          console.error("Failed to release ranking fallback attempt.", {
+            error:
+              releaseError instanceof Error
+                ? releaseError.message
+                : "Unknown error",
+          }),
+      );
+    }
     console.error("Subscription request failed.", {
-      providerId: parsed.data.providerId,
-      planId: parsed.data.planId ?? null,
+      providerId: scopeProviderSlug,
+      planId: scopePlanSlug,
       error: error instanceof Error ? error.message : "Unknown error",
     });
     const message =

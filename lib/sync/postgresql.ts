@@ -4,6 +4,8 @@ import {
   getWriteDatabaseUrl,
 } from "@/lib/db/client";
 import {
+  apiRankingEvents,
+  apiRankingState,
   collectionErrors,
   collectionRuns,
   fxRates,
@@ -54,6 +56,8 @@ export async function syncPostgresqlData(
     observationRows,
     changeCandidateRows,
     changeEventRows,
+    rankingStateRows,
+    rankingEventRows,
     collectionErrorRows,
   ] = await source.transaction(
     async (snapshot) =>
@@ -67,6 +71,8 @@ export async function syncPostgresqlData(
         snapshot.select().from(priceObservations),
         snapshot.select().from(priceChangeCandidates),
         snapshot.select().from(priceChangeEvents),
+        snapshot.select().from(apiRankingState),
+        snapshot.select().from(apiRankingEvents),
         snapshot.select().from(collectionErrors),
       ]),
     {
@@ -79,6 +85,8 @@ export async function syncPostgresqlData(
   try {
     await targetConnection.database.transaction(async (target) => {
       await target.delete(collectionErrors);
+      await target.delete(apiRankingEvents);
+      await target.delete(apiRankingState);
       await target.delete(priceChangeEvents);
       await target.delete(priceChangeCandidates);
       await target.delete(priceObservations);
@@ -274,6 +282,60 @@ export async function syncPostgresqlData(
           });
       }
 
+      for (const batch of batches(rankingStateRows)) {
+        await target
+          .insert(apiRankingState)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: apiRankingState.id,
+            set: {
+              metric: excluded("metric"),
+              entryKey: excluded("entry_key"),
+              providerSlug: excluded("provider_slug"),
+              providerName: excluded("provider_name"),
+              providerColor: excluded("provider_color"),
+              modelSlug: excluded("model_slug"),
+              modelName: excluded("model_name"),
+              modelOrder: excluded("model_order"),
+              offerPlanSlug: excluded("offer_plan_slug"),
+              rank: excluded("rank"),
+              priceCny: excluded("price_cny"),
+              displayPrice: excluded("display_price"),
+              active: excluded("active"),
+              collectionRunId: excluded("collection_run_id"),
+              createdAt: excluded("created_at"),
+              updatedAt: excluded("updated_at"),
+            },
+          });
+      }
+
+      for (const batch of batches(rankingEventRows)) {
+        await target
+          .insert(apiRankingEvents)
+          .values(batch)
+          .onConflictDoUpdate({
+            target: apiRankingEvents.id,
+            set: {
+              collectionRunId: excluded("collection_run_id"),
+              metric: excluded("metric"),
+              entryKey: excluded("entry_key"),
+              providerSlug: excluded("provider_slug"),
+              providerName: excluded("provider_name"),
+              modelSlug: excluded("model_slug"),
+              modelName: excluded("model_name"),
+              previousRank: excluded("previous_rank"),
+              currentRank: excluded("current_rank"),
+              previousPriceCny: excluded("previous_price_cny"),
+              currentPriceCny: excluded("current_price_cny"),
+              previousDisplayPrice: excluded("previous_display_price"),
+              currentDisplayPrice: excluded("current_display_price"),
+              rankingSnapshot: excluded("ranking_snapshot"),
+              notifiedAt: excluded("notified_at"),
+              createdAt: excluded("created_at"),
+            },
+          });
+      }
+
       for (const batch of batches(collectionErrorRows)) {
         await target
           .insert(collectionErrors)
@@ -307,6 +369,8 @@ export async function syncPostgresqlData(
     priceObservations: observationRows.length,
     priceChangeCandidates: changeCandidateRows.length,
     priceChangeEvents: changeEventRows.length,
+    apiRankingState: rankingStateRows.length,
+    apiRankingEvents: rankingEventRows.length,
     collectionErrors: collectionErrorRows.length,
   };
 }

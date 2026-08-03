@@ -585,7 +585,13 @@ input:focus-visible {
   line-height: 1.15;
 }
 
-.api-ranking-heading > span {
+.api-ranking-heading-actions {
+  display: grid;
+  gap: 7px;
+  justify-items: end;
+}
+
+.api-ranking-heading-actions > span {
   margin: 0;
   padding: 5px 9px;
   border-radius: 999px;
@@ -594,6 +600,32 @@ input:focus-visible {
   font-size: 11px;
   font-weight: 720;
   white-space: nowrap;
+}
+
+.api-ranking-heading-actions > button {
+  position: relative;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--tint) 24%, var(--separator));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 740;
+  white-space: nowrap;
+}
+
+.api-ranking-heading-actions > button::after {
+  position: absolute;
+  inset: -7px 0;
+  content: "";
+}
+
+.api-ranking-heading-actions > button:hover,
+.api-ranking-heading-actions > button:focus-visible {
+  background: var(--tint-soft);
 }
 
 .api-ranking-kicker {
@@ -665,6 +697,17 @@ input:focus-visible {
 
 .api-ranking-list li {
   border-top: 1px solid var(--separator);
+}
+
+.api-ranking-entry-shell {
+  position: relative;
+}
+
+.api-ranking-change {
+  position: absolute;
+  z-index: 2;
+  top: 13px;
+  left: 15px;
 }
 
 .api-ranking-entry {
@@ -1321,6 +1364,9 @@ input:focus-visible {
 
 .official-price {
   display: grid;
+  grid-template-columns: minmax(0, max-content) auto;
+  column-gap: 6px;
+  align-items: center;
 }
 
 .official-price strong {
@@ -1330,9 +1376,84 @@ input:focus-visible {
 }
 
 .official-price small {
+  grid-column: 1 / -1;
   margin-top: 2px;
   color: var(--ink-tertiary);
   font-size: 10px;
+}
+
+.change-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.change-badge {
+  position: relative;
+  display: inline-grid;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tint-soft);
+  color: var(--tint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.change-badge::after {
+  position: absolute;
+  inset: -13px;
+  content: "";
+}
+
+.change-badge[data-tone="positive"] {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.change-badge[data-tone="negative"] {
+  background: color-mix(in srgb, var(--negative) 12%, transparent);
+  color: var(--negative);
+}
+
+.change-badge:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.change-tooltip {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 7px);
+  right: 0;
+  display: grid;
+  width: max-content;
+  max-width: min(250px, calc(100vw - 32px));
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--separator);
+  border-radius: 11px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-floating);
+  color: var(--ink-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+
+.api-ranking-change .change-tooltip {
+  right: auto;
+  left: 0;
 }
 
 .mobile-api-unit {
@@ -1590,6 +1711,38 @@ input:focus-visible {
 .sheet-success .primary-button {
   width: 100%;
   margin-top: 24px;
+}
+
+.sheet-fallback-confirm {
+  padding: 24px 4px 8px;
+}
+
+.sheet-fallback-confirm .eyebrow {
+  margin: 0 0 8px;
+}
+
+.sheet-fallback-confirm h2 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+
+.sheet-fallback-confirm > p:last-of-type {
+  margin: 10px 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.sheet-confirm-actions {
+  display: grid;
+  gap: 9px;
+  margin-top: 24px;
+}
+
+.sheet-confirm-actions > button {
+  width: 100%;
+  min-height: 48px;
 }
 
 .preview-confirm-link {
@@ -1881,8 +2034,20 @@ input:focus-visible {
     font-size: 23px;
   }
 
-  .api-ranking-heading > span {
+  .api-ranking-heading-actions > span {
     font-size: 10px;
+  }
+
+  .api-ranking-heading-actions > button {
+    max-width: 118px;
+    min-height: 28px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .api-ranking-change {
+    top: 17px;
+    left: 11px;
   }
 
   .api-ranking-switch button {

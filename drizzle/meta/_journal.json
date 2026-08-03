@@ -36,6 +36,20 @@
       "when": 1785481035860,
       "tag": "0004_overrated_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785492264249,
+      "tag": "0005_green_bushwacker",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785495650026,
+      "tag": "0006_dashing_dazzler",
+      "breakpoints": true
     }
   ]
 }
