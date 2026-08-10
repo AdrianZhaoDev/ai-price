@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPage, hashContent } from "@/lib/collectors/http-client";
+import {
+  fetchBinaryPage,
+  fetchPage,
+  hashContent,
+} from "@/lib/collectors/http-client";
 import { CollectionError } from "@/lib/collectors/types";
 
 describe("collector HTTP client", () => {
@@ -154,5 +158,24 @@ describe("collector HTTP client", () => {
     expect(mockedFetch.mock.calls[0][1]).toHaveProperty("dispatcher");
     expect(mockedFetch.mock.calls[1][1]).not.toHaveProperty("dispatcher");
     expect(mockedFetch.mock.calls[2][1]).toHaveProperty("dispatcher");
+  });
+
+  it("downloads binary sources through the same proxy fallback", async () => {
+    vi.stubEnv("COLLECTOR_PROXY_URL", "http://127.0.0.1:40000");
+    const bytes = new Uint8Array([0x1f, 0x8b, 0x08, 0x00]);
+    const mockedFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("proxy unavailable"))
+      .mockResolvedValueOnce(new Response(bytes));
+    vi.stubGlobal("fetch", mockedFetch);
+
+    const result = await fetchBinaryPage("https://example.com/archive.tgz", {
+      attempts: 2,
+      retryDelayMs: 0,
+    });
+
+    expect([...result.body]).toEqual([...bytes]);
+    expect(mockedFetch.mock.calls[0][1]).toHaveProperty("dispatcher");
+    expect(mockedFetch.mock.calls[1][1]).not.toHaveProperty("dispatcher");
   });
 });

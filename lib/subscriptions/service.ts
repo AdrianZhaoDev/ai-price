@@ -18,9 +18,9 @@ import {
 } from "./repository";
 import { getApplicationBaseUrl } from "./urls";
 import {
-  API_RANKING_PLAN_SLUG,
-  API_RANKING_PROVIDER_SLUG,
-  isApiRankingScope,
+  API_MODEL_NEW_PLAN_SLUG,
+  API_MODEL_NEW_PROVIDER_SLUG,
+  isApiModelNewScope,
 } from "./scopes";
 import { z } from "zod";
 
@@ -71,14 +71,14 @@ export async function requestPriceSubscription(
   };
 }
 
-export async function requestApiRankingSubscription(
+export async function requestApiModelNewSubscription(
   emailInput: string,
 ): Promise<RequestSubscriptionResult> {
   const email = z.email("请输入有效邮箱。").max(254).parse(emailInput);
   const subscription = await createActiveSubscription({
     email,
-    providerSlug: API_RANKING_PROVIDER_SLUG,
-    planSlug: API_RANKING_PLAN_SLUG,
+    providerSlug: API_MODEL_NEW_PROVIDER_SLUG,
+    planSlug: API_MODEL_NEW_PLAN_SLUG,
   });
   return {
     notificationId: subscription.emailNotificationPending
@@ -96,7 +96,7 @@ export async function sendSubscriptionCreatedEmail(
   let deliveryId: EmailDeliveryReservation | null = null;
 
   try {
-    const rankingScope = isApiRankingScope(claim.providerSlug, claim.planSlug);
+    const modelScope = isApiModelNewScope(claim.providerSlug, claim.planSlug);
     const catalogProvider = providerCatalog.find(
       (candidate) => candidate.id === claim.providerSlug,
     );
@@ -107,8 +107,8 @@ export async function sendSubscriptionCreatedEmail(
     const selectedPlan = provider?.offers.find(
       (offer) => offer.planId === claim.planSlug,
     );
-    const scopeLabel = rankingScope
-      ? "API 价格排行榜"
+    const scopeLabel = modelScope
+      ? "API 新模型通知"
       : provider && selectedPlan
         ? `${provider.name} · ${selectedPlan.planName}`
         : (provider?.name ?? claim.providerSlug);
@@ -119,12 +119,12 @@ export async function sendSubscriptionCreatedEmail(
       getApplicationBaseUrl(),
     );
     unsubscribeUrl.searchParams.set("token", unsubscribeToken);
-    const viewPath = rankingScope
-      ? "/api-pricing#api-ranking"
+    const viewPath = modelScope
+      ? "/api-pricing"
       : modeHref(provider?.mode ?? "global");
     const viewUrl = new URL(viewPath, getApplicationBaseUrl()).toString();
-    const ctaLabel = rankingScope
-      ? "查看完整榜单"
+    const ctaLabel = modelScope
+      ? "查看最新模型"
       : provider?.mode === "china-subscription"
         ? "看看还有更便宜的订阅吗？"
         : provider?.mode === "api"
@@ -148,6 +148,14 @@ export async function sendSubscriptionCreatedEmail(
         viewUrl,
         ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
+        ...(modelScope
+          ? {
+              eyebrow: "新模型通知已生效",
+              description:
+                "目录出现新的 canonical model 时，我们会发送汇总；普通价格、Provider 或更新时间变化不会打扰你。",
+              subject: "已订阅 API 新模型通知",
+            }
+          : {}),
       }),
       headers: {
         "X-Entity-Ref-ID": hashEmail(`${claim.subscriptionId}:${claim.email}`),

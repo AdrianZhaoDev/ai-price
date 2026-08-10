@@ -191,14 +191,14 @@ describe("subscription rate limits", () => {
     const [firstFallback, concurrentFallback] = await Promise.all([
       checkSubscriptionRateLimit({
         ...baseInput,
-        providerSlug: "api-ranking",
+        providerSlug: "api-model-new",
         planSlug: "*",
         rankingFallback: true,
         now: new Date(start + 11_000),
       }),
       checkSubscriptionRateLimit({
         ...baseInput,
-        providerSlug: "api-ranking",
+        providerSlug: "api-model-new",
         planSlug: "*",
         rankingFallback: true,
         now: new Date(start + 11_000),

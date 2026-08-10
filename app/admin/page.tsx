@@ -1,7 +1,7 @@
 import { ADMIN_SESSION_COOKIE, isAdminSession } from "@/lib/admin/auth";
 import { listAdminSubscriptions } from "@/lib/admin/repository";
 import { providerCatalog } from "@/lib/data/catalog";
-import { API_RANKING_PROVIDER_SLUG } from "@/lib/subscriptions/scopes";
+import { API_MODEL_NEW_PROVIDER_SLUG } from "@/lib/subscriptions/scopes";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -105,8 +105,8 @@ export default async function AdminSubscriptionsPage({
           </thead>
           <tbody>
             {visible.map((item) => {
-              const rankingSubscription =
-                item.providerSlug === API_RANKING_PROVIDER_SLUG;
+              const modelSubscription =
+                item.providerSlug === API_MODEL_NEW_PROVIDER_SLUG;
               const provider = providerMap.get(item.providerSlug);
               const plan =
                 item.planSlug === "*"
@@ -119,13 +119,13 @@ export default async function AdminSubscriptionsPage({
                   <td className="admin-email">{item.email}</td>
                   <td>
                     <strong>
-                      {rankingSubscription
-                        ? "API 价格排行榜"
+                      {modelSubscription
+                        ? "API 新模型通知"
                         : (provider?.name ?? item.providerSlug)}
                     </strong>
                     <span>
-                      {rankingSubscription
-                        ? "缓存、非缓存与输出价格变动"
+                      {modelSubscription
+                        ? "新增 canonical model 摘要"
                         : item.planSlug === "*"
                           ? "全部价格通知"
                           : (plan?.planName ?? item.planSlug ?? "全部价格通知")}

@@ -23,6 +23,7 @@ export const adminErrorChannels = [
   "official_web",
   "official_api",
   "manual_official",
+  "community_catalog",
 ] as const;
 export type AdminErrorChannel = (typeof adminErrorChannels)[number];
 export type AdminErrorStatus = "all" | "open" | "resolved";

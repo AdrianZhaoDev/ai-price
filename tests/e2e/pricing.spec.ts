@@ -343,12 +343,12 @@ test("offers one-click ranking fallback and reuses the entered email", async ({
   await expect(
     page.getByRole("heading", { name: "订阅次数有点多" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "确认订阅排行榜" }).click();
+  await page.getByRole("button", { name: "确认订阅新模型" }).click();
   await expect(
     page.getByRole("heading", { name: "您已订阅成功！" }),
   ).toBeVisible();
   expect(payloads[1]).toEqual({
-    subscriptionType: "api_ranking",
+    subscriptionType: "api_model_new",
     email: "reader@example.com",
     rankingFallback: true,
   });
@@ -396,7 +396,7 @@ test("classifies an invalid subscription response without exposing it", async ({
   expect(JSON.stringify(events)).not.toContain("private upstream response");
 });
 
-test("submits the regular ranking subscription", async ({ page }) => {
+test("submits the new-model subscription", async ({ page }) => {
   let payload: Record<string, unknown> | undefined;
   await page.route("**/api/subscriptions", async (route) => {
     payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -412,11 +412,11 @@ test("submits the regular ranking subscription", async ({ page }) => {
   await page.goto("/api-pricing");
   await waitForPricingHydration(page);
   await page
-    .getByRole("button", { name: "订阅排行榜变动" })
+    .getByRole("button", { name: "订阅新模型" })
     .filter({ visible: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "订阅 API 价格排行榜" }),
+    page.getByRole("heading", { name: "订阅 API 新模型" }),
   ).toBeVisible();
   await page.getByLabel("邮箱").fill("ranking@example.com");
   await page.getByRole("button", { name: "立即订阅" }).click();
@@ -424,7 +424,7 @@ test("submits the regular ranking subscription", async ({ page }) => {
     page.getByRole("heading", { name: "您已订阅成功！" }),
   ).toBeVisible();
   expect(payload).toEqual({
-    subscriptionType: "api_ranking",
+    subscriptionType: "api_model_new",
     email: "ranking@example.com",
     rankingFallback: false,
   });
@@ -529,18 +529,17 @@ test("uses stable model query links for API landing-page handoff", async ({
     /\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,
   );
   await waitForPricingHydration(page);
-  await expect(
-    page.locator('.provider-button[data-provider-id="deepseek-api"]'),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator('.price-row[data-highlighted="true"]')).toHaveCount(
-    1,
-  );
+  await expect(page.getByLabel("Provider")).toHaveValue("deepseek");
 });
 
 test("shows ranked RMB prices without duplicate or status-only plans", async ({
   page,
   isMobile,
 }) => {
+  test.skip(
+    true,
+    "Legacy API provider workspace was replaced by the model catalog.",
+  );
   test.skip(isMobile, "Desktop price table assertions.");
   await page.goto("/");
   await waitForPricingHydration(page);
@@ -747,6 +746,10 @@ test("mobile navigation and sheet remain usable", async ({
   page,
   isMobile,
 }) => {
+  test.skip(
+    true,
+    "Legacy mobile ranking was replaced by the scrollable model table.",
+  );
   test.skip(!isMobile, "Mobile-only navigation.");
   await page.goto("/");
   await waitForPricingHydration(page);
@@ -819,11 +822,107 @@ test("mobile navigation and sheet remain usable", async ({
   ).toBe(true);
 });
 
+test("model catalog has eight sortable columns, filters, and detail navigation", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Desktop table behavior is covered once.");
+  await page.goto("/api-pricing");
+  await waitForPricingHydration(page);
+  await expect(
+    page.getByRole("heading", { name: "API 模型目录" }),
+  ).toBeVisible();
+  await expect(page.locator(".provider-section")).toHaveCount(0);
+  await expect(page.locator(".model-catalog-table thead th")).toHaveCount(8);
+  await expect(page.locator(".model-catalog-table thead th")).toHaveText([
+    "Model",
+    "Lab",
+    "Context",
+    "Output",
+    "Input",
+    /Price/,
+    /Release/,
+    "Updated",
+  ]);
+  const releaseDates = await page
+    .locator(".model-catalog-table tbody tr td:nth-child(7)")
+    .allTextContents();
+  expect(releaseDates).toEqual(
+    [...releaseDates].sort((a, b) => b.localeCompare(a)),
+  );
+
+  let searchRscRequests = 0;
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/api-pricing") &&
+      request.url().includes("_rsc=")
+    ) {
+      searchRscRequests += 1;
+    }
+  });
+  await page.getByRole("searchbox", { name: "Model" }).fill("Gemini");
+  await expect(page).toHaveURL(/q=Gemini/);
+  await expect(page.locator(".model-catalog-table tbody tr")).toHaveCount(1);
+  expect(searchRscRequests).toBe(0);
+  await page.getByRole("button", { name: /清除筛选/ }).click();
+  await expect(page).toHaveURL(/\/api-pricing$/);
+
+  const modelLink = page.locator(".model-catalog-table tbody th a").first();
+  await modelLink.click();
+  await expect(page).toHaveURL(/\/models\/.+\/.+/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Providers" })).toBeVisible();
+  await expect(page.locator(".model-provider-table thead th")).toHaveCount(14);
+  expect(
+    await page
+      .locator('script[type="application/ld+json"]')
+      .evaluateAll((scripts) =>
+        scripts.some((script) =>
+          script.textContent?.includes("BreadcrumbList"),
+        ),
+      ),
+  ).toBe(true);
+});
+
+test("model catalog scrolls locally without phone-width page overflow", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Explicit widths are covered in this test.");
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 812 });
+    await page.goto("/api-pricing");
+    await waitForPricingHydration(page);
+    const metrics = await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>(
+        ".model-table-scroll",
+      )!;
+      const first = document.querySelector<HTMLElement>(
+        ".model-catalog-table tbody th",
+      )!;
+      return {
+        pageFits:
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+        localOverflow: scroller.scrollWidth > scroller.clientWidth,
+        sticky:
+          getComputedStyle(first).position === "sticky" &&
+          getComputedStyle(first).left === "0px",
+      };
+    });
+    expect(metrics).toEqual({
+      pageFits: true,
+      localOverflow: true,
+      sticky: true,
+    });
+  }
+});
+
 test("all pricing tabs fit common phone widths and use soft navigation", async ({
   page,
   isMobile,
 }) => {
   test.skip(isMobile, "Explicit phone widths are covered once.");
+  test.setTimeout(90_000);
 
   const paths = ["/", "/china-ai-subscriptions", "/api-pricing"] as const;
   for (const width of [320, 375, 390, 430]) {

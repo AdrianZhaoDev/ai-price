@@ -14,7 +14,13 @@ const counts = {
   priceChangeEvents: 9,
   apiRankingState: 10,
   apiRankingEvents: 11,
-  collectionErrors: 12,
+  modelCatalogImports: 12,
+  modelLabs: 13,
+  modelCatalogProviders: 14,
+  modelCatalogModels: 15,
+  modelProviderOfferings: 16,
+  modelCatalogEvents: 17,
+  collectionErrors: 18,
 };
 
 describe("configured data sync", () => {

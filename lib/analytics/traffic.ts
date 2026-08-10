@@ -10,8 +10,8 @@ export type TrafficEvent =
 export type TrafficEventProperties = {
   mode?: PriceMode;
   provider_id?: string;
-  subscription_type?: "price" | "api_ranking";
-  plan_scope?: "provider" | "plan" | "api_ranking";
+  subscription_type?: "price" | "api_model_new";
+  plan_scope?: "provider" | "plan" | "api_model_new";
   sort_direction?: "asc" | "desc";
   result?: "subscribed" | "already_subscribed" | "fallback_subscribed";
   failure_kind?: "http" | "network" | "invalid_response" | "fallback_available";

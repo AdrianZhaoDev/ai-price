@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const installer = readFileSync("deploy/vps-install.sh", "utf8");
+const deployScript = readFileSync("deploy/vps-update.ps1", "utf8");
 
 describe("VPS collector schedule", () => {
   it("keeps manual and scheduled systemd invocations separate", () => {
@@ -27,5 +28,14 @@ describe("VPS collector schedule", () => {
     );
     expect(scheduledUnit).toContain("RuntimeDirectory=ai-price-collect");
     expect(timerUnit).toContain("Unit=ai-price-collect-scheduled.service");
+  });
+
+  it("stops deployment when catalog collection or warming fails", () => {
+    expect(deployScript).toContain(
+      "/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock bash -e -c '",
+    );
+    expect(
+      deployScript.indexOf("npm run collect -- --source=models-dev"),
+    ).toBeLessThan(deployScript.indexOf("npm run warm:models"));
   });
 });

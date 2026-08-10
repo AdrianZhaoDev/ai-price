@@ -12,7 +12,7 @@ type SubscriptionSheetProps = {
   providerId: string;
   mode: PriceMode;
   planId?: string;
-  subscriptionType?: "price" | "api_ranking";
+  subscriptionType?: "price" | "api_model_new";
   onClose: () => void;
 };
 
@@ -182,9 +182,9 @@ export function SubscriptionSheet({
     }
 
     const payload =
-      subscriptionType === "api_ranking"
+      subscriptionType === "api_model_new"
         ? {
-            subscriptionType: "api_ranking",
+            subscriptionType: "api_model_new",
             email: normalizedEmail,
             rankingFallback: false,
           }
@@ -207,8 +207,8 @@ export function SubscriptionSheet({
           provider_id: providerId,
           subscription_type: subscriptionType,
           plan_scope:
-            subscriptionType === "api_ranking"
-              ? "api_ranking"
+            subscriptionType === "api_model_new"
+              ? "api_model_new"
               : planId
                 ? "plan"
                 : "provider",
@@ -234,8 +234,8 @@ export function SubscriptionSheet({
         provider_id: providerId,
         subscription_type: subscriptionType,
         plan_scope:
-          subscriptionType === "api_ranking"
-            ? "api_ranking"
+          subscriptionType === "api_model_new"
+            ? "api_model_new"
             : planId
               ? "plan"
               : "provider",
@@ -247,8 +247,8 @@ export function SubscriptionSheet({
         provider_id: providerId,
         subscription_type: subscriptionType,
         plan_scope:
-          subscriptionType === "api_ranking"
-            ? "api_ranking"
+          subscriptionType === "api_model_new"
+            ? "api_model_new"
             : planId
               ? "plan"
               : "provider",
@@ -268,7 +268,7 @@ export function SubscriptionSheet({
     setMessage("");
     try {
       const result = await submitRequest({
-        subscriptionType: "api_ranking",
+        subscriptionType: "api_model_new",
         email: email.trim().toLowerCase(),
         rankingFallback: true,
       });
@@ -281,20 +281,20 @@ export function SubscriptionSheet({
       setState("success");
       setMessage(result.message || "您已订阅成功！");
       setResultStatus("subscribed");
-      lastSuccessfulSubscriptionRef.current = `${email.trim().toLowerCase()}:api_ranking:api-ranking:*`;
+      lastSuccessfulSubscriptionRef.current = `${email.trim().toLowerCase()}:api_model_new:api-model-new:*`;
       trackTrafficEvent("subscription_submit_succeeded", {
         mode,
         provider_id: providerId,
-        subscription_type: "api_ranking",
-        plan_scope: "api_ranking",
+        subscription_type: "api_model_new",
+        plan_scope: "api_model_new",
         result: "fallback_subscribed",
       });
     } catch (error) {
       trackTrafficEvent("subscription_submit_failed", {
         mode,
         provider_id: providerId,
-        subscription_type: "api_ranking",
-        plan_scope: "api_ranking",
+        subscription_type: "api_model_new",
+        plan_scope: "api_model_new",
         failure_kind: failureKind(error),
       });
       setState("error");
@@ -354,7 +354,9 @@ export function SubscriptionSheet({
                 <h2 id="subscription-title">{message}</h2>
                 <p>
                   {resultStatus === "already_subscribed"
-                    ? "无需再次提交；价格或套餐变化时我们会发送邮件。"
+                    ? subscriptionType === "api_model_new"
+                      ? "无需再次提交；目录出现新的 canonical model 时我们会发送摘要。"
+                      : "无需再次提交；价格或套餐变化时我们会发送邮件。"
                     : "订阅成功通知邮件将在后台发送，无需点击确认。"}
                 </p>
                 <button
@@ -371,8 +373,8 @@ export function SubscriptionSheet({
                 <p className="eyebrow">一次掌握全部变化</p>
                 <h2 id="subscription-title">订阅次数有点多</h2>
                 <p>
-                  您近期提交了较多订阅。要不要改为一次订阅 API
-                  价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。
+                  您近期提交了较多订阅。要不要改为订阅 API 新模型？目录出现新的
+                  canonical model 时，我们会发送摘要。
                 </p>
                 <div className="sheet-confirm-actions">
                   <button
@@ -384,7 +386,7 @@ export function SubscriptionSheet({
                   >
                     {state === "fallback_submitting"
                       ? "正在订阅…"
-                      : "确认订阅排行榜"}
+                      : "确认订阅新模型"}
                   </button>
                   <button
                     type="button"
@@ -400,18 +402,18 @@ export function SubscriptionSheet({
               <>
                 <div className="sheet-copy">
                   <p className="eyebrow">
-                    {subscriptionType === "api_ranking"
-                      ? "排行榜变动通知"
+                    {subscriptionType === "api_model_new"
+                      ? "新模型通知"
                       : "价格变动通知"}
                   </p>
                   <h2 id="subscription-title">
-                    {subscriptionType === "api_ranking"
-                      ? "订阅 API 价格排行榜"
+                    {subscriptionType === "api_model_new"
+                      ? "订阅 API 新模型"
                       : `关注 ${scopeLabel}`}
                   </h2>
                   <p>
-                    {subscriptionType === "api_ranking"
-                      ? "缓存输入、非缓存输入或输出榜发生变化时，我们会发送一封汇总邮件。"
+                    {subscriptionType === "api_model_new"
+                      ? "目录出现新的 canonical model 时，我们会发送一封汇总邮件。"
                       : "提交后立即生效，仅在价格或套餐发生变化时发送邮件。"}
                   </p>
                 </div>

@@ -27,6 +27,7 @@ export default defineConfig({
         "lib/collectors/persistence.ts",
         "lib/db/**",
         "lib/pricing/repository.ts",
+        "lib/model-catalog/repository.ts",
         "tests/**",
         "**/*.config.*",
         "scripts/**",

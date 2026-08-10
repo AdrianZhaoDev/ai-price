@@ -7,6 +7,12 @@ import { loadLandingCatalogSnapshot } from "@/lib/landing-page-data";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import {
+  MODEL_CATALOG_CACHE_TAG,
+  modelCacheTag,
+} from "@/lib/model-catalog/cache";
+import { isSafeModelId, modelDetailPath } from "@/lib/model-catalog/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +33,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let body: unknown = {};
+  const text = await request.text();
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+  }
+  const parsed = z
+    .object({
+      catalogVersion: z.string().max(80).optional(),
+      catalogChanged: z.boolean().optional().default(false),
+      changedModelIds: z
+        .array(z.string().refine(isSafeModelId))
+        .max(1000)
+        .optional()
+        .default([]),
+    })
+    .safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid catalog revalidation request" },
+      { status: 400 },
+    );
+  }
+
   revalidateTag(PRICING_PAGE_CACHE_TAG, { expire: 0 });
+  if (parsed.data.catalogChanged || parsed.data.changedModelIds.length > 0) {
+    revalidateTag(MODEL_CATALOG_CACHE_TAG, { expire: 0 });
+    revalidatePath("/api-pricing");
+  }
   revalidatePath("/");
   revalidatePath("/china-ai-subscriptions");
-  revalidatePath("/api-pricing");
   revalidatePath("/[landingSlug]", "page");
   revalidatePath("/sitemap.xml");
+  for (const modelId of parsed.data.changedModelIds) {
+    revalidateTag(modelCacheTag(modelId), { expire: 0 });
+    revalidatePath(modelDetailPath(modelId));
+  }
 
   await Promise.all([warmPricingPageData(), loadLandingCatalogSnapshot()]);
   const versions = await Promise.all(
@@ -42,5 +82,11 @@ export async function POST(request: Request) {
     })),
   );
 
-  return NextResponse.json({ revalidated: true, versions });
+  return NextResponse.json({
+    revalidated: true,
+    versions,
+    catalogVersion: parsed.data.catalogVersion ?? null,
+    catalogChanged: parsed.data.catalogChanged,
+    changedModelIds: parsed.data.changedModelIds,
+  });
 }

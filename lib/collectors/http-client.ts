@@ -21,6 +21,10 @@ type FetchPageOptions = {
   proxyUrl?: string | null;
 };
 
+export type RawBinaryCollectionResult = Omit<RawCollectionResult, "body"> & {
+  body: Buffer;
+};
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -140,6 +144,111 @@ export async function fetchPage(
           headers: responseHeaders(response.headers),
           body,
           contentHash: hashContent(body),
+          observedAt: (options.observedAt ?? new Date()).toISOString(),
+        };
+      } catch (error) {
+        lastError = error;
+        attemptFailures.push({
+          attempt,
+          attemptedAt: new Date(attemptStartedAt).toISOString(),
+          durationMs: Date.now() - attemptStartedAt,
+          route: useProxy ? "proxy" : "direct",
+          error: errorDiagnosticDetails(error),
+        });
+        const retryable =
+          useProxy ||
+          !(error instanceof CollectionError) ||
+          (error.code === "HTTP_ERROR" &&
+            (Number(error.details.status) === 429 ||
+              Number(error.details.status) >= 500));
+        if (attempt < attempts && retryable) {
+          await delay((options.retryDelayMs ?? 750) * 2 ** (attempt - 1));
+        } else if (!retryable) {
+          break;
+        }
+      }
+    }
+
+    if (lastError instanceof CollectionError) {
+      throw new CollectionError(lastError.code, lastError.message, {
+        ...lastError.details,
+        attempts: attemptFailures,
+      });
+    }
+    throw new CollectionError(
+      "FETCH_FAILED",
+      lastError instanceof Error ? lastError.message : "Source request failed.",
+      {
+        url: sanitizeDiagnosticUrl(url),
+        proxyConfigured: Boolean(proxyUrl),
+        attempts: attemptFailures,
+        finalError: errorDiagnosticDetails(lastError),
+      },
+    );
+  } finally {
+    await proxyAgent?.close();
+  }
+}
+
+export async function fetchBinaryPage(
+  url: string,
+  options: FetchPageOptions = {},
+): Promise<RawBinaryCollectionResult> {
+  const attempts = Math.max(1, Math.min(5, Math.trunc(options.attempts ?? 3)));
+  const proxyUrl =
+    options.proxyUrl === undefined
+      ? process.env.COLLECTOR_PROXY_URL?.trim() || null
+      : options.proxyUrl?.trim() || null;
+  const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : null;
+  let lastError: unknown;
+  const attemptFailures: Array<Record<string, unknown>> = [];
+
+  try {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const attemptStartedAt = Date.now();
+      const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
+      const signal = options.signal
+        ? AbortSignal.any([options.signal, timeoutSignal])
+        : timeoutSignal;
+      const useProxy = Boolean(proxyAgent && attempt % 2 === 1);
+
+      try {
+        const requestInit: RequestInit & { dispatcher?: ProxyAgent } = {
+          headers: {
+            accept: "application/octet-stream,application/gzip",
+            "cache-control": "no-cache",
+            "user-agent":
+              "AIPriceAtlas/0.1 (+https://github.com/ai-price-atlas; public-price-monitor)",
+            ...options.headers,
+          },
+          redirect: "follow",
+          signal,
+        };
+        if (useProxy && proxyAgent) requestInit.dispatcher = proxyAgent;
+        const response = await fetch(url, requestInit);
+        if (
+          !response.ok &&
+          !options.allowedStatuses?.includes(response.status)
+        ) {
+          throw new CollectionError(
+            "HTTP_ERROR",
+            `Official source returned HTTP ${response.status}.`,
+            {
+              status: response.status,
+              statusText: response.statusText,
+              url: sanitizeDiagnosticUrl(url),
+              responseUrl: sanitizeDiagnosticUrl(response.url || url),
+              responseHeaders: diagnosticHeaders(response.headers),
+            },
+          );
+        }
+        const body = Buffer.from(await response.arrayBuffer());
+        return {
+          sourceUrl: response.url || url,
+          status: response.status,
+          headers: responseHeaders(response.headers),
+          body,
+          contentHash: createHash("sha256").update(body).digest("hex"),
           observedAt: (options.observedAt ?? new Date()).toISOString(),
         };
       } catch (error) {

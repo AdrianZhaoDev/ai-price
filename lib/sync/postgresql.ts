@@ -9,6 +9,12 @@ import {
   collectionErrors,
   collectionRuns,
   fxRates,
+  modelCatalogEvents,
+  modelCatalogImports,
+  modelCatalogModels,
+  modelCatalogProviders,
+  modelLabs,
+  modelProviderOfferings,
   plans,
   priceChangeCandidates,
   priceChangeEvents,
@@ -59,6 +65,12 @@ export async function syncPostgresqlData(
     rankingStateRows,
     rankingEventRows,
     collectionErrorRows,
+    modelCatalogImportRows,
+    modelLabRows,
+    modelCatalogProviderRows,
+    modelCatalogModelRows,
+    modelProviderOfferingRows,
+    modelCatalogEventRows,
   ] = await source.transaction(
     async (snapshot) =>
       Promise.all([
@@ -74,6 +86,12 @@ export async function syncPostgresqlData(
         snapshot.select().from(apiRankingState),
         snapshot.select().from(apiRankingEvents),
         snapshot.select().from(collectionErrors),
+        snapshot.select().from(modelCatalogImports),
+        snapshot.select().from(modelLabs),
+        snapshot.select().from(modelCatalogProviders),
+        snapshot.select().from(modelCatalogModels),
+        snapshot.select().from(modelProviderOfferings),
+        snapshot.select().from(modelCatalogEvents),
       ]),
     {
       isolationLevel: "repeatable read",
@@ -84,6 +102,12 @@ export async function syncPostgresqlData(
   const targetConnection = createDatabaseConnection(targetUrl, 2);
   try {
     await targetConnection.database.transaction(async (target) => {
+      await target.delete(modelCatalogEvents);
+      await target.delete(modelProviderOfferings);
+      await target.delete(modelCatalogModels);
+      await target.delete(modelCatalogProviders);
+      await target.delete(modelLabs);
+      await target.delete(modelCatalogImports);
       await target.delete(collectionErrors);
       await target.delete(apiRankingEvents);
       await target.delete(apiRankingState);
@@ -354,6 +378,25 @@ export async function syncPostgresqlData(
             },
           });
       }
+
+      for (const batch of batches(modelCatalogImportRows)) {
+        await target.insert(modelCatalogImports).values(batch);
+      }
+      for (const batch of batches(modelLabRows)) {
+        await target.insert(modelLabs).values(batch);
+      }
+      for (const batch of batches(modelCatalogProviderRows)) {
+        await target.insert(modelCatalogProviders).values(batch);
+      }
+      for (const batch of batches(modelCatalogModelRows)) {
+        await target.insert(modelCatalogModels).values(batch);
+      }
+      for (const batch of batches(modelProviderOfferingRows)) {
+        await target.insert(modelProviderOfferings).values(batch);
+      }
+      for (const batch of batches(modelCatalogEventRows)) {
+        await target.insert(modelCatalogEvents).values(batch);
+      }
     });
   } finally {
     await targetConnection.client.end({ timeout: 5 });
@@ -372,5 +415,11 @@ export async function syncPostgresqlData(
     apiRankingState: rankingStateRows.length,
     apiRankingEvents: rankingEventRows.length,
     collectionErrors: collectionErrorRows.length,
+    modelCatalogImports: modelCatalogImportRows.length,
+    modelLabs: modelLabRows.length,
+    modelCatalogProviders: modelCatalogProviderRows.length,
+    modelCatalogModels: modelCatalogModelRows.length,
+    modelProviderOfferings: modelProviderOfferingRows.length,
+    modelCatalogEvents: modelCatalogEventRows.length,
   };
 }
