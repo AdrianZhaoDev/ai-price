@@ -892,6 +892,10 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   await expect(
     detailPage.locator(".model-provider-table thead th"),
   ).toHaveCount(14);
+  await expect(detailPage.locator(".model-provider-table")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
   const inputPriceHeader = detailPage.getByRole("columnheader", {
     name: /Input Price/,
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   sortModelProviderOfferings,
   type ModelProviderSortKey,
@@ -57,10 +57,15 @@ export function ModelProviderTable({
 }) {
   const [sort, setSort] = useState<ModelProviderSortKey>("inputPrice");
   const [direction, setDirection] = useState<"asc" | "desc">("asc");
+  const tableRef = useRef<HTMLTableElement>(null);
   const sortedProviders = useMemo(
     () => sortModelProviderOfferings(providers, sort, direction),
     [direction, providers, sort],
   );
+
+  useEffect(() => {
+    tableRef.current?.setAttribute("data-hydrated", "true");
+  }, []);
 
   function sortBy(nextSort: ModelProviderSortKey) {
     if (nextSort === sort) {
@@ -77,7 +82,7 @@ export function ModelProviderTable({
       tabIndex={0}
       aria-label="Provider 报价表，可横向滚动"
     >
-      <table className="model-provider-table">
+      <table ref={tableRef} className="model-provider-table">
         <caption className="sr-only">
           Provider 模型规格与输入、输出价格比较
         </caption>
