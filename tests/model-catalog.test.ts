@@ -3,10 +3,12 @@ import { contentHash, normalizeCatalogFiles } from "@/lib/model-catalog/source";
 import {
   catalogDateEnd,
   catalogDateStart,
+  filterAndSortModelCatalog,
   parseModelCatalogFilters,
   parseOptionalNumber,
 } from "@/lib/model-catalog/filters";
 import { isSafeModelId, modelDetailPath } from "@/lib/model-catalog/paths";
+import { sortModelProviderOfferings } from "@/lib/model-catalog/provider-sorting";
 import { assertPlausibleCatalogSnapshot } from "@/lib/model-catalog/health";
 
 const baseModel = `
@@ -93,6 +95,79 @@ describe("models.dev catalog normalization", () => {
     expect(atlas.summary.minOutputProviderName).toBe("Cheap Output");
     expect(scoped.providers).toHaveLength(1);
     expect(catalog.unlinkedProviderModels).toBe(0);
+    expect(
+      filterAndSortModelCatalog(
+        catalog.models.map((model) => model.summary),
+        parseModelCatalogFilters({}),
+      ).map((model) => model.id),
+    ).toEqual(["provider/scoped"]);
+    expect(
+      filterAndSortModelCatalog(
+        catalog.models.map((model) => model.summary),
+        parseModelCatalogFilters({ hideZero: "0" }),
+      ).map((model) => model.id),
+    ).toEqual(["lab/atlas", "provider/scoped"]);
+    expect(
+      filterAndSortModelCatalog(
+        catalog.models.map((model) => model.summary),
+        parseModelCatalogFilters({
+          hideZero: "0",
+          sort: "price_output",
+          direction: "desc",
+        }),
+      ).map((model) => model.id),
+    ).toEqual(["provider/scoped", "lab/atlas"]);
+  });
+
+  it("sorts provider rows by the four numeric columns with missing values last", () => {
+    const catalog = normalizeCatalogFiles(
+      new Map<string, string>([
+        ["models/lab/atlas.toml", baseModel],
+        ["providers/a/provider.toml", 'name = "Provider A"'],
+        ["providers/b/provider.toml", 'name = "Provider B"'],
+        [
+          "providers/a/models/atlas.toml",
+          'base_model = "lab/atlas"\ncost = { input = 2, output = 8 }\n[limit]\ncontext = 100\noutput = 50',
+        ],
+        [
+          "providers/b/models/atlas.toml",
+          'base_model = "lab/atlas"\ncost = { input = 1, output = 9 }\n[limit]\ncontext = 200\noutput = 25',
+        ],
+      ]),
+      "a".repeat(40),
+      "2026-08-10T00:00:00.000Z",
+    );
+    const providers = [
+      ...catalog.models[0]!.providers,
+      {
+        ...catalog.models[0]!.providers[0]!,
+        providerId: "missing",
+        providerName: "Missing",
+        inputPrice: undefined,
+        outputPrice: undefined,
+        context: undefined,
+        output: undefined,
+      },
+    ];
+
+    expect(
+      sortModelProviderOfferings(providers).map((item) => item.providerName),
+    ).toEqual(["Provider B", "Provider A", "Missing"]);
+    expect(
+      sortModelProviderOfferings(providers, "context", "desc").map(
+        (item) => item.providerName,
+      ),
+    ).toEqual(["Provider B", "Provider A", "Missing"]);
+    expect(
+      sortModelProviderOfferings(providers, "output").map(
+        (item) => item.providerName,
+      ),
+    ).toEqual(["Provider B", "Provider A", "Missing"]);
+    expect(
+      sortModelProviderOfferings(providers, "outputPrice", "desc").map(
+        (item) => item.providerName,
+      ),
+    ).toEqual(["Provider B", "Provider A", "Missing"]);
   });
 
   it("applies base_model_omit before provider overrides and excludes alpha/deprecated offers from minima", () => {
@@ -238,6 +313,16 @@ describe("models.dev catalog normalization", () => {
       direction: "asc",
     });
     expect(parseOptionalNumber("")).toBeUndefined();
+    expect(parseModelCatalogFilters({})).toMatchObject({
+      hideZeroPrice: true,
+      sort: "price_input",
+      direction: "asc",
+    });
+    expect(parseModelCatalogFilters({ hideZero: "0" })).toMatchObject({
+      hideZeroPrice: false,
+      sort: "price_input",
+      direction: "asc",
+    });
     expect(parseModelCatalogFilters({ model: "legacy-model" }).query).toBe(
       "legacy-model",
     );

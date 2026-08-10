@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ModelProviderTable } from "@/components/model-provider-table";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { modes } from "@/lib/data/catalog";
 import { loadCachedModelDetail } from "@/lib/model-catalog/cache";
@@ -19,20 +20,8 @@ function joinModelId(path: string[]) {
 function tokens(value?: number) {
   return value === undefined ? "—" : value.toLocaleString("en-US");
 }
-function price(value?: number) {
-  return value === undefined
-    ? "—"
-    : `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
-}
 function yesNo(value?: boolean) {
   return value === undefined ? "—" : value ? "是" : "否";
-}
-function priceTierDetails(costDetails?: Record<string, unknown>) {
-  if (!costDetails) return undefined;
-  const { input: _input, output: _output, ...details } = costDetails;
-  void _input;
-  void _output;
-  return Object.keys(details).length ? details : undefined;
 }
 
 export async function generateMetadata({
@@ -44,12 +33,24 @@ export async function generateMetadata({
   const model = await loadCachedModelDetail(joinModelId(modelPath));
   if (!model) return {};
   const path = modelDetailPath(model.id);
-  const description =
-    model.description ??
-    `${model.name} 的规格、上下文、输出限制与 provider API 价格。`;
+  const description = [
+    model.description,
+    `查看 ${model.name} 的 Context、最大输出、输入输出模态、能力与各 Provider API 价格。`,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 180);
+  const imageUrl = absoluteUrl("/og.png");
   return {
     title: `${model.name} API 价格与模型规格`,
     description,
+    keywords: [
+      model.name,
+      `${model.name} API 价格`,
+      `${model.labName} 模型`,
+      "AI 模型 API 价格",
+      model.family,
+    ].filter((value): value is string => Boolean(value)),
     alternates: { canonical: path },
     robots: model.active ? undefined : { index: false, follow: true },
     openGraph: {
@@ -59,6 +60,22 @@ export async function generateMetadata({
       url: path,
       title: `${model.name} API 价格与模型规格`,
       description,
+      publishedTime: model.releaseDate,
+      modifiedTime: model.detailChangedAt ?? model.updatedDate,
+      images: [
+        {
+          url: imageUrl,
+          width: 1731,
+          height: 909,
+          alt: `${model.name} API 价格与模型规格`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${model.name} API 价格与模型规格`,
+      description,
+      images: [imageUrl],
     },
   };
 }
@@ -71,24 +88,65 @@ export default async function ModelPage({
   const { modelPath } = await params;
   const model = await loadCachedModelDetail(joinModelId(modelPath));
   if (!model) notFound();
-  const breadcrumb = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "API 模型目录",
-        item: absoluteUrl("/api-pricing"),
+  const pageUrl = absoluteUrl(modelDetailPath(model.id));
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "API 价格排行榜",
+          item: absoluteUrl("/api-pricing"),
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: model.name,
+          item: pageUrl,
+        },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Dataset",
+      name: `${model.name} API 价格与模型规格`,
+      description:
+        model.description ?? `${model.name} 的模型规格与 Provider API 价格。`,
+      identifier: model.id,
+      url: pageUrl,
+      isAccessibleForFree: true,
+      datePublished: model.releaseDate,
+      dateModified: model.detailChangedAt ?? model.updatedDate,
+      creator: { "@type": "Organization", name: model.labName },
+      isPartOf: {
+        "@type": "Dataset",
+        name: "Low Price Radar API 价格排行榜",
+        url: absoluteUrl("/api-pricing"),
       },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: model.name,
-        item: absoluteUrl(modelDetailPath(model.id)),
-      },
-    ],
-  };
+      license: "https://github.com/anomalyco/models.dev/blob/dev/LICENSE",
+      isBasedOn: model.sourceUrl,
+      variableMeasured: [
+        { "@type": "PropertyValue", name: "Context", value: model.context },
+        {
+          "@type": "PropertyValue",
+          name: "Output limit",
+          value: model.output,
+        },
+        {
+          "@type": "PropertyValue",
+          name: "Minimum input price (USD per million tokens)",
+          value: model.minInputPrice,
+        },
+        {
+          "@type": "PropertyValue",
+          name: "Minimum output price (USD per million tokens)",
+          value: model.minOutputPrice,
+        },
+      ].filter((measurement) => measurement.value !== undefined),
+    },
+  ];
   const facts = [
     ["完整 ID", model.id],
     ["Lab", model.labName],
@@ -108,7 +166,7 @@ export default async function ModelPage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(breadcrumb).replace(/</g, "\\u003c"),
+          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
         }}
       />
       <a className="skip-link" href="#main-content">
@@ -155,7 +213,7 @@ export default async function ModelPage({
       </header>
       <main id="main-content" className="main-content model-detail-main">
         <nav className="model-breadcrumb" aria-label="面包屑">
-          <Link href="/api-pricing">API 模型目录</Link>
+          <Link href="/api-pricing">API 价格排行榜</Link>
           <span>/</span>
           <span>{model.name}</span>
         </nav>
@@ -211,101 +269,7 @@ export default async function ModelPage({
             </div>
             <span>{model.providers.length} 个报价</span>
           </div>
-          <div className="model-table-scroll" tabIndex={0}>
-            <table className="model-provider-table">
-              <thead>
-                <tr>
-                  {[
-                    "Provider",
-                    "Lab",
-                    "Model ID",
-                    "Context",
-                    "Output",
-                    "Input Price",
-                    "Output Price",
-                    "Price tiers",
-                    "Reasoning",
-                    "Tool Call",
-                    "Structured",
-                    "Temperature",
-                    "状态",
-                    "来源",
-                  ].map((label) => (
-                    <th key={label} scope="col">
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {model.providers.map((provider) => {
-                  const tierDetails = priceTierDetails(provider.costDetails);
-                  return (
-                    <tr
-                      key={`${provider.providerId}:${provider.providerModelId}`}
-                    >
-                      <th scope="row">
-                        <Link
-                          href={`/api-pricing?provider=${encodeURIComponent(provider.providerId)}`}
-                        >
-                          {provider.providerName}
-                        </Link>
-                        <small>
-                          {provider.origin === "local_overlay"
-                            ? "local overlay"
-                            : "models.dev"}
-                        </small>
-                      </th>
-                      <td>{provider.labName}</td>
-                      <td>
-                        <code>{provider.providerModelId}</code>
-                      </td>
-                      <td>{tokens(provider.context)}</td>
-                      <td>{tokens(provider.output)}</td>
-                      <td>{price(provider.inputPrice)}</td>
-                      <td>{price(provider.outputPrice)}</td>
-                      <td>
-                        {tierDetails ? (
-                          <details className="model-price-tiers">
-                            <summary>
-                              {Object.keys(tierDetails).length} 项明细
-                            </summary>
-                            <pre>{JSON.stringify(tierDetails, null, 2)}</pre>
-                          </details>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>{yesNo(provider.capabilities.reasoning)}</td>
-                      <td>{yesNo(provider.capabilities.toolCall)}</td>
-                      <td>{yesNo(provider.capabilities.structuredOutput)}</td>
-                      <td>{yesNo(provider.capabilities.temperature)}</td>
-                      <td>
-                        <span
-                          className={`model-status model-status-${provider.status ?? "active"}`}
-                        >
-                          {provider.status ?? "active"}
-                        </span>
-                      </td>
-                      <td>
-                        {provider.sourceUrl ? (
-                          <a
-                            href={provider.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            查看 ↗
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ModelProviderTable providers={model.providers} />
         </section>
         <aside className="model-provenance">
           <strong>数据来源与版本</strong>
@@ -321,7 +285,7 @@ export default async function ModelPage({
       <footer className="site-footer">
         <div>
           <strong>Low Price Radar</strong>
-          <p>API 模型规格与社区聚合价格目录。</p>
+          <p>API 模型规格与社区聚合价格排行榜。</p>
         </div>
         <div className="footer-links">
           <Link href="/methodology">采集方法</Link>

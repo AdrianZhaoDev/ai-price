@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { modes } from "@/lib/data/catalog";
 import {
-  catalogDateEnd,
-  catalogDateStart,
+  DEFAULT_MODEL_CATALOG_FILTERS,
+  filterAndSortModelCatalog,
   parseOptionalNumber,
 } from "@/lib/model-catalog/filters";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
@@ -34,16 +34,6 @@ function formatPrice(value?: number) {
   return value === undefined
     ? "—"
     : `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
-}
-
-function compareOptional(
-  a: number | undefined,
-  b: number | undefined,
-  direction: "asc" | "desc",
-) {
-  if (a === undefined) return b === undefined ? 0 : 1;
-  if (b === undefined) return -1;
-  return (a - b) * (direction === "asc" ? 1 : -1);
 }
 
 export function ModelCatalogExplorer({
@@ -92,6 +82,7 @@ export function ModelCatalogExplorer({
   function catalogHref(next: ModelCatalogFilters) {
     const params = new URLSearchParams();
     if (next.query) params.set("q", next.query);
+    if (next.hideZeroPrice === false) params.set("hideZero", "0");
     if (next.labs?.length) params.set("lab", next.labs.join(","));
     if (next.providers?.length)
       params.set("provider", next.providers.join(","));
@@ -109,8 +100,16 @@ export function ModelCatalogExplorer({
     if (next.releaseTo) params.set("releaseTo", next.releaseTo);
     if (next.updatedFrom) params.set("updatedFrom", next.updatedFrom);
     if (next.updatedTo) params.set("updatedTo", next.updatedTo);
-    if (next.sort && next.sort !== "release") params.set("sort", next.sort);
-    if (next.direction && next.direction !== "desc")
+    if (next.sort && next.sort !== "price_input") params.set("sort", next.sort);
+    const defaultDirection =
+      next.sort === "model" ||
+      next.sort === "lab" ||
+      next.sort === "input" ||
+      !next.sort ||
+      next.sort === "price_input"
+        ? "asc"
+        : "desc";
+    if (next.direction && next.direction !== defaultDirection)
       params.set("direction", next.direction);
     return `/api-pricing${params.size ? `?${params}` : ""}`;
   }
@@ -122,116 +121,13 @@ export function ModelCatalogExplorer({
   }
 
   const visible = useMemo(
-    () =>
-      models
-        .filter((model) => {
-          const query = filters.query?.trim().toLowerCase();
-          if (
-            query &&
-            !`${model.name} ${model.id} ${model.labName} ${model.description ?? ""}`
-              .toLowerCase()
-              .includes(query)
-          )
-            return false;
-          if (filters.labs?.length && !filters.labs.includes(model.labId))
-            return false;
-          if (
-            filters.providers?.length &&
-            !filters.providers.some((id) => model.providerIds.includes(id))
-          )
-            return false;
-          if (
-            filters.contextMin !== undefined &&
-            (model.context ?? -1) < filters.contextMin
-          )
-            return false;
-          if (
-            filters.outputMin !== undefined &&
-            (model.output ?? -1) < filters.outputMin
-          )
-            return false;
-          if (
-            filters.inputModalities?.length &&
-            !filters.inputModalities.every((item) =>
-              model.inputModalities.includes(item),
-            )
-          )
-            return false;
-          if (
-            filters.inputPriceMax !== undefined &&
-            (model.minInputPrice === undefined ||
-              model.minInputPrice > filters.inputPriceMax)
-          )
-            return false;
-          if (
-            filters.outputPriceMax !== undefined &&
-            (model.minOutputPrice === undefined ||
-              model.minOutputPrice > filters.outputPriceMax)
-          )
-            return false;
-          if (
-            filters.releaseFrom &&
-            catalogDateEnd(model.releaseDate) < filters.releaseFrom
-          )
-            return false;
-          if (
-            filters.releaseTo &&
-            catalogDateStart(model.releaseDate) > filters.releaseTo
-          )
-            return false;
-          if (
-            filters.updatedFrom &&
-            catalogDateEnd(model.updatedDate) < filters.updatedFrom
-          )
-            return false;
-          if (
-            filters.updatedTo &&
-            catalogDateStart(model.updatedDate) > filters.updatedTo
-          )
-            return false;
-          return true;
-        })
-        .sort((a, b) => {
-          const direction = filters.direction ?? "desc";
-          const sign = direction === "asc" ? 1 : -1;
-          const sort = (filters.sort ?? "release") as SortKey;
-          if (sort === "context" || sort === "output")
-            return compareOptional(a[sort], b[sort], direction);
-          if (sort === "price_input")
-            return compareOptional(a.minInputPrice, b.minInputPrice, direction);
-          if (sort === "price_output")
-            return compareOptional(
-              a.minOutputPrice,
-              b.minOutputPrice,
-              direction,
-            );
-          const left =
-            sort === "model"
-              ? a.name
-              : sort === "lab"
-                ? a.labName
-                : sort === "input"
-                  ? a.inputModalities.join(",")
-                  : sort === "updated"
-                    ? a.updatedDate
-                    : a.releaseDate;
-          const right =
-            sort === "model"
-              ? b.name
-              : sort === "lab"
-                ? b.labName
-                : sort === "input"
-                  ? b.inputModalities.join(",")
-                  : sort === "updated"
-                    ? b.updatedDate
-                    : b.releaseDate;
-          return left.localeCompare(right) * sign;
-        }),
+    () => filterAndSortModelCatalog(models, filters),
     [filters, models],
   );
 
   const activeFilterCount = [
     filters.query,
+    filters.hideZeroPrice === false ? 1 : undefined,
     filters.labs?.length,
     filters.providers?.length,
     filters.contextMin,
@@ -257,7 +153,10 @@ export function ModelCatalogExplorer({
           ? filters.direction === "asc"
             ? "desc"
             : "asc"
-          : sort === "model" || sort === "lab" || sort === "input"
+          : sort === "model" ||
+              sort === "lab" ||
+              sort === "input" ||
+              sort === "price_input"
             ? "asc"
             : "desc",
     });
@@ -316,7 +215,7 @@ export function ModelCatalogExplorer({
         >
           <div>
             <p className="eyebrow">MODELS.DEV CATALOG</p>
-            <h1 id="model-catalog-title">API 模型目录</h1>
+            <h1 id="model-catalog-title">API 价格排行榜</h1>
             <p>比较模型规格与所有有效 provider 中的最低输入、输出价格。</p>
           </div>
           <button
@@ -375,6 +274,16 @@ export function ModelCatalogExplorer({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="model-zero-filter">
+            <input
+              type="checkbox"
+              checked={filters.hideZeroPrice !== false}
+              onChange={(event) =>
+                update("hideZeroPrice", event.target.checked)
+              }
+            />
+            <span>不显示 0 价格</span>
           </label>
           <button
             type="button"
@@ -510,7 +419,7 @@ export function ModelCatalogExplorer({
             <button
               type="button"
               className="model-clear pressable"
-              onClick={() => commit({ sort: "release", direction: "desc" })}
+              onClick={() => commit(DEFAULT_MODEL_CATALOG_FILTERS)}
             >
               <RotateCcw size={14} />
               清除筛选
@@ -526,6 +435,9 @@ export function ModelCatalogExplorer({
           aria-label="API 模型排行榜，可横向滚动"
         >
           <table className="model-catalog-table">
+            <caption className="sr-only">
+              API 价格排行榜：模型规格、最低输入与输出价格
+            </caption>
             <thead>
               <tr>
                 {(
@@ -545,7 +457,17 @@ export function ModelCatalogExplorer({
                     ["updated", "Updated"],
                   ] as Array<[SortKey, string]>
                 ).map(([key, label]) => (
-                  <th key={label} scope="col">
+                  <th
+                    key={label}
+                    scope="col"
+                    aria-sort={
+                      filters.sort === key
+                        ? filters.direction === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
+                  >
                     <button
                       type="button"
                       onClick={() => sortBy(key)}
@@ -583,9 +505,15 @@ export function ModelCatalogExplorer({
               {visible.map((model) => (
                 <tr key={model.id}>
                   <th scope="row">
-                    <Link href={modelDetailPath(model.id)}>
+                    <Link
+                      href={modelDetailPath(model.id)}
+                      target="_blank"
+                      rel="noopener"
+                      title="在新页签打开模型详情"
+                    >
                       <strong>{model.name}</strong>
                       <small>{model.id}</small>
+                      <span className="sr-only">（在新页签打开详情）</span>
                     </Link>
                   </th>
                   <td>{model.labName}</td>
@@ -623,7 +551,7 @@ export function ModelCatalogExplorer({
       <footer className="site-footer">
         <div>
           <strong>Low Price Radar</strong>
-          <p>API 模型规格与社区聚合价格目录。</p>
+          <p>API 模型规格与社区聚合价格排行榜。</p>
         </div>
         <div className="footer-links">
           <Link href="/methodology">采集方法</Link>

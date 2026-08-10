@@ -8,10 +8,10 @@
 4. 登录后的官方会员页面。
 5. 管理员人工录入并附官方证据。
 
-第三方媒体和聚合站只用于发现线索，不作为订阅与品牌价格来源。API 模型目录是
+第三方媒体和聚合站只用于发现线索，不作为订阅与品牌价格来源。API 价格排行榜是
 唯一明确例外，见下节。
 
-## models.dev API 模型目录
+## models.dev API 价格排行榜数据源
 
 - 榜单与模型详情的唯一读取源为 `anomalyco/models.dev`，每 4 小时先解析 `dev`
   当前 commit SHA，再下载该固定提交的 TOML 快照。
@@ -118,7 +118,7 @@ TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 |   19 | Gemini API | Paid Tier 的 Standard 输入、缓存与输出 Token 价   | `https://ai.google.dev/gemini-api/docs/pricing`            |
 |   20 | xAI Grok   | Text API 的短上下文输入、缓存与输出 Token 价      | `https://docs.x.ai/developers/pricing`                     |
 
-这些官方 collector 继续服务品牌落地页与历史价格观察，但新的 API 模型目录、榜单和
+这些官方 collector 继续服务品牌落地页与历史价格观察，但新的 API 价格排行榜和
 模型详情不读取这些报价，也不再产生旧 API 排名事件。Batch、Flex、Priority、长上下文、
 免费层、退役或限量模型，以及图片、音频、工具调用等非 Token 项目不进入旧历史口径。
 为避免历史型号淹没当前价格，采集阶段只保留官网仍在售的最新主力系列：OpenAI
