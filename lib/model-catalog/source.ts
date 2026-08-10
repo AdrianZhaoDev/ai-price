@@ -11,6 +11,7 @@ import { gunzipSync } from "node:zlib";
 import { parse as parseToml } from "smol-toml";
 import { extract } from "tar-stream";
 import { z } from "zod";
+import { fetchBinaryPage, fetchPage } from "@/lib/collectors/http-client";
 
 const MODELS_DEV_REPOSITORY = "anomalyco/models.dev";
 const MODELS_DEV_BRANCH = "dev";
@@ -266,36 +267,51 @@ function requireOverride(
 }
 
 export async function fetchModelsDevCatalog(
-  fetchImplementation: typeof fetch = fetch,
+  fetchImplementation?: typeof fetch,
 ): Promise<NormalizedCatalog> {
-  const commitResponse = await fetchImplementation(
-    `https://api.github.com/repos/${MODELS_DEV_REPOSITORY}/commits/${MODELS_DEV_BRANCH}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "low-price-radar-model-catalog",
-      },
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-  if (!commitResponse.ok)
-    throw new Error(
-      `models.dev commit lookup failed with HTTP ${commitResponse.status}.`,
-    );
+  const commitUrl = `https://api.github.com/repos/${MODELS_DEV_REPOSITORY}/commits/${MODELS_DEV_BRANCH}`;
+  const commitBody = fetchImplementation
+    ? await fetchImplementation(commitUrl, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "low-price-radar-model-catalog",
+        },
+        signal: AbortSignal.timeout(30_000),
+      }).then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            `models.dev commit lookup failed with HTTP ${response.status}.`,
+          );
+        return response.text();
+      })
+    : (
+        await fetchPage(commitUrl, {
+          timeoutMs: 30_000,
+          headers: {
+            Accept: "application/vnd.github+json",
+            "User-Agent": "low-price-radar-model-catalog",
+          },
+        })
+      ).body;
   const commit = z
     .object({ sha: z.string().regex(/^[a-f0-9]{40}$/) })
-    .parse(await commitResponse.json());
-  const archiveResponse = await fetchImplementation(
-    `https://codeload.github.com/${MODELS_DEV_REPOSITORY}/tar.gz/${commit.sha}`,
-    {
-      signal: AbortSignal.timeout(60_000),
-    },
-  );
-  if (!archiveResponse.ok)
-    throw new Error(
-      `models.dev archive download failed with HTTP ${archiveResponse.status}.`,
-    );
-  const archive = Buffer.from(await archiveResponse.arrayBuffer());
+    .parse(JSON.parse(commitBody));
+  const archiveUrl = `https://codeload.github.com/${MODELS_DEV_REPOSITORY}/tar.gz/${commit.sha}`;
+  const archive = fetchImplementation
+    ? await fetchImplementation(archiveUrl, {
+        signal: AbortSignal.timeout(60_000),
+      }).then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            `models.dev archive download failed with HTTP ${response.status}.`,
+          );
+        return Buffer.from(await response.arrayBuffer());
+      })
+    : (
+        await fetchBinaryPage(archiveUrl, {
+          timeoutMs: 60_000,
+        })
+      ).body;
   const files = await tarEntries(archive);
   return normalizeCatalogFiles(files, commit.sha, new Date().toISOString());
 }

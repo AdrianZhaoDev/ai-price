@@ -7,6 +7,7 @@ import {
   parseOptionalNumber,
 } from "@/lib/model-catalog/filters";
 import { isSafeModelId, modelDetailPath } from "@/lib/model-catalog/paths";
+import { assertPlausibleCatalogSnapshot } from "@/lib/model-catalog/health";
 
 const baseModel = `
 name = "Atlas"
@@ -25,6 +26,23 @@ output = 8000
 `;
 
 describe("models.dev catalog normalization", () => {
+  it("rejects implausibly small snapshots before an initial import", () => {
+    expect(() =>
+      assertPlausibleCatalogSnapshot({
+        models: 0,
+        providers: 0,
+        offerings: 0,
+      }),
+    ).toThrow("model count 0 is below the minimum 100");
+    expect(() =>
+      assertPlausibleCatalogSnapshot({
+        models: 303,
+        providers: 182,
+        offerings: 3_237,
+      }),
+    ).not.toThrow();
+  });
+
   it("links explicit, exact, and provider-scoped models and calculates independent minimum prices", () => {
     const files = new Map<string, string>([
       ["models/lab/atlas.toml", baseModel],

@@ -12,6 +12,7 @@ import type {
   ModelCatalogImportResult,
   NormalizedCatalog,
 } from "@/lib/model-catalog/types";
+import { assertPlausibleCatalogSnapshot } from "@/lib/model-catalog/health";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
 export async function persistModelCatalog(
@@ -62,6 +63,11 @@ export async function persistModelCatalog(
       (total, model) => total + model.providers.length,
       0,
     );
+    assertPlausibleCatalogSnapshot({
+      models: catalog.models.length,
+      providers: catalog.providers.length,
+      offerings: nextOfferingCount,
+    });
     for (const [label, previous, next] of [
       ["provider", previousImport?.providerCount, catalog.providers.length],
       ["offering", previousImport?.offeringCount, nextOfferingCount],

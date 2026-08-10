@@ -86,6 +86,10 @@ export function ModelCatalogExplorer({
 
   function commit(next: ModelCatalogFilters) {
     setFilters(next);
+    router.replace(catalogHref(next), { scroll: false });
+  }
+
+  function catalogHref(next: ModelCatalogFilters) {
     const params = new URLSearchParams();
     if (next.query) params.set("q", next.query);
     if (next.labs?.length) params.set("lab", next.labs.join(","));
@@ -108,9 +112,13 @@ export function ModelCatalogExplorer({
     if (next.sort && next.sort !== "release") params.set("sort", next.sort);
     if (next.direction && next.direction !== "desc")
       params.set("direction", next.direction);
-    router.replace(`/api-pricing${params.size ? `?${params}` : ""}`, {
-      scroll: false,
-    });
+    return `/api-pricing${params.size ? `?${params}` : ""}`;
+  }
+
+  function updateQuery(value: string | undefined) {
+    const next = { ...filters, query: value };
+    setFilters(next);
+    window.history.replaceState(window.history.state, "", catalogHref(next));
   }
 
   const visible = useMemo(
@@ -326,9 +334,7 @@ export function ModelCatalogExplorer({
             <input
               type="search"
               value={filters.query ?? ""}
-              onChange={(event) =>
-                update("query", event.target.value || undefined)
-              }
+              onChange={(event) => updateQuery(event.target.value || undefined)}
               placeholder="搜索名称或 ID"
             />
           </label>

@@ -851,9 +851,19 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
     [...releaseDates].sort((a, b) => b.localeCompare(a)),
   );
 
+  let searchRscRequests = 0;
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/api-pricing") &&
+      request.url().includes("_rsc=")
+    ) {
+      searchRscRequests += 1;
+    }
+  });
   await page.getByRole("searchbox", { name: "Model" }).fill("Gemini");
   await expect(page).toHaveURL(/q=Gemini/);
   await expect(page.locator(".model-catalog-table tbody tr")).toHaveCount(1);
+  expect(searchRscRequests).toBe(0);
   await page.getByRole("button", { name: /清除筛选/ }).click();
   await expect(page).toHaveURL(/\/api-pricing$/);
 
