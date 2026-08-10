@@ -19,9 +19,27 @@ export default function MethodologyPage() {
       <p className="eyebrow">方法与边界</p>
       <h1>官方价格怎样进入 Low Price Radar</h1>
       <p className="document-lead">
-        我们只发布可以追溯到官方页面的价格。国际订阅读取 Apple App Store 的公开
-        storefront 页面；国内价格读取产品官网、帮助中心或开放平台文档。
+        订阅与品牌价格只发布可追溯到官方页面的记录。API
+        模型目录是明确标注的例外： 它使用 models.dev 的 MIT
+        许可社区聚合数据，并保留固定 commit 证据。
       </p>
+      <section>
+        <h2>API 模型目录的来源边界</h2>
+        <p>
+          API 模型榜单和模型详情每 4 小时从 models.dev 的固定 Git commit
+          导入。输入、输出价格统一为 USD / 百万 tokens；alpha 与 deprecated
+          offering 不参与最低价，0 仍是有效价格。页面会区分 models.dev 与本站
+          local overlay，且不会把社区聚合价描述为本站官方采集价。
+        </p>
+        <p>
+          models.dev 采用 MIT
+          License。版权归原作者所有，数据按“原样”提供且不作担保；
+          <a href="https://github.com/anomalyco/models.dev/blob/dev/LICENSE">
+            查看许可声明
+          </a>
+          。
+        </p>
+      </section>
       <section>
         <h2>每 4 小时核验一次</h2>
         <p>
@@ -54,9 +72,10 @@ export default function MethodologyPage() {
       <section>
         <h2>先标准化，再比较</h2>
         <p>
-          订阅价格保留官方币种、计费周期和地区，同时换算人民币参考价；API
-          报价保留官方原币价、模型、价格层级、缓存输入、非缓存输入、输出及官方计费单位，并统一换算为人民币排序。只有标准实时、短上下文、付费且按百万
-          tokens 计价的数据进入排行榜。
+          订阅价格保留官方币种、计费周期和地区，同时换算人民币参考价。API
+          模型目录 分别计算所有有效 provider 中最低的输入价与输出价，并同时保存
+          provider、规格、 状态、价格层级和来源；缺失价格显示为“—”，不会按 0
+          处理。
         </p>
         <p>
           Batch、Flex、Priority、长上下文、免费层和非 Token

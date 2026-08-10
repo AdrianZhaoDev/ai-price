@@ -90,6 +90,10 @@ production artifact + SHA-256 manifest
 脚本只接受当前本地 `HEAD` 对应且结论为 `success` 的 CI run。如果 CI 尚在执行，
 脚本会等待；失败则停止，不会改动生产。也可明确指定 run：
 
+原子切换并启动新 release 后，脚本会执行一次仅含 `models-dev` 的目录同步，再对全部
+active model 详情、API 目录与 sitemap 做有限并发预热。新 release 不复用旧 release
+的 ISR 文件缓存；同步或任一路径预热失败都会使发布验收失败。
+
 ```powershell
 .\deploy\vps-update.ps1 -RunId 123456789
 ```
@@ -136,6 +140,15 @@ sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'observations=' || count(*) FROM price_observations"
 sudo -u postgres psql -d ai_price -Atc \
   "SELECT 'runs=' || count(*) FROM collection_runs"
+sudo -u postgres psql -d ai_price -Atc \
+  "SELECT 'model_import=' || version || ',models=' || model_count || ',providers=' || provider_count || ',offerings=' || offering_count FROM model_catalog_imports WHERE status='success' ORDER BY created_at DESC LIMIT 1"
+sudo -u postgres psql -d ai_price -Atc \
+  "SELECT 'active_models=' || count(*) FROM model_catalog_models WHERE active"
+curl -fsS -o /dev/null -w "api-models=%{http_code}\n" \
+  http://127.0.0.1:3100/api-pricing
+curl -fsS -o /dev/null -w "model-detail=%{http_code}\n" \
+  http://127.0.0.1:3100/models/google/gemini-2.5-flash
+curl -fsS http://127.0.0.1:3100/sitemap.xml | grep -q '/models/'
 systemctl list-timers ai-price-collect.timer --no-pager
 journalctl -u ai-price.service --since "-10 minutes" --no-pager
 nginx -t
@@ -165,7 +178,8 @@ sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
 验收条件：五个服务/timer 均为 `active`，源站 HTTPS 和公网均为 `200`，HTTP
 一跳 `301` 到主站 HTTPS，错误页未登录时重定向，数据库记录大于 0，timer 有
 下次运行时间，证书剩余至少 14 天，Web 日志无持续重启或连接错误，Nginx 配置
-检查通过且最新 access log 是符合上述字段要求的 JSON。
+检查通过，模型导入数量与上游量级相符，代表性详情与 sitemap 模型链接可访问，且最新
+access log 是符合上述字段要求的 JSON。
 
 生产 access log 使用站点级 `ai_price` JSON 格式。`uri` 和 `referer` 均不记录查询
 参数；字段包含请求方法、状态、响应字节、User-Agent、请求/上游耗时、上游状态、

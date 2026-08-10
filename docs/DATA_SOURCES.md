@@ -8,7 +8,24 @@
 4. 登录后的官方会员页面。
 5. 管理员人工录入并附官方证据。
 
-第三方媒体和聚合站只用于发现线索，不作为发布价格来源。
+第三方媒体和聚合站只用于发现线索，不作为订阅与品牌价格来源。API 模型目录是
+唯一明确例外，见下节。
+
+## models.dev API 模型目录
+
+- 榜单与模型详情的唯一读取源为 `anomalyco/models.dev`，每 4 小时先解析 `dev`
+  当前 commit SHA，再下载该固定提交的 TOML 快照。
+- canonical model、lab、provider 和 provider offering 独立入库；完整执行
+  `base_model`、相同 ID、provider-scoped ID、继承、覆盖和 `base_model_omit` 规则。
+- 输入/输出价格单位固定为 USD / 百万 tokens。`alpha`、`deprecated` 不参与最低价；
+  详情仍保留状态与全部价格层级。`0` 是有效报价，缺失值不是零。
+- `lib/data/model-catalog-overlay.json` 可增加本站 provider/model/offering。冲突必须显式
+  `override: true` 并填写原因，offering 还必须提供 canonical ID、来源 URL 与更新时间。
+- 导入按内容哈希做差异比较，单事务发布。数量坍缩或 schema 失败时保留上一有效快照；
+  仅变化模型失效并主动预热 ISR 页面。
+- models.dev 使用 MIT License，见
+  `https://github.com/anomalyco/models.dev/blob/dev/LICENSE`。数据按原样提供，页面保留
+  固定 commit 证据与 `models.dev` / `local overlay` 来源标识。
 
 ## 采集适配器类型
 
@@ -63,7 +80,7 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 智谱 GLM 资源包固定置顶。所有来源均从无需登录的官方页面或页面公开加载的版本化
 JavaScript 中解析；登录后才能看到且没有公开价目表的会员不发布价格。
 
-## 国内 API 来源（16）
+## 保留的国内官方 API 采集（16）
 
 | 排名 | 产品                 | 采集范围                                   | 官方入口                                                          |
 | ---: | -------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
@@ -87,7 +104,7 @@ JavaScript 中解析；登录后才能看到且没有公开价目表的会员不
 讯飞未公开统一按量后付费价，因此页面明确展示“标准成员折算”，不描述为按量价。
 TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 
-## 海外 API 来源（4）
+## 保留的海外官方 API 采集（4）
 
 | 排名 | 产品       | 采集范围                                          | 官方入口                                                   |
 | ---: | ---------- | ------------------------------------------------- | ---------------------------------------------------------- |
@@ -96,9 +113,9 @@ TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 |   19 | Gemini API | Paid Tier 的 Standard 输入、缓存与输出 Token 价   | `https://ai.google.dev/gemini-api/docs/pricing`            |
 |   20 | xAI Grok   | Text API 的短上下文输入、缓存与输出 Token 价      | `https://docs.x.ai/developers/pricing`                     |
 
-四家海外 API 只使用各平台官方公开价目表。官方 USD 原价与汇率日期一并保留，
-页面以人民币换算值作为主要展示与排序口径。Batch、Flex、Priority、长上下文、
-免费层、退役或限量模型，以及图片、音频、工具调用等非 Token 项目不进入排行榜。
+这些官方 collector 继续服务品牌落地页与历史价格观察，但新的 API 模型目录、榜单和
+模型详情不读取这些报价，也不再产生旧 API 排名事件。Batch、Flex、Priority、长上下文、
+免费层、退役或限量模型，以及图片、音频、工具调用等非 Token 项目不进入旧历史口径。
 为避免历史型号淹没当前价格，采集阶段只保留官网仍在售的最新主力系列：OpenAI
 保留 GPT-5.5 与 GPT-5.6 全系，Claude、Gemini 和 Grok 保留各自当前主力型号；
 海外平台参与排行榜的模型上限为 10 个，国内平台仍为 2 个。

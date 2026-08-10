@@ -11,6 +11,12 @@ export type DataSyncTableCounts = {
   apiRankingState: number;
   apiRankingEvents: number;
   collectionErrors: number;
+  modelCatalogImports: number;
+  modelLabs: number;
+  modelCatalogProviders: number;
+  modelCatalogModels: number;
+  modelProviderOfferings: number;
+  modelCatalogEvents: number;
 };
 
 export type DataSyncResult = {

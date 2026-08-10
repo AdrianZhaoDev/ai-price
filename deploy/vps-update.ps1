@@ -191,6 +191,14 @@ chmod 700 /tmp/ai-price-vps-install.sh
   /tmp/ai-price-package-lock.json
 systemctl is-active \
   ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
+sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
+  set -a
+  source /etc/ai-price.env
+  set +a
+  cd /opt/ai-price/current
+  npm run collect -- --source=models-dev
+  npm run warm:models
+'
 origin_status=`$(curl -sS --resolve '$PublicDomain`:443:127.0.0.1' \
   -o /dev/null -w '%{http_code}' https://$PublicDomain/)
 public_status=`$(curl -sS -o /dev/null -w '%{http_code}' \

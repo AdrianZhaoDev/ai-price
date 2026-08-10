@@ -501,4 +501,4 @@ describe("SEO landing page registry", () => {
     );
   });
 });
-import { buildSitemap } from "@/app/sitemap";
+import { buildSitemap } from "@/lib/catalog-sitemap";

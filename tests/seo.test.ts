@@ -1,6 +1,10 @@
 import manifest from "@/app/manifest";
 import robots from "@/app/robots";
-import { buildSitemap, dynamic as sitemapRendering } from "@/app/sitemap";
+import {
+  buildSitemap,
+  renderSitemapIndexXml,
+  sitemapPageCount,
+} from "@/lib/catalog-sitemap";
 import { providersForMode } from "@/lib/data/catalog";
 import {
   landingPagePath,
@@ -22,7 +26,11 @@ import { describe, expect, it } from "vitest";
 
 describe("SEO routes", () => {
   it("renders the sitemap dynamically from the authoritative runtime cache", () => {
-    expect(sitemapRendering).toBe("force-dynamic");
+    expect(sitemapPageCount(45_000)).toBe(1);
+    expect(sitemapPageCount(45_001)).toBe(2);
+    expect(
+      renderSitemapIndexXml(2, new Date("2026-08-10T00:00:00.000Z")),
+    ).toContain("/sitemaps/2.xml");
   });
 
   it("assigns a stable, distinct URL to every pricing mode", () => {

@@ -5,13 +5,13 @@ import {
   type SubscriptionRateLimitResult,
 } from "@/lib/security/subscription-rate-limit";
 import {
-  requestApiRankingSubscription,
+  requestApiModelNewSubscription,
   requestPriceSubscription,
   sendSubscriptionCreatedEmail,
 } from "@/lib/subscriptions/service";
 import {
-  API_RANKING_PLAN_SLUG,
-  API_RANKING_PROVIDER_SLUG,
+  API_MODEL_NEW_PLAN_SLUG,
+  API_MODEL_NEW_PROVIDER_SLUG,
 } from "@/lib/subscriptions/scopes";
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -23,12 +23,12 @@ const priceRequestSchema = z.object({
   providerId: z.string().min(1).max(80),
   planId: z.string().min(1).max(120).nullable().optional(),
 });
-const rankingRequestSchema = z.object({
-  subscriptionType: z.literal("api_ranking"),
+const modelRequestSchema = z.object({
+  subscriptionType: z.enum(["api_model_new", "api_ranking"]),
   email: emailSchema,
   rankingFallback: z.boolean().optional().default(false),
 });
-const requestSchema = z.union([rankingRequestSchema, priceRequestSchema]);
+const requestSchema = z.union([modelRequestSchema, priceRequestSchema]);
 
 function clientIp(request: NextRequest): string {
   return (
@@ -51,7 +51,7 @@ function rateLimitMessage(
       return `同一邮箱更换关注时需间隔 10 秒，请在 ${rateLimit.retryAfterSeconds} 秒后再试。`;
     case "ip_window":
       return rateLimit.rankingFallbackAllowed
-        ? "您近期提交了较多订阅。要不要改为一次订阅 API 价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。"
+        ? "您近期提交了较多订阅。要不要改为订阅 API 新模型？之后目录出现新的 canonical model 时，我们会发送摘要。"
         : "您近期提交的订阅较多，请过段时间再试。";
   }
 }
@@ -74,20 +74,18 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
-  const rankingRequest = data.subscriptionType === "api_ranking";
+  const modelRequest = data.subscriptionType !== "price";
   const provider =
     data.subscriptionType === "price"
       ? providerCatalog.find((candidate) => candidate.id === data.providerId)
       : undefined;
-  const scopeProviderSlug =
-    data.subscriptionType === "api_ranking"
-      ? API_RANKING_PROVIDER_SLUG
-      : data.providerId;
-  const scopePlanSlug =
-    data.subscriptionType === "api_ranking"
-      ? API_RANKING_PLAN_SLUG
-      : (data.planId ?? null);
-  if (!rankingRequest && !provider) {
+  const scopeProviderSlug = modelRequest
+    ? API_MODEL_NEW_PROVIDER_SLUG
+    : data.providerId;
+  const scopePlanSlug = modelRequest
+    ? API_MODEL_NEW_PLAN_SLUG
+    : (data.planId ?? null);
+  if (!modelRequest && !provider) {
     return NextResponse.json(
       { message: "未找到要关注的产品。" },
       { status: 404 },
@@ -100,8 +98,7 @@ export async function POST(request: NextRequest) {
       email: data.email,
       providerSlug: scopeProviderSlug,
       planSlug: scopePlanSlug,
-      rankingFallback:
-        data.subscriptionType === "api_ranking" && data.rankingFallback,
+      rankingFallback: modelRequest && data.rankingFallback,
     });
     if (!rateLimit.allowed) {
       const isWindowLimit = rateLimit.reason === "ip_window";
@@ -127,14 +124,13 @@ export async function POST(request: NextRequest) {
     }
     fallbackAttemptId = rateLimit.fallbackAttemptId;
 
-    const result =
-      data.subscriptionType === "api_ranking"
-        ? await requestApiRankingSubscription(data.email)
-        : await requestPriceSubscription({
-            email: data.email,
-            providerId: data.providerId,
-            planId: data.planId ?? null,
-          });
+    const result = modelRequest
+      ? await requestApiModelNewSubscription(data.email)
+      : await requestPriceSubscription({
+          email: data.email,
+          providerId: data.providerId,
+          planId: data.planId ?? null,
+        });
 
     const notificationId = result.notificationId;
     if (notificationId) {

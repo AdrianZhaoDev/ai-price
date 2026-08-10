@@ -43,9 +43,9 @@ export const modeSeo: Record<PriceMode, ModeSeo> = {
   },
   api: {
     path: "/api-pricing",
-    title: "AI API 价格排行榜",
+    title: "AI 模型 API 价格与规格排行榜",
     description:
-      "比较 DeepSeek、豆包、通义千问、Kimi 等平台的官方 AI API 价格，按缓存输入、非缓存输入和输出成本查看每百万 Tokens 报价、模型差异、更新时间及官方计费来源，用于估算模型调用预算、比较输入输出成本并选择更合适的服务平台。",
+      "浏览 models.dev 模型目录，比较各模型的 Lab、Context、最大输出、输入模态、最低输入与输出价格、发布日期和更新时间。",
     keywords: [
       "AI API 价格",
       "大模型 API 价格",

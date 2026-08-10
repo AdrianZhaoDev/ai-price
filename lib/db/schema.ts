@@ -422,6 +422,240 @@ export const apiRankingEvents = pgTable(
   ],
 );
 
+export const modelCatalogImports = pgTable(
+  "model_catalog_imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    version: text("version").notNull(),
+    contentHash: text("content_hash").notNull(),
+    status: text("status").notNull(),
+    modelCount: integer("model_count").default(0).notNull(),
+    providerCount: integer("provider_count").default(0).notNull(),
+    offeringCount: integer("offering_count").default(0).notNull(),
+    changedModelCount: integer("changed_model_count").default(0).notNull(),
+    addedModelCount: integer("added_model_count").default(0).notNull(),
+    unlinkedProviderModelCount: integer("unlinked_provider_model_count")
+      .default(0)
+      .notNull(),
+    error: text("error"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("model_catalog_imports_content_hash_unique").on(
+      table.contentHash,
+    ),
+    index("model_catalog_imports_version_idx").on(table.version),
+    index("model_catalog_imports_latest_idx").on(table.createdAt),
+  ],
+);
+
+export const modelLabs = pgTable("model_labs", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  origin: text("origin").notNull(),
+  active: boolean("active").default(true).notNull(),
+  contentHash: text("content_hash").notNull(),
+  lastImportId: uuid("last_import_id").references(
+    () => modelCatalogImports.id,
+    {
+      onDelete: "set null",
+    },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const modelCatalogProviders = pgTable("model_catalog_providers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  docUrl: text("doc_url"),
+  apiUrl: text("api_url"),
+  npmPackage: text("npm_package"),
+  origin: text("origin").notNull(),
+  active: boolean("active").default(true).notNull(),
+  contentHash: text("content_hash").notNull(),
+  lastImportId: uuid("last_import_id").references(
+    () => modelCatalogImports.id,
+    {
+      onDelete: "set null",
+    },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const modelCatalogModels = pgTable(
+  "model_catalog_models",
+  {
+    id: text("id").primaryKey(),
+    labId: text("lab_id")
+      .references(() => modelLabs.id, { onDelete: "restrict" })
+      .notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    family: text("family"),
+    contextTokens: integer("context_tokens"),
+    outputTokens: integer("output_tokens"),
+    inputModalities: jsonb("input_modalities")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    outputModalities: jsonb("output_modalities")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    capabilities: jsonb("capabilities")
+      .$type<Record<string, boolean | undefined>>()
+      .default({})
+      .notNull(),
+    knowledge: text("knowledge"),
+    openWeights: boolean("open_weights").default(false).notNull(),
+    releaseDate: text("release_date").notNull(),
+    updatedDate: text("updated_date").notNull(),
+    providerCount: integer("provider_count").default(0).notNull(),
+    minInputPrice: numeric("min_input_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    minInputProviderId: text("min_input_provider_id"),
+    minOutputPrice: numeric("min_output_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    minOutputProviderId: text("min_output_provider_id"),
+    origin: text("origin").notNull(),
+    active: boolean("active").default(true).notNull(),
+    contentHash: text("content_hash").notNull(),
+    detailChangedAt: timestamp("detail_changed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastImportId: uuid("last_import_id").references(
+      () => modelCatalogImports.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+  },
+  (table) => [
+    index("model_catalog_models_active_release_idx").on(
+      table.active,
+      table.releaseDate,
+    ),
+    index("model_catalog_models_lab_idx").on(table.labId),
+  ],
+);
+
+export const modelProviderOfferings = pgTable(
+  "model_provider_offerings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    providerId: text("provider_id")
+      .references(() => modelCatalogProviders.id, { onDelete: "cascade" })
+      .notNull(),
+    providerModelId: text("provider_model_id").notNull(),
+    canonicalModelId: text("canonical_model_id")
+      .references(() => modelCatalogModels.id, { onDelete: "cascade" })
+      .notNull(),
+    contextTokens: integer("context_tokens"),
+    outputTokens: integer("output_tokens"),
+    inputPrice: numeric("input_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    outputPrice: numeric("output_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    status: text("status"),
+    capabilities: jsonb("capabilities")
+      .$type<Record<string, boolean | undefined>>()
+      .default({})
+      .notNull(),
+    inputModalities: jsonb("input_modalities")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    outputModalities: jsonb("output_modalities")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    costDetails: jsonb("cost_details")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    sourceUrl: text("source_url"),
+    origin: text("origin").notNull(),
+    active: boolean("active").default(true).notNull(),
+    contentHash: text("content_hash").notNull(),
+    lastImportId: uuid("last_import_id").references(
+      () => modelCatalogImports.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("model_provider_offerings_identity_unique").on(
+      table.providerId,
+      table.providerModelId,
+    ),
+    index("model_provider_offerings_model_idx").on(table.canonicalModelId),
+  ],
+);
+
+export const modelCatalogEvents = pgTable(
+  "model_catalog_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    importId: uuid("import_id")
+      .references(() => modelCatalogImports.id, { onDelete: "cascade" })
+      .notNull(),
+    eventType: text("event_type").notNull(),
+    modelId: text("model_id").notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("model_catalog_events_import_model_unique").on(
+      table.importId,
+      table.eventType,
+      table.modelId,
+    ),
+    index("model_catalog_events_pending_idx").on(table.notifiedAt),
+  ],
+);
+
 export const collectionErrors = pgTable(
   "collection_errors",
   {

@@ -3,6 +3,9 @@ type SubscriptionCreatedTemplateInput = {
   viewUrl: string;
   ctaLabel: string;
   unsubscribeUrl: string;
+  eyebrow?: string;
+  description?: string;
+  subject?: string;
 };
 
 type PriceChangeTemplateInput = {
@@ -66,6 +69,18 @@ type AdminAlertTemplateInput = {
   adminUrl?: string;
 };
 
+type ModelCatalogDigestTemplateInput = {
+  models: Array<{
+    name: string;
+    labName: string;
+    releaseDate: string;
+    url: string;
+  }>;
+  catalogVersion: string;
+  viewUrl: string;
+  unsubscribeUrl: string;
+};
+
 function shell(content: string): string {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -113,6 +128,9 @@ export function subscriptionCreatedEmail({
   viewUrl,
   ctaLabel,
   unsubscribeUrl,
+  eyebrow = "价格关注已生效",
+  description = "订阅已经成功。之后仅在价格或套餐发生变化时通知你，无需再点击确认。",
+  subject,
 }: SubscriptionCreatedTemplateInput) {
   const safeScopeLabel = escapeHtml(scopeLabel);
   const safeViewUrl = safeHttpUrl(viewUrl);
@@ -121,17 +139,17 @@ export function subscriptionCreatedEmail({
   const safeUnsubscribeUrl = safeHttpUrl(unsubscribeUrl);
   const safeUnsubscribeTextUrl = safeHttpTextUrl(unsubscribeUrl);
   const html = shell(`
-    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:700;">价格关注已生效</p>
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:700;">${escapeHtml(eyebrow)}</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">已关注 ${safeScopeLabel}</h1>
-    <p style="margin:0;color:#5f5f65;font-size:14px;line-height:1.7;">订阅已经成功。之后仅在价格或套餐发生变化时通知你，无需再点击确认。</p>
+    <p style="margin:0;color:#5f5f65;font-size:14px;line-height:1.7;">${escapeHtml(description)}</p>
     <p style="margin:24px 0 0;"><a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${safeCtaLabel}</a></p>
     <p style="margin:22px 0 0;color:#85858c;font-size:11px;line-height:1.6;">不再需要这项通知？<a href="${safeUnsubscribeUrl}" style="color:#0066cc;">取消订阅</a></p>
   `);
 
   return {
-    subject: `已订阅成功｜看看 ${scopeLabel} 的当前价格`,
+    subject: subject ?? `已订阅成功｜看看 ${scopeLabel} 的当前价格`,
     html,
-    text: `您已成功关注 ${scopeLabel} 的价格。价格或套餐发生变化时，我们会发送邮件。\n\n${ctaLabel}：${safeViewTextUrl}\n取消订阅：${safeUnsubscribeTextUrl}`,
+    text: `您已成功关注 ${scopeLabel}。${description}\n\n${ctaLabel}：${safeViewTextUrl}\n取消订阅：${safeUnsubscribeTextUrl}`,
   };
 }
 
@@ -311,6 +329,35 @@ export function apiRankingChangeEmail({
     subject,
     html,
     text: `${subject}\n\n${textTables}${removedText}\n\n查看完整榜单：${safeViewTextUrl}\n退订：${safeUnsubscribeTextUrl}`,
+  };
+}
+
+export function modelCatalogDigestEmail({
+  models,
+  catalogVersion,
+  viewUrl,
+  unsubscribeUrl,
+}: ModelCatalogDigestTemplateInput) {
+  const rows = models
+    .map(
+      (model) => `<tr>
+        <td style="padding:11px 0;border-bottom:1px solid #ececef;"><a href="${safeHttpUrl(model.url)}" style="color:#1d1d1f;text-decoration:none;font-size:13px;font-weight:700;">${escapeHtml(model.name)}</a><br><span style="color:#85858c;font-size:11px;">${escapeHtml(model.labName)} · ${escapeHtml(model.releaseDate)}</span></td>
+      </tr>`,
+    )
+    .join("");
+  const html = shell(`
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">API 模型目录更新</p>
+    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">发现 ${models.length} 个新模型</h1>
+    <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">以下 canonical model 首次出现在最新目录中。</p>
+    <table style="width:100%;border-collapse:collapse;">${rows}</table>
+    <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看模型目录</a></p>
+    <p style="margin:18px 0 0;color:#85858c;font-size:10px;">目录版本 ${escapeHtml(catalogVersion.slice(0, 12))}</p>
+    <p style="margin:12px 0 0;color:#85858c;font-size:11px;"><a href="${safeHttpUrl(unsubscribeUrl)}" style="color:#0066cc;">退订新模型通知</a></p>
+  `);
+  return {
+    subject: `API 模型目录新增 ${models.length} 个模型`,
+    html,
+    text: `API 模型目录新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n目录：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
   };
 }
 

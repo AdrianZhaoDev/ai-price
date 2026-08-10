@@ -55,7 +55,9 @@
 默认同步 `providers`、`products`、`plans`、`sources`、`collection_runs`、
 `fx_rates`、`price_observations`、`price_change_events`、
 `price_change_candidates`、`api_ranking_state`、`api_ranking_events` 和
-`collection_errors`。包含邮箱或 token 的订阅与邮件
+`collection_errors`，以及 `model_catalog_imports`、`model_labs`、
+`model_catalog_providers`、`model_catalog_models`、`model_provider_offerings`、
+`model_catalog_events`。包含邮箱或 token 的订阅与邮件
 表不参与同步。
 
 主要实体：
@@ -76,6 +78,12 @@
 - `price_change_candidates`
 - `api_ranking_state`
 - `api_ranking_events`
+- `model_catalog_imports`
+- `model_labs`
+- `model_catalog_providers`
+- `model_catalog_models`
+- `model_provider_offerings`
+- `model_catalog_events`
 - `email_deliveries`
 
 `latest_prices` 不单独存表。当前价由
@@ -86,10 +94,14 @@
 `converted_cny`、`fx_rate` 与汇率观察时间；原币价未变时只刷新人民币换算，不生成
 价格变化事件。
 
-每轮采集结束后使用网页同一排序函数计算 API 三榜。首次运行只建立
-`api_ranking_state` 基线；后续把价格、名次、加入及移出变化写入
-`api_ranking_events`。网页读取每个项目的最近事件持续展示角标，直到下一次正式
-变化覆盖；排行榜状态和事件参与公共 PostgreSQL/Neon 镜像。
+旧 `api_ranking_state` / `api_ranking_events` 作为历史审计保留，但新采集不再写入
+API 三榜事件。models.dev 导入以 canonical model 内容哈希识别变化；首次导入只建
+基线，后续新增 model 写入 `model_catalog_events`，详情元数据或 provider 价格变化只
+触发相应 ISR 失效，不发送邮件。
+
+模型 URL 加入动态 sitemap。总 URL 数不超过 45,000 时 `/sitemap.xml` 直接输出
+`urlset`；超过阈值后自动改为 sitemap index，并把 URL 分片到
+`/sitemaps/{page}.xml`，避免触碰单 sitemap 的规模上限。
 
 ## 目录结构
 

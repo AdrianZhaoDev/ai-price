@@ -3,6 +3,7 @@ import {
   adminAlertEmail,
   apiRankingChangeEmail,
   escapeHtml,
+  modelCatalogDigestEmail,
   priceChangeEmail,
   subscriptionCreatedEmail,
 } from "@/lib/email/templates";
@@ -111,5 +112,25 @@ describe("email templates", () => {
     });
     expect(alert.subject).toContain("采集异常");
     expect(alert.html).toContain("&lt;broken&gt;");
+  });
+
+  it("renders one deduplicated-style new-model digest without price-change copy", () => {
+    const digest = modelCatalogDigestEmail({
+      models: [
+        {
+          name: "Model <Next>",
+          labName: "Example Lab",
+          releaseDate: "2026-08-10",
+          url: "https://example.com/models/lab/model-next",
+        },
+      ],
+      catalogVersion: "a".repeat(40),
+      viewUrl: "https://example.com/api-pricing",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(digest.subject).toContain("新增 1 个模型");
+    expect(digest.html).toContain("Model &lt;Next&gt;");
+    expect(digest.text).toContain("lab/model-next");
+    expect(digest.text).not.toContain("涨价");
   });
 });

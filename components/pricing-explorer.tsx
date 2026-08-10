@@ -212,7 +212,7 @@ export function PricingExplorer({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetLoaded, setSheetLoaded] = useState(false);
   const [subscriptionType, setSubscriptionType] = useState<
-    "price" | "api_ranking"
+    "price" | "api_model_new"
   >("price");
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
@@ -261,14 +261,14 @@ export function PricingExplorer({
   });
 
   const openSubscriptionSheet = useCallback(
-    (type: "price" | "api_ranking") => {
+    (type: "price" | "api_model_new") => {
       trackTrafficEvent("subscription_sheet_opened", {
         mode: activeMode,
         provider_id: selectedProviderId,
         subscription_type: type,
         plan_scope:
-          type === "api_ranking"
-            ? "api_ranking"
+          type === "api_model_new"
+            ? "api_model_new"
             : activeMode === "global" && selectedPlanId
               ? "plan"
               : "provider",
@@ -732,7 +732,7 @@ export function PricingExplorer({
               providers={modeProviders}
               changes={rankingChanges}
               onSubscribe={() => {
-                openSubscriptionSheet("api_ranking");
+                openSubscriptionSheet("api_model_new");
               }}
               metric={rankingMetric}
               onMetricChange={setRankingMetric}
@@ -1273,7 +1273,7 @@ export function PricingExplorer({
                 providers={modeProviders}
                 changes={rankingChanges}
                 onSubscribe={() => {
-                  openSubscriptionSheet("api_ranking");
+                  openSubscriptionSheet("api_model_new");
                 }}
                 metric={rankingMetric}
                 onMetricChange={setRankingMetric}

@@ -6,7 +6,7 @@
 
 1. ChatGPT、Gemini、Claude、Grok 的 App Store 跨区订阅价格。
 2. 国内热门 AI 产品的官方会员订阅方案。
-3. 没有消费者订阅方案的平台，其官方 API 价目表。
+3. 基于 models.dev 社区目录的 API 模型规格、provider 与最低输入/输出价格。
 
 项目以“来源可追溯、价格有时间戳、失效不覆盖旧数据”为基本原则。页面只读取已经验证和持久化的数据，采集任务每 4 小时运行一次，失败会向管理员发送告警。
 
@@ -55,8 +55,8 @@ npm run collect
 - 219 个采集来源；外币按同轮汇率快照换算人民币。
 - 15 个国内订阅来源，包含 GLM Coding、Comate、Qoder、TRAE、CodeBuddy、MiMo、华为 MaaS 和 SenseNova。
 - 16 个国内 API 平台，新增 MiMo、百川、LongCat、SiliconFlow、华为 MaaS 与中国电信 TeleAI。
-- 4 个海外 API 官方价目来源：OpenAI、Claude、Gemini 与 xAI Grok，统一按人民币排行。
-- 每 4 小时 GitHub Actions、人民币最低三档变化邮件、管理员故障告警。
+- models.dev canonical 模型目录、provider 报价、模型详情页与按模型增量 ISR。
+- 每 4 小时 GitHub Actions、API 新模型摘要邮件、管理员故障告警。
 - 本地 PostgreSQL 主写，支持采集完成后向 Neon/PostgreSQL 异步同步，并可配置
   页面读取和运行写入目标。
 - Vitest 覆盖率门槛与桌面 / 手机 Playwright smoke。

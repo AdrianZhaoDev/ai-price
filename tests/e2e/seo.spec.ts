@@ -15,7 +15,7 @@ const publicPages = [
   },
   {
     path: "/api-pricing",
-    title: "AI API 价格排行榜",
+    title: "AI 模型 API 价格与规格排行榜",
     canonical: "https://lowpriceradar.com/api-pricing",
     sitemapUrl: "https://lowpriceradar.com/api-pricing",
   },
@@ -110,11 +110,14 @@ test("publishes distinct indexable pricing pages and structured data", async ({
         expect.objectContaining({ "@type": "ItemList" }),
       ]),
     );
-    await expect(page.locator(".price-index")).toBeVisible();
-    await expect(page.locator(".price-index-links a").first()).toHaveAttribute(
-      "href",
-      /.+-price|china-ai-subscriptions|api-pricing/,
-    );
+    if (entry.path === "/api-pricing") {
+      await expect(page.locator(".model-catalog-table")).toBeVisible();
+    } else {
+      await expect(page.locator(".price-index")).toBeVisible();
+      await expect(
+        page.locator(".price-index-links a").first(),
+      ).toHaveAttribute("href", /.+-price|china-ai-subscriptions|api-pricing/);
+    }
   }
 });
 
@@ -256,6 +259,11 @@ test("publishes crawler controls without blocking the API pricing page", async (
   for (const entry of publicPages) {
     expect(sitemap).toContain(`<loc>${entry.sitemapUrl}</loc>`);
   }
+  expect(sitemap).toContain("<loc>https://lowpriceradar.com/models/");
+  const sitemapUrls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => match[1],
+  );
+  expect(new Set(sitemapUrls).size).toBe(sitemapUrls.length);
 
   const socialCardResponse = await request.get("/og.png");
   expect(socialCardResponse.ok()).toBe(true);
@@ -266,6 +274,41 @@ test("publishes crawler controls without blocking the API pricing page", async (
   });
   expect(faviconResponse.ok()).toBe(true);
   expect(faviconResponse.headers()["content-type"]).toContain("image/svg+xml");
+});
+
+test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered noindex", async ({
+  page,
+  request,
+  isMobile,
+}) => {
+  test.skip(isMobile, "SEO output is device-independent.");
+  await page.goto("/models/google/gemini-2.5-flash");
+  await expect(page).toHaveTitle(/Gemini 2.5 Flash API 价格与模型规格/);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://lowpriceradar.com/models/google/gemini-2.5-flash",
+  );
+  expect(
+    await page
+      .locator('script[type="application/ld+json"]')
+      .evaluateAll((scripts) =>
+        scripts.some((script) =>
+          script.textContent?.includes("BreadcrumbList"),
+        ),
+      ),
+  ).toBe(true);
+
+  const missing = await request.get("/models/unknown/does-not-exist");
+  expect(missing.status()).toBe(404);
+  await page.goto("/api-pricing?lab=google");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    /noindex,\s*follow/,
+  );
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://lowpriceradar.com/api-pricing",
+  );
 });
 
 test("all public pages expose valid internal link targets", async ({
@@ -311,7 +354,7 @@ test("repeated navigation components perform real browser navigation", async ({
   test.setTimeout(120_000);
   test.skip(isMobile, "Desktop covers the shared link components.");
 
-  await page.goto("/api-pricing");
+  await page.goto("/");
   const priceIndexLink = page.locator(".price-index-links a").first();
   const priceIndexTarget = await priceIndexLink.getAttribute("href");
   expect(priceIndexTarget).toBeTruthy();
@@ -338,7 +381,7 @@ test("repeated navigation components perform real browser navigation", async ({
   await expect(page).toHaveURL(new RegExp(`${priceIndexTarget}$`));
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/api-pricing$/);
+  await expect(page).toHaveURL(/\/$/);
   await expect(
     page.locator(".price-index-links a").first(),
   ).not.toHaveAttribute("aria-busy", "true");
@@ -359,9 +402,7 @@ test("repeated navigation components perform real browser navigation", async ({
   expect(ctaTarget).toBeTruthy();
   await ctaLink.click();
   await expect(page).toHaveURL(new RegExp(ctaTarget!.replace("?", "\\?")));
-  await expect(
-    page.locator('.provider-button[data-provider-id="deepseek-api"]'),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Provider")).toHaveValue("deepseek");
 
   await page.goto("/methodology");
   await page.locator(".document-back").click();

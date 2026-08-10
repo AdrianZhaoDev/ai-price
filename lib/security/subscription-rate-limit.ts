@@ -2,8 +2,8 @@ import { getDatabase, isDatabaseConfigured } from "@/lib/db/client";
 import { subscriptionAttempts } from "@/lib/db/schema";
 import { hashEmail, hashValue } from "@/lib/security/tokens";
 import {
-  API_RANKING_PROVIDER_SLUG,
-  isApiRankingScope,
+  API_MODEL_NEW_PROVIDER_SLUG,
+  isApiModelNewScope,
 } from "@/lib/subscriptions/scopes";
 import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 
@@ -72,13 +72,14 @@ function evaluateAttempt(
   if (withinWindow.length >= IP_WINDOW_LIMIT) {
     const rankingFallbackUsed = withinWindow.some(
       (attempt) =>
-        attempt.accepted && attempt.providerSlug === API_RANKING_PROVIDER_SLUG,
+        attempt.accepted &&
+        attempt.providerSlug === API_MODEL_NEW_PROVIDER_SLUG,
     );
     const rankingFallbackAllowed = !rankingFallbackUsed;
     if (
       rankingFallback &&
       rankingFallbackAllowed &&
-      isApiRankingScope(current.providerSlug, current.planSlug)
+      isApiModelNewScope(current.providerSlug, current.planSlug)
     ) {
       return { allowed: true, retryAfterSeconds: 0 };
     }

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   afterCallback: undefined as undefined | (() => Promise<void>),
   checkSubscriptionRateLimit: vi.fn(),
   releaseRankingFallbackAttempt: vi.fn(),
-  requestApiRankingSubscription: vi.fn(),
+  requestApiModelNewSubscription: vi.fn(),
   requestPriceSubscription: vi.fn(),
   sendSubscriptionCreatedEmail: vi.fn(),
 }));
@@ -25,7 +25,7 @@ vi.mock("@/lib/security/subscription-rate-limit", () => ({
 }));
 
 vi.mock("@/lib/subscriptions/service", () => ({
-  requestApiRankingSubscription: mocks.requestApiRankingSubscription,
+  requestApiModelNewSubscription: mocks.requestApiModelNewSubscription,
   requestPriceSubscription: mocks.requestPriceSubscription,
   sendSubscriptionCreatedEmail: mocks.sendSubscriptionCreatedEmail,
 }));
@@ -76,7 +76,7 @@ describe("subscription route", () => {
     mocks.requestPriceSubscription.mockResolvedValue({
       notificationId: "subscription-id",
     });
-    mocks.requestApiRankingSubscription.mockResolvedValue({
+    mocks.requestApiModelNewSubscription.mockResolvedValue({
       notificationId: "ranking-subscription-id",
     });
     mocks.sendSubscriptionCreatedEmail.mockResolvedValue(undefined);
@@ -162,7 +162,7 @@ describe("subscription route", () => {
     expect(response.headers.get("Retry-After")).toBe("1200");
     await expect(response.json()).resolves.toEqual({
       message:
-        "您近期提交了较多订阅。要不要改为一次订阅 API 价格排行榜？之后缓存输入、非缓存输入和输出价格有变化时，我们都会通知您。",
+        "您近期提交了较多订阅。要不要改为订阅 API 新模型？之后目录出现新的 canonical model 时，我们会发送摘要。",
       code: "subscription_limit",
       retryAfterSeconds: 1200,
       rankingFallbackAllowed: true,
@@ -176,12 +176,12 @@ describe("subscription route", () => {
     expect(mocks.checkSubscriptionRateLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         email: "reader@example.com",
-        providerSlug: "api-ranking",
+        providerSlug: "api-model-new",
         planSlug: "*",
         rankingFallback: true,
       }),
     );
-    expect(mocks.requestApiRankingSubscription).toHaveBeenCalledWith(
+    expect(mocks.requestApiModelNewSubscription).toHaveBeenCalledWith(
       "reader@example.com",
     );
     expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("subscription route", () => {
       retryAfterSeconds: 0,
       fallbackAttemptId: "attempt-id",
     });
-    mocks.requestApiRankingSubscription.mockRejectedValueOnce(
+    mocks.requestApiModelNewSubscription.mockRejectedValueOnce(
       new Error("database unavailable"),
     );
 

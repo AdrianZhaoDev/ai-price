@@ -27,11 +27,15 @@ describe("pricing cache refresh", () => {
         fetchImplementation,
       }),
     ).resolves.toEqual({ refreshed: true });
-    expect(fetchImplementation).toHaveBeenCalledWith(
+    expect(fetchImplementation).toHaveBeenNthCalledWith(
+      1,
       "http://127.0.0.1:3100/api/pricing/revalidate",
       expect.objectContaining({
         method: "POST",
-        headers: { Authorization: "Bearer collector-secret" },
+        headers: {
+          Authorization: "Bearer collector-secret",
+          "Content-Type": "application/json",
+        },
         cache: "no-store",
       }),
     );
