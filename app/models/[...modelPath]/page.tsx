@@ -27,6 +27,13 @@ function price(value?: number) {
 function yesNo(value?: boolean) {
   return value === undefined ? "—" : value ? "是" : "否";
 }
+function priceTierDetails(costDetails?: Record<string, unknown>) {
+  if (!costDetails) return undefined;
+  const { input: _input, output: _output, ...details } = costDetails;
+  void _input;
+  void _output;
+  return Object.keys(details).length ? details : undefined;
+}
 
 export async function generateMetadata({
   params,
@@ -216,6 +223,7 @@ export default async function ModelPage({
                     "Output",
                     "Input Price",
                     "Output Price",
+                    "Price tiers",
                     "Reasoning",
                     "Tool Call",
                     "Structured",
@@ -230,56 +238,71 @@ export default async function ModelPage({
                 </tr>
               </thead>
               <tbody>
-                {model.providers.map((provider) => (
-                  <tr
-                    key={`${provider.providerId}:${provider.providerModelId}`}
-                  >
-                    <th scope="row">
-                      <Link
-                        href={`/api-pricing?provider=${encodeURIComponent(provider.providerId)}`}
-                      >
-                        {provider.providerName}
-                      </Link>
-                      <small>
-                        {provider.origin === "local_overlay"
-                          ? "local overlay"
-                          : "models.dev"}
-                      </small>
-                    </th>
-                    <td>{provider.labName}</td>
-                    <td>
-                      <code>{provider.providerModelId}</code>
-                    </td>
-                    <td>{tokens(provider.context)}</td>
-                    <td>{tokens(provider.output)}</td>
-                    <td>{price(provider.inputPrice)}</td>
-                    <td>{price(provider.outputPrice)}</td>
-                    <td>{yesNo(provider.capabilities.reasoning)}</td>
-                    <td>{yesNo(provider.capabilities.toolCall)}</td>
-                    <td>{yesNo(provider.capabilities.structuredOutput)}</td>
-                    <td>{yesNo(provider.capabilities.temperature)}</td>
-                    <td>
-                      <span
-                        className={`model-status model-status-${provider.status ?? "active"}`}
-                      >
-                        {provider.status ?? "active"}
-                      </span>
-                    </td>
-                    <td>
-                      {provider.sourceUrl ? (
-                        <a
-                          href={provider.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                {model.providers.map((provider) => {
+                  const tierDetails = priceTierDetails(provider.costDetails);
+                  return (
+                    <tr
+                      key={`${provider.providerId}:${provider.providerModelId}`}
+                    >
+                      <th scope="row">
+                        <Link
+                          href={`/api-pricing?provider=${encodeURIComponent(provider.providerId)}`}
                         >
-                          查看 ↗
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {provider.providerName}
+                        </Link>
+                        <small>
+                          {provider.origin === "local_overlay"
+                            ? "local overlay"
+                            : "models.dev"}
+                        </small>
+                      </th>
+                      <td>{provider.labName}</td>
+                      <td>
+                        <code>{provider.providerModelId}</code>
+                      </td>
+                      <td>{tokens(provider.context)}</td>
+                      <td>{tokens(provider.output)}</td>
+                      <td>{price(provider.inputPrice)}</td>
+                      <td>{price(provider.outputPrice)}</td>
+                      <td>
+                        {tierDetails ? (
+                          <details className="model-price-tiers">
+                            <summary>
+                              {Object.keys(tierDetails).length} 项明细
+                            </summary>
+                            <pre>{JSON.stringify(tierDetails, null, 2)}</pre>
+                          </details>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>{yesNo(provider.capabilities.reasoning)}</td>
+                      <td>{yesNo(provider.capabilities.toolCall)}</td>
+                      <td>{yesNo(provider.capabilities.structuredOutput)}</td>
+                      <td>{yesNo(provider.capabilities.temperature)}</td>
+                      <td>
+                        <span
+                          className={`model-status model-status-${provider.status ?? "active"}`}
+                        >
+                          {provider.status ?? "active"}
+                        </span>
+                      </td>
+                      <td>
+                        {provider.sourceUrl ? (
+                          <a
+                            href={provider.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            查看 ↗
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

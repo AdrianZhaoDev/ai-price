@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { modes } from "@/lib/data/catalog";
-import { parseOptionalNumber } from "@/lib/model-catalog/filters";
+import {
+  catalogDateEnd,
+  catalogDateStart,
+  parseOptionalNumber,
+} from "@/lib/model-catalog/filters";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type {
   ModelCatalogFilters,
@@ -157,13 +161,25 @@ export function ModelCatalogExplorer({
               model.minOutputPrice > filters.outputPriceMax)
           )
             return false;
-          if (filters.releaseFrom && model.releaseDate < filters.releaseFrom)
+          if (
+            filters.releaseFrom &&
+            catalogDateEnd(model.releaseDate) < filters.releaseFrom
+          )
             return false;
-          if (filters.releaseTo && model.releaseDate > filters.releaseTo)
+          if (
+            filters.releaseTo &&
+            catalogDateStart(model.releaseDate) > filters.releaseTo
+          )
             return false;
-          if (filters.updatedFrom && model.updatedDate < filters.updatedFrom)
+          if (
+            filters.updatedFrom &&
+            catalogDateEnd(model.updatedDate) < filters.updatedFrom
+          )
             return false;
-          if (filters.updatedTo && model.updatedDate > filters.updatedTo)
+          if (
+            filters.updatedTo &&
+            catalogDateStart(model.updatedDate) > filters.updatedTo
+          )
             return false;
           return true;
         })

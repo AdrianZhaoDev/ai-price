@@ -1835,6 +1835,30 @@ input:focus-visible {
   align-items: center;
   min-height: 44px;
 }
+.model-price-tiers {
+  min-width: 120px;
+}
+.model-price-tiers summary {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--tint);
+  cursor: pointer;
+  font-weight: 700;
+}
+.model-price-tiers pre {
+  max-width: 320px;
+  max-height: 240px;
+  margin: 0 0 10px;
+  overflow: auto;
+  color: var(--ink-secondary);
+  font:
+    11px/1.55 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+}
 .model-catalog-table small,
 .model-provider-table small {
   display: block;

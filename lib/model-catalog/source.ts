@@ -417,19 +417,31 @@ export function normalizeCatalogFiles(
 
   const offeringsByCanonical = new Map<string, ModelProviderOffering[]>();
   let unlinkedProviderModels = 0;
+  const unlinkedProviderModelHashes: string[] = [];
   for (const entry of providerModels) {
     const provider = providers.get(entry.providerId);
     if (!provider)
       throw new Error(`Provider metadata is missing for ${entry.providerId}.`);
     const baseId = entry.data.base_model;
-    const canonicalId =
-      (baseId && canonical.has(baseId) ? baseId : undefined) ??
-      (canonical.has(entry.modelId) ? entry.modelId : undefined) ??
-      (canonical.has(`${entry.providerId}/${entry.modelId}`)
-        ? `${entry.providerId}/${entry.modelId}`
-        : undefined);
+    const canonicalId = baseId
+      ? canonical.has(baseId)
+        ? baseId
+        : undefined
+      : ((canonical.has(entry.modelId) ? entry.modelId : undefined) ??
+        (canonical.has(`${entry.providerId}/${entry.modelId}`)
+          ? `${entry.providerId}/${entry.modelId}`
+          : undefined));
     if (!canonicalId) {
       unlinkedProviderModels += 1;
+      unlinkedProviderModelHashes.push(
+        contentHash({
+          providerId: entry.providerId,
+          modelId: entry.modelId,
+          data: entry.data,
+          origin: entry.origin,
+          sourceUrl: entry.sourceUrl,
+        }),
+      );
       continue;
     }
     const base = structuredClone(canonical.get(canonicalId)!.data) as Record<
@@ -539,6 +551,7 @@ export function normalizeCatalogFiles(
       labs: [...labs.entries()],
       providers: [...providers.entries()],
       models: normalizedModels.map((item) => item.contentHash),
+      unlinkedProviderModels: unlinkedProviderModelHashes.sort(),
     }),
     fetchedAt,
     labs: [...labs.entries()].map(([id, item]) => ({ id, ...item })),

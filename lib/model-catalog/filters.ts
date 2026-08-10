@@ -6,6 +6,19 @@ export function parseOptionalNumber(value: string | undefined) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function catalogDateStart(value: string): string {
+  return /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
+}
+
+export function catalogDateEnd(value: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${value}-${String(day).padStart(2, "0")}`;
+}
+
 export function parseModelCatalogFilters(
   params: Record<string, string | string[] | undefined>,
 ): ModelCatalogFilters {
@@ -25,7 +38,7 @@ export function parseModelCatalogFilters(
     "updated",
   ]);
   return {
-    query: stringValue("q"),
+    query: stringValue("q") ?? stringValue("model"),
     labs: stringValue("lab")?.split(",").filter(Boolean),
     providers: stringValue("provider")
       ?.split(",")

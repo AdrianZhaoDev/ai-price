@@ -861,7 +861,7 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   await modelLink.click();
   await expect(page).toHaveURL(/\/models\/.+\/.+/, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Providers" })).toBeVisible();
-  await expect(page.locator(".model-provider-table thead th")).toHaveCount(13);
+  await expect(page.locator(".model-provider-table thead th")).toHaveCount(14);
   expect(
     await page
       .locator('script[type="application/ld+json"]')

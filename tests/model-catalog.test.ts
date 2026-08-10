@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { contentHash, normalizeCatalogFiles } from "@/lib/model-catalog/source";
 import {
+  catalogDateEnd,
+  catalogDateStart,
   parseModelCatalogFilters,
   parseOptionalNumber,
 } from "@/lib/model-catalog/filters";
@@ -145,6 +147,52 @@ describe("models.dev catalog normalization", () => {
     expect(second.contentHash).not.toBe(first.contentHash);
   });
 
+  it("includes unlinked provider offering state in the catalog hash", () => {
+    const files = new Map<string, string>([
+      ["models/lab/atlas.toml", baseModel],
+      ["providers/provider/provider.toml", 'name = "Provider"'],
+      [
+        "providers/provider/models/unlinked.toml",
+        'name = "Unlinked A"\nrelease_date = "2026-01"\nlast_updated = "2026-01"\nopen_weights = false',
+      ],
+    ]);
+    const first = normalizeCatalogFiles(
+      files,
+      "a".repeat(40),
+      "2026-08-10T00:00:00.000Z",
+    );
+    files.set(
+      "providers/provider/models/unlinked.toml",
+      'name = "Unlinked B"\nrelease_date = "2026-01"\nlast_updated = "2026-01"\nopen_weights = false',
+    );
+    const second = normalizeCatalogFiles(
+      files,
+      "b".repeat(40),
+      "2026-08-10T04:00:00.000Z",
+    );
+    expect(first.unlinkedProviderModels).toBe(1);
+    expect(second.unlinkedProviderModels).toBe(1);
+    expect(second.contentHash).not.toBe(first.contentHash);
+  });
+
+  it("does not heuristically relink an invalid explicit base_model", () => {
+    const files = new Map<string, string>([
+      ["models/lab/atlas.toml", baseModel],
+      ["providers/provider/provider.toml", 'name = "Provider"'],
+      [
+        "providers/provider/models/lab/atlas.toml",
+        'base_model = "missing/model"\ncost = { input = 1, output = 2 }',
+      ],
+    ]);
+    const catalog = normalizeCatalogFiles(
+      files,
+      "a".repeat(40),
+      "2026-08-10T00:00:00.000Z",
+    );
+    expect(catalog.models[0]?.providers).toHaveLength(0);
+    expect(catalog.unlinkedProviderModels).toBe(1);
+  });
+
   it("parses filter query strings and nested model paths safely", () => {
     expect(
       parseModelCatalogFilters({
@@ -172,6 +220,13 @@ describe("models.dev catalog normalization", () => {
       direction: "asc",
     });
     expect(parseOptionalNumber("")).toBeUndefined();
+    expect(parseModelCatalogFilters({ model: "legacy-model" }).query).toBe(
+      "legacy-model",
+    );
+    expect(catalogDateStart("2026-02")).toBe("2026-02-01");
+    expect(catalogDateEnd("2026-02")).toBe("2026-02-28");
+    expect(catalogDateStart("2026-02-14")).toBe("2026-02-14");
+    expect(catalogDateEnd("2026-02-14")).toBe("2026-02-14");
     expect(modelDetailPath("lab/family/model+v1")).toBe(
       "/models/lab/family/model%2Bv1",
     );
