@@ -47,12 +47,14 @@ import {
   Database,
   Globe2,
   Info,
+  LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -226,6 +228,18 @@ export function PricingExplorer({
   const [rankingFocusRequest, setRankingFocusRequest] =
     useState<ApiRankingFocusRequest | null>(null);
   const [rankingMetric, setRankingMetric] = useState<ApiRankingMetric>("input");
+  const [pendingPriceIndexHref, setPendingPriceIndexHref] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    const clearRestoredNavigation = (event: PageTransitionEvent) => {
+      if (event.persisted) setPendingPriceIndexHref(null);
+    };
+    window.addEventListener("pageshow", clearRestoredNavigation);
+    return () =>
+      window.removeEventListener("pageshow", clearRestoredNavigation);
+  }, []);
   const priceRowRefs = useRef(new Map<string, HTMLElement>());
   const highlightedRowRef = useRef<HTMLElement | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -1288,15 +1302,51 @@ export function PricingExplorer({
               </p>
             </div>
             <div className="price-index-links">
-              {priceIndexLinks.map((link) => (
-                <Link key={link.href} href={link.href} prefetch={false}>
-                  <span>
-                    <strong>{link.label}</strong>
-                    <small>{link.description}</small>
-                  </span>
-                  <ArrowUpRight size={16} aria-hidden="true" />
-                </Link>
-              ))}
+              {priceIndexLinks.map((link) => {
+                const pending = pendingPriceIndexHref === link.href;
+                return (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    data-pending={pending || undefined}
+                    aria-busy={pending || undefined}
+                    onClick={(event) => {
+                      if (
+                        event.defaultPrevented ||
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      ) {
+                        return;
+                      }
+                      event.preventDefault();
+                      flushSync(() => setPendingPriceIndexHref(link.href));
+                      window.setTimeout(
+                        () => window.location.assign(link.href),
+                        80,
+                      );
+                    }}
+                  >
+                    <span>
+                      <strong>{link.label}</strong>
+                      <small>
+                        {pending ? "正在打开价格页面…" : link.description}
+                      </small>
+                    </span>
+                    {pending ? (
+                      <LoaderCircle
+                        className="price-index-spinner"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ArrowUpRight size={16} aria-hidden="true" />
+                    )}
+                  </a>
+                );
+              })}
             </div>
           </nav>
         ) : null}

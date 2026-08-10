@@ -315,9 +315,36 @@ test("repeated navigation components perform real browser navigation", async ({
   const priceIndexLink = page.locator(".price-index-links a").first();
   const priceIndexTarget = await priceIndexLink.getAttribute("href");
   expect(priceIndexTarget).toBeTruthy();
-  await priceIndexLink.click();
+  let releaseNavigation: (() => void) | undefined;
+  const navigationGate = new Promise<void>((resolve) => {
+    releaseNavigation = resolve;
+  });
+  await page.route(`**${priceIndexTarget}`, async (route) => {
+    await navigationGate;
+    await route.continue();
+  });
+  const documentRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === priceIndexTarget &&
+      request.resourceType() === "document",
+  );
+  await priceIndexLink.evaluate((element) =>
+    (element as HTMLAnchorElement).click(),
+  );
+  await expect(priceIndexLink).toHaveAttribute("aria-busy", "true");
+  await expect(priceIndexLink).toContainText("正在打开价格页面");
+  expect((await documentRequest).resourceType()).toBe("document");
+  releaseNavigation?.();
   await expect(page).toHaveURL(new RegExp(`${priceIndexTarget}$`));
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/api-pricing$/);
+  await expect(
+    page.locator(".price-index-links a").first(),
+  ).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.locator(".price-index-links a").first()).not.toContainText(
+    "正在打开价格页面",
+  );
 
   await page.goto("/chatgpt-plus-price");
   const relatedLink = page.locator(".landing-related-links a").first();
