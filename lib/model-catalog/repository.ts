@@ -165,9 +165,52 @@ export async function loadModelDetail(
           )
         : eq(modelProviderOfferings.canonicalModelId, modelId),
     );
-  const summary = (
-    await loadModelCatalogSummaries({ database, activeOnly: false })
-  ).find((item) => item.id === modelId)!;
+  const providerNamesById = new Map(
+    offerings.map(({ provider }) => [provider.id, provider.name]),
+  );
+  const providerIds = [
+    ...new Set(
+      offerings
+        .filter(
+          ({ offering }) =>
+            offering.active &&
+            offering.status !== "alpha" &&
+            offering.status !== "deprecated",
+        )
+        .map(({ offering }) => offering.providerId),
+    ),
+  ].sort();
+  const summary: ModelCatalogSummary = {
+    id: row.model.id,
+    name: row.model.name,
+    description: row.model.description ?? undefined,
+    labId: row.model.labId,
+    labName: row.lab.name,
+    family: row.model.family ?? undefined,
+    context: row.model.contextTokens ?? undefined,
+    output: row.model.outputTokens ?? undefined,
+    inputModalities: row.model.inputModalities,
+    minInputPrice: row.model.minInputPrice ?? undefined,
+    minInputProviderId: row.model.minInputProviderId ?? undefined,
+    minInputProviderName: row.model.minInputProviderId
+      ? providerNamesById.get(row.model.minInputProviderId)
+      : undefined,
+    minOutputPrice: row.model.minOutputPrice ?? undefined,
+    minOutputProviderId: row.model.minOutputProviderId ?? undefined,
+    minOutputProviderName: row.model.minOutputProviderId
+      ? providerNamesById.get(row.model.minOutputProviderId)
+      : undefined,
+    releaseDate: row.model.releaseDate,
+    updatedDate: row.model.updatedDate,
+    providerCount: row.model.providerCount,
+    providerIds,
+    providerNames: providerIds.map(
+      (providerId) => providerNamesById.get(providerId) ?? providerId,
+    ),
+    active: row.model.active,
+    origin: row.model.origin as ModelCatalogOrigin,
+    detailChangedAt: row.model.detailChangedAt.toISOString(),
+  };
   const providers: ModelProviderOffering[] = offerings.map(
     ({ offering, provider }) => ({
       providerId: offering.providerId,

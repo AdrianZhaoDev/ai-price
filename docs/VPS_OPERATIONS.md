@@ -92,7 +92,9 @@ production artifact + SHA-256 manifest
 
 原子切换并启动新 release 后，脚本会执行一次仅含 `models-dev` 的目录同步，再对全部
 active model 详情、API 目录与 sitemap 做有限并发预热。新 release 不复用旧 release
-的 ISR 文件缓存；同步或任一路径预热失败都会使发布验收失败。
+的 ISR 文件缓存；同步或任一路径预热失败都会使发布验收失败。部署同步显式使用
+`NODE_ENV=production`，并与两个 systemd collector unit 共用
+`/run/ai-price-collect/collector.lock`，避免与四小时任务并发写库或跳过缓存失效。
 
 ```powershell
 .\deploy\vps-update.ps1 -RunId 123456789

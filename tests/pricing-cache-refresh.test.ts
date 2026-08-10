@@ -54,4 +54,35 @@ describe("pricing cache refresh", () => {
       }),
     ).rejects.toThrow("HTTP 503");
   });
+
+  it("chunks catalogs larger than the protected endpoint limit", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    const changedModelIds = Array.from(
+      { length: 1001 },
+      (_, index) => `lab/model-${index}`,
+    );
+
+    await refreshPricingCacheAfterCollection({
+      environment: "production",
+      secret: "collector-secret",
+      catalogChanged: true,
+      changedModelIds,
+      fetchImplementation,
+    });
+
+    const refreshCalls = fetchImplementation.mock.calls.filter(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(refreshCalls).toHaveLength(2);
+    expect(JSON.parse(String(refreshCalls[0][1]?.body))).toMatchObject({
+      catalogChanged: true,
+      changedModelIds: changedModelIds.slice(0, 1000),
+    });
+    expect(JSON.parse(String(refreshCalls[1][1]?.body))).toMatchObject({
+      catalogChanged: false,
+      changedModelIds: changedModelIds.slice(1000),
+    });
+  });
 });

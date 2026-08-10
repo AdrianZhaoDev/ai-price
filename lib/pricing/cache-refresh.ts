@@ -33,20 +33,33 @@ export async function refreshPricingCacheAfterCollection({
     );
   }
 
-  const response = await fetchImplementation(refreshUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ catalogVersion, catalogChanged, changedModelIds }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Pricing cache refresh failed with HTTP ${response.status}.`,
-    );
+  const changedModelIdBatches =
+    changedModelIds.length === 0
+      ? [[]]
+      : Array.from(
+          { length: Math.ceil(changedModelIds.length / 1000) },
+          (_, index) => changedModelIds.slice(index * 1000, (index + 1) * 1000),
+        );
+  for (const [index, batch] of changedModelIdBatches.entries()) {
+    const response = await fetchImplementation(refreshUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        catalogVersion,
+        catalogChanged: index === 0 && catalogChanged,
+        changedModelIds: batch,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Pricing cache refresh failed with HTTP ${response.status}.`,
+      );
+    }
   }
 
   const paths = changedModelIds.map(

@@ -29,7 +29,11 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
   if (!isDatabaseConfigured() || !isSmtpConfigured()) return 0;
   const db = getDatabase();
   const pending = await db
-    .select({ event: modelCatalogEvents, version: modelCatalogImports.version })
+    .select({
+      event: modelCatalogEvents,
+      importId: modelCatalogImports.id,
+      version: modelCatalogImports.version,
+    })
     .from(modelCatalogEvents)
     .innerJoin(
       modelCatalogImports,
@@ -46,7 +50,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
 
   const batches = new Map<string, typeof pending>();
   for (const row of pending)
-    batches.set(row.version, [...(batches.get(row.version) ?? []), row]);
+    batches.set(row.importId, [...(batches.get(row.importId) ?? []), row]);
   const subscribers = await listActivePriceSubscribers(
     API_MODEL_NEW_PROVIDER_SLUG,
     API_MODEL_NEW_PLAN_SLUG,
@@ -56,10 +60,11 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
     throw new Error("APP_URL is required before sending model catalog alerts.");
   let sent = 0;
 
-  for (const [version, rows] of batches) {
+  for (const [importId, rows] of batches) {
+    const version = rows[0].version;
     let failures = 0;
     for (const subscriber of subscribers) {
-      const dedupeKey = `model-catalog:${version}:${hashEmail(subscriber.email)}`;
+      const dedupeKey = `model-catalog:${importId}:${hashEmail(subscriber.email)}`;
       const reservation = await reserveEmailDelivery({
         type: "model_catalog_added",
         recipient: subscriber.email,

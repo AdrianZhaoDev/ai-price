@@ -191,7 +191,9 @@ chmod 700 /tmp/ai-price-vps-install.sh
   /tmp/ai-price-package-lock.json
 systemctl is-active \
   ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
-sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
+install -d -o ai-price -g ai-price -m 0750 /run/ai-price-collect
+sudo -u ai-price env HOME=/var/lib/ai-price NODE_ENV=production \
+  /usr/bin/flock --exclusive /run/ai-price-collect/collector.lock bash -c '
   set -a
   source /etc/ai-price.env
   set +a
