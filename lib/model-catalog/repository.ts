@@ -49,6 +49,18 @@ function fallbackSummaries(activeOnly = true): ModelCatalogSummary[] {
     }));
 }
 
+export async function loadModelCatalogIds(
+  database?: Database,
+): Promise<string[]> {
+  const target =
+    database ?? (isReadDatabaseConfigured() ? getReadDatabase() : null);
+  if (!target) return fallbackModelCatalog.map((model) => model.id);
+  const rows = await target
+    .select({ id: modelCatalogModels.id })
+    .from(modelCatalogModels);
+  return rows.map((row) => row.id);
+}
+
 export async function loadModelCatalogSummaries(
   options: {
     database?: Database;

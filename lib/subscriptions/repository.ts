@@ -44,6 +44,7 @@ type MemorySubscription = {
   successEmailNextAttemptAt: number | null;
   successEmailLockedAt: number | null;
   successEmailSentAt: number | null;
+  activeSince: number;
 };
 
 const globalMemory = globalThis as typeof globalThis & {
@@ -110,6 +111,9 @@ async function createMemorySubscription(
     successEmailSentAt: alreadySubscribed
       ? (existing.successEmailSentAt ?? null)
       : null,
+    activeSince: alreadySubscribed
+      ? (existing.activeSince ?? Date.now())
+      : Date.now(),
   });
 
   return {
@@ -549,6 +553,7 @@ export function resetMemorySubscriptionsForTests(): void {
 export type ActivePriceSubscriber = {
   subscriptionId: string;
   email: string;
+  activeSince: Date;
 };
 
 export async function listActivePriceSubscribers(
@@ -566,6 +571,7 @@ export async function listActivePriceSubscribers(
       .map((subscription) => ({
         subscriptionId: subscription.id,
         email: subscription.email,
+        activeSince: new Date(subscription.activeSince),
       }));
   }
 
@@ -573,6 +579,7 @@ export async function listActivePriceSubscribers(
     .select({
       subscriptionId: subscriptions.id,
       email: subscribers.emailNormalized,
+      activeSince: sql<Date>`coalesce(${subscriptions.confirmedAt}, ${subscriptions.createdAt})`,
     })
     .from(subscriptions)
     .innerJoin(subscribers, eq(subscriptions.subscriberId, subscribers.id))

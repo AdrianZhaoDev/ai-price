@@ -92,12 +92,14 @@ async function main() {
       });
   console.log(JSON.stringify(summary, null, 2));
 
+  let dataSyncSucceeded = true;
   try {
     const syncResult = await runConfiguredDataSync();
     if (syncResult) {
       console.log(JSON.stringify({ dataSync: syncResult }, null, 2));
     }
   } catch (error) {
+    dataSyncSucceeded = false;
     console.error(`Data sync failed: ${dataSyncErrorMessage(error)}`);
     process.exitCode = 1;
   }
@@ -109,7 +111,7 @@ async function main() {
       changedModelIds: modelCatalogResult?.changedModelIds,
     });
     if (cacheRefresh.refreshed) {
-      if (modelCatalogResult) {
+      if (modelCatalogResult && dataSyncSucceeded) {
         await markModelCatalogCacheRefreshed(modelCatalogResult.importId);
       }
       console.log("Pricing page caches revalidated and prewarmed.");

@@ -1,4 +1,5 @@
 import {
+  loadModelCatalogIds,
   loadModelCatalogSummaries,
   loadModelDetail,
 } from "@/lib/model-catalog/repository";
@@ -16,7 +17,14 @@ export const loadCachedModelCatalogSummaries = unstable_cache(
   { tags: [MODEL_CATALOG_CACHE_TAG], revalidate: false },
 );
 
+const loadCachedModelCatalogIds = unstable_cache(
+  loadModelCatalogIds,
+  ["model-catalog-ids"],
+  { tags: [MODEL_CATALOG_CACHE_TAG], revalidate: false },
+);
+
 export async function loadCachedModelDetail(modelId: string) {
+  if (!(await loadCachedModelCatalogIds()).includes(modelId)) return null;
   return unstable_cache(
     () => loadModelDetail(modelId),
     ["model-catalog-detail", modelId],

@@ -344,6 +344,23 @@ journalctl -u ai-price.service -n 150 --no-pager
 数据库 migration 可能不向后兼容。涉及数据库时，不得仅回滚代码；必须使用发布
 前的备份制定恢复方案，并获得用户明确授权后才能执行数据库恢复。
 
+若目标 release 早于 models.dev 目录功能，旧代码不理解 `api-model-new`。在获得用户
+明确授权并确认数据库备份后，必须先执行以下兼容事务：迁移前已有的排行榜订阅恢复为
+旧 scope；新功能上线后才创建的新模型订阅改为暂停，避免旧代码向其发送未同意的排行
+变动邮件。随后再切换 release；恢复新版本时应从发布前备份或审计记录恢复暂停订阅。
+
+```bash
+sudo -u postgres psql -d ai_price -v ON_ERROR_STOP=1 -c "
+BEGIN;
+UPDATE subscriptions
+SET status='unsubscribed', unsubscribed_at=now(), updated_at=now()
+WHERE provider_slug='api-model-new' AND NOT migrated_from_api_ranking;
+UPDATE subscriptions
+SET provider_slug='api-ranking', migrated_from_api_ranking=false, updated_at=now()
+WHERE provider_slug='api-model-new' AND migrated_from_api_ranking;
+COMMIT;"
+```
+
 ## 7. 清理旧版本
 
 ```bash

@@ -115,7 +115,8 @@ ALTER TABLE "model_provider_offerings" ADD CONSTRAINT "model_provider_offerings_
 ALTER TABLE "model_provider_offerings" ADD CONSTRAINT "model_provider_offerings_last_import_id_model_catalog_imports_id_fk" FOREIGN KEY ("last_import_id") REFERENCES "public"."model_catalog_imports"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "model_catalog_events_import_model_unique" ON "model_catalog_events" USING btree ("import_id","event_type","model_id");--> statement-breakpoint
 CREATE INDEX "model_catalog_events_pending_idx" ON "model_catalog_events" USING btree ("notified_at");--> statement-breakpoint
-UPDATE "subscriptions" SET "provider_slug" = 'api-model-new', "updated_at" = now() WHERE "provider_slug" = 'api-ranking' AND "plan_slug" = '*';--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD COLUMN "migrated_from_api_ranking" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE "subscriptions" SET "provider_slug" = 'api-model-new', "migrated_from_api_ranking" = true, "updated_at" = now() WHERE "provider_slug" = 'api-ranking' AND "plan_slug" = '*';--> statement-breakpoint
 CREATE INDEX "model_catalog_imports_content_hash_idx" ON "model_catalog_imports" USING btree ("content_hash");--> statement-breakpoint
 CREATE INDEX "model_catalog_imports_version_idx" ON "model_catalog_imports" USING btree ("version");--> statement-breakpoint
 CREATE INDEX "model_catalog_imports_latest_idx" ON "model_catalog_imports" USING btree ("created_at");--> statement-breakpoint

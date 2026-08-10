@@ -717,6 +717,9 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum("status").default("active").notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    migratedFromApiRanking: boolean("migrated_from_api_ranking")
+      .default(false)
+      .notNull(),
     successEmailPending: boolean("success_email_pending")
       .default(false)
       .notNull(),

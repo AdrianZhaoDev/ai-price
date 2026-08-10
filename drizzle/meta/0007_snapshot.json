@@ -2996,6 +2996,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "migrated_from_api_ranking": {
+          "name": "migrated_from_api_ranking",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "success_email_pending": {
           "name": "success_email_pending",
           "type": "boolean",
