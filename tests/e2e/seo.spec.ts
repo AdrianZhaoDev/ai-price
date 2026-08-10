@@ -293,6 +293,9 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
     /.{70,}/,
   );
   await expect(page.locator('meta[property="og:image"]')).toHaveCount(1);
+  await expect(
+    page.locator('meta[property="article:modified_time"]'),
+  ).toHaveCount(1);
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
     "content",
     "summary_large_image",

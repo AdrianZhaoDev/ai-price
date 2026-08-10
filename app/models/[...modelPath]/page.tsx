@@ -60,6 +60,8 @@ export async function generateMetadata({
       url: path,
       title: `${model.name} API 价格与模型规格`,
       description,
+      publishedTime: model.releaseDate,
+      modifiedTime: model.detailChangedAt ?? model.updatedDate,
       images: [
         {
           url: imageUrl,
@@ -116,7 +118,7 @@ export default async function ModelPage({
       url: pageUrl,
       isAccessibleForFree: true,
       datePublished: model.releaseDate,
-      dateModified: model.updatedDate,
+      dateModified: model.detailChangedAt ?? model.updatedDate,
       creator: { "@type": "Organization", name: model.labName },
       isPartOf: {
         "@type": "Dataset",
