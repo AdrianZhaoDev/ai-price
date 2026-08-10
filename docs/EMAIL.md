@@ -57,8 +57,9 @@ EMAIL_TOKEN_SECRET=
 
 API 新模型订阅只处理首次出现的 canonical model。初始目录导入不发历史通知；后续
 同一 import 的多个新模型合并为一封摘要，包含名称、Lab、Release 与站内详情链接。
-价格、Provider、Release 或 Updated 变化均不发信，投递以 import SHA + recipient
-去重。旧 `api-ranking` 订阅在迁移时自动改为此主题并保留原审计时间。
+价格、Provider、Release 或 Updated 变化均不发信，投递以 import ID + recipient
+去重。单个地址投递失败只保留对应 import 待重试，不阻塞后续 import 向其他订阅者
+发送。旧 `api-ranking` 订阅在迁移时自动改为此主题并保留原审计时间。
 
 如果 Web 进程在后台发送完成前重启，或 SMTP 暂时失败，待发送状态会保留并按退避
 时间重试。现有采集 timer 每轮开始前也会清扫到期任务，避免通知永久丢失。每次实际

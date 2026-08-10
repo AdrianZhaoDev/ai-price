@@ -23,6 +23,7 @@ export const sourceTypeEnum = pgEnum("source_type", [
   "official_web",
   "official_api",
   "manual_official",
+  "community_catalog",
 ]);
 
 export const recordStatusEnum = pgEnum("record_status", [
@@ -433,20 +434,23 @@ export const modelCatalogImports = pgTable(
     providerCount: integer("provider_count").default(0).notNull(),
     offeringCount: integer("offering_count").default(0).notNull(),
     changedModelCount: integer("changed_model_count").default(0).notNull(),
+    changedModelIds: jsonb("changed_model_ids")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
     addedModelCount: integer("added_model_count").default(0).notNull(),
     unlinkedProviderModelCount: integer("unlinked_provider_model_count")
       .default(0)
       .notNull(),
     error: text("error"),
+    cacheRefreshedAt: timestamp("cache_refreshed_at", { withTimezone: true }),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
-    uniqueIndex("model_catalog_imports_content_hash_unique").on(
-      table.contentHash,
-    ),
+    index("model_catalog_imports_content_hash_idx").on(table.contentHash),
     index("model_catalog_imports_version_idx").on(table.version),
     index("model_catalog_imports_latest_idx").on(table.createdAt),
   ],

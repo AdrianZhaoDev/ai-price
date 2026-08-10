@@ -117,8 +117,8 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
         .set({ notifiedAt: new Date() })
         .where(eq(modelCatalogEvents.importId, rows[0].event.importId));
     } else {
-      throw new Error(
-        `${failures} model catalog email delivery attempt(s) failed.`,
+      console.error(
+        `${failures} model catalog email delivery attempt(s) failed for import ${importId}; later imports will continue.`,
       );
     }
   }

@@ -23,6 +23,11 @@
   `override: true` 并填写原因，offering 还必须提供 canonical ID、来源 URL 与更新时间。
 - 导入按内容哈希做差异比较，单事务发布。数量坍缩或 schema 失败时保留上一有效快照；
   仅变化模型失效并主动预热 ISR 页面。
+- 成功 import 持久化待失效模型 ID，只有 revalidate 与预热全部成功后才标记完成；
+  下轮遇到相同快照但上轮下游失败时会重放失效。历史快照重新出现时会作为新 import
+  恢复其内容，而不是被历史哈希短路。
+- 抓取、校验或持久化失败作为 `community_catalog` 来源写入统一错误生命周期；只有连续
+  两次 scheduled 失败或开放 8 小时才升级告警，成功导入会解决开放错误。
 - models.dev 使用 MIT License，见
   `https://github.com/anomalyco/models.dev/blob/dev/LICENSE`。数据按原样提供，页面保留
   固定 commit 证据与 `models.dev` / `local overlay` 来源标识。

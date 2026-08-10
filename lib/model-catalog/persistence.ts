@@ -19,14 +19,22 @@ export async function persistModelCatalog(
   database: Database = getDatabase(),
 ): Promise<ModelCatalogImportResult> {
   return database.transaction(async (tx) => {
-    const [sameSnapshot] = await tx
-      .select({ id: modelCatalogImports.id })
+    const [latestSnapshot] = await tx
+      .select({
+        id: modelCatalogImports.id,
+        contentHash: modelCatalogImports.contentHash,
+        changedModelIds: modelCatalogImports.changedModelIds,
+        cacheRefreshedAt: modelCatalogImports.cacheRefreshedAt,
+      })
       .from(modelCatalogImports)
-      .where(eq(modelCatalogImports.contentHash, catalog.contentHash))
+      .where(eq(modelCatalogImports.status, "success"))
+      .orderBy(desc(modelCatalogImports.createdAt))
       .limit(1);
-    if (sameSnapshot) {
+    if (latestSnapshot?.contentHash === catalog.contentHash) {
+      const cacheRefreshPending = latestSnapshot.cacheRefreshedAt === null;
       return {
-        changed: false,
+        importId: latestSnapshot.id,
+        changed: cacheRefreshPending,
         catalogVersion: catalog.version,
         modelCount: catalog.models.length,
         providerCount: catalog.providers.length,
@@ -34,7 +42,9 @@ export async function persistModelCatalog(
           (total, model) => total + model.providers.length,
           0,
         ),
-        changedModelIds: [],
+        changedModelIds: cacheRefreshPending
+          ? latestSnapshot.changedModelIds
+          : [],
         addedModelIds: [],
       };
     }
@@ -119,6 +129,7 @@ export async function persistModelCatalog(
         providerCount: catalog.providers.length,
         offeringCount,
         changedModelCount: changedModelIds.length,
+        changedModelIds: [...new Set(changedModelIds)],
         addedModelCount: addedModelIds.length,
         unlinkedProviderModelCount: catalog.unlinkedProviderModels,
         fetchedAt: new Date(catalog.fetchedAt),
@@ -331,6 +342,7 @@ export async function persistModelCatalog(
     }
 
     return {
+      importId: catalogImport.id,
       changed: true,
       catalogVersion: catalog.version,
       modelCount: catalog.models.length,
@@ -340,4 +352,14 @@ export async function persistModelCatalog(
       addedModelIds,
     };
   });
+}
+
+export async function markModelCatalogCacheRefreshed(
+  importId: string,
+  database: Database = getDatabase(),
+): Promise<void> {
+  await database
+    .update(modelCatalogImports)
+    .set({ cacheRefreshedAt: new Date() })
+    .where(eq(modelCatalogImports.id, importId));
 }

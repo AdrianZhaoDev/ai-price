@@ -22,6 +22,7 @@ const channelLabels: Record<AdminErrorChannel, string> = {
   official_web: "官方网页",
   official_api: "官方 API",
   manual_official: "人工官方源",
+  community_catalog: "社区模型目录",
 };
 
 const statusLabels: Record<AdminErrorStatus, string> = {

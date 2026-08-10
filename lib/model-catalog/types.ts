@@ -120,6 +120,7 @@ export type NormalizedCatalog = {
 };
 
 export type ModelCatalogImportResult = {
+  importId: string;
   changed: boolean;
   catalogVersion: string;
   modelCount: number;

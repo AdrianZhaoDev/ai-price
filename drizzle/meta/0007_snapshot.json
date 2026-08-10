@@ -1074,6 +1074,13 @@
           "notNull": true,
           "default": 0
         },
+        "changed_model_ids": {
+          "name": "changed_model_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
         "added_model_count": {
           "name": "added_model_count",
           "type": "integer",
@@ -1094,6 +1101,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cache_refreshed_at": {
+          "name": "cache_refreshed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "fetched_at": {
           "name": "fetched_at",
           "type": "timestamp with time zone",
@@ -1109,8 +1122,8 @@
         }
       },
       "indexes": {
-        "model_catalog_imports_content_hash_unique": {
-          "name": "model_catalog_imports_content_hash_unique",
+        "model_catalog_imports_content_hash_idx": {
+          "name": "model_catalog_imports_content_hash_idx",
           "columns": [
             {
               "expression": "content_hash",
@@ -1119,7 +1132,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3144,7 +3157,13 @@
     "public.source_type": {
       "name": "source_type",
       "schema": "public",
-      "values": ["app_store", "official_web", "official_api", "manual_official"]
+      "values": [
+        "app_store",
+        "official_web",
+        "official_api",
+        "manual_official",
+        "community_catalog"
+      ]
     },
     "public.subscription_status": {
       "name": "subscription_status",

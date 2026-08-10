@@ -1,3 +1,4 @@
+ALTER TYPE "public"."source_type" ADD VALUE 'community_catalog';--> statement-breakpoint
 CREATE TABLE "model_catalog_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"import_id" uuid NOT NULL,
@@ -17,9 +18,11 @@ CREATE TABLE "model_catalog_imports" (
 	"provider_count" integer DEFAULT 0 NOT NULL,
 	"offering_count" integer DEFAULT 0 NOT NULL,
 	"changed_model_count" integer DEFAULT 0 NOT NULL,
+	"changed_model_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"added_model_count" integer DEFAULT 0 NOT NULL,
 	"unlinked_provider_model_count" integer DEFAULT 0 NOT NULL,
 	"error" text,
+	"cache_refreshed_at" timestamp with time zone,
 	"fetched_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -113,7 +116,7 @@ ALTER TABLE "model_provider_offerings" ADD CONSTRAINT "model_provider_offerings_
 CREATE UNIQUE INDEX "model_catalog_events_import_model_unique" ON "model_catalog_events" USING btree ("import_id","event_type","model_id");--> statement-breakpoint
 CREATE INDEX "model_catalog_events_pending_idx" ON "model_catalog_events" USING btree ("notified_at");--> statement-breakpoint
 UPDATE "subscriptions" SET "provider_slug" = 'api-model-new', "updated_at" = now() WHERE "provider_slug" = 'api-ranking' AND "plan_slug" = '*';--> statement-breakpoint
-CREATE UNIQUE INDEX "model_catalog_imports_content_hash_unique" ON "model_catalog_imports" USING btree ("content_hash");--> statement-breakpoint
+CREATE INDEX "model_catalog_imports_content_hash_idx" ON "model_catalog_imports" USING btree ("content_hash");--> statement-breakpoint
 CREATE INDEX "model_catalog_imports_version_idx" ON "model_catalog_imports" USING btree ("version");--> statement-breakpoint
 CREATE INDEX "model_catalog_imports_latest_idx" ON "model_catalog_imports" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "model_catalog_models_active_release_idx" ON "model_catalog_models" USING btree ("active","release_date");--> statement-breakpoint

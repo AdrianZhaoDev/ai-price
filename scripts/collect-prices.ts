@@ -10,6 +10,7 @@ import { syncModelsDevCatalog } from "@/lib/model-catalog/sync";
 import type { ModelCatalogImportResult } from "@/lib/model-catalog/types";
 import { notifyPendingModelCatalogChanges } from "@/lib/model-catalog/notifications";
 import { sendAdminCollectionAlert } from "@/lib/alerts/notifier";
+import { markModelCatalogCacheRefreshed } from "@/lib/model-catalog/persistence";
 
 config({ path: [".env.local", ".env"] });
 
@@ -64,20 +65,13 @@ async function main() {
   let modelCatalogResult: ModelCatalogImportResult | undefined;
   if (isDatabaseConfigured() && (!requested || modelCatalogOnly)) {
     try {
-      modelCatalogResult = await syncModelsDevCatalog();
+      modelCatalogResult = await syncModelsDevCatalog({ trigger });
       console.log(
         JSON.stringify({ modelCatalog: modelCatalogResult }, null, 2),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Model catalog sync failed: ${message}`);
-      await sendAdminCollectionAlert({
-        sourceName: "models.dev catalog",
-        errorCode: "MODEL_CATALOG_SYNC_FAILED",
-        message,
-        occurredAt: new Date().toISOString(),
-        dedupeKey: `model-catalog-sync:${new Date().toISOString().slice(0, 13)}`,
-      }).catch(() => false);
       process.exitCode = 1;
     }
   }
@@ -115,6 +109,9 @@ async function main() {
       changedModelIds: modelCatalogResult?.changedModelIds,
     });
     if (cacheRefresh.refreshed) {
+      if (modelCatalogResult) {
+        await markModelCatalogCacheRefreshed(modelCatalogResult.importId);
+      }
       console.log("Pricing page caches revalidated and prewarmed.");
     }
   } catch (error) {
