@@ -346,18 +346,18 @@ export function modelCatalogDigestEmail({
     )
     .join("");
   const html = shell(`
-    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">API 模型目录更新</p>
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">API 价格排行榜更新</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">发现 ${models.length} 个新模型</h1>
     <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">以下 canonical model 首次出现在最新目录中。</p>
     <table style="width:100%;border-collapse:collapse;">${rows}</table>
-    <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看模型目录</a></p>
+    <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看 API 价格排行榜</a></p>
     <p style="margin:18px 0 0;color:#85858c;font-size:10px;">目录版本 ${escapeHtml(catalogVersion.slice(0, 12))}</p>
     <p style="margin:12px 0 0;color:#85858c;font-size:11px;"><a href="${safeHttpUrl(unsubscribeUrl)}" style="color:#0066cc;">退订新模型通知</a></p>
   `);
   return {
-    subject: `API 模型目录新增 ${models.length} 个模型`,
+    subject: `API 价格排行榜新增 ${models.length} 个模型`,
     html,
-    text: `API 模型目录新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n目录：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
+    text: `API 价格排行榜新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n排行榜：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
   };
 }
 

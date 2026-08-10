@@ -830,8 +830,11 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   await page.goto("/api-pricing");
   await waitForPricingHydration(page);
   await expect(
-    page.getByRole("heading", { name: "API 模型目录" }),
+    page.getByRole("heading", { name: "API 价格排行榜" }),
   ).toBeVisible();
+  const hideZero = page.getByRole("checkbox", { name: "不显示 0 价格" });
+  await expect(hideZero).toBeChecked();
+  await expect(page).toHaveURL(/\/api-pricing$/);
   await expect(page.locator(".provider-section")).toHaveCount(0);
   await expect(page.locator(".model-catalog-table thead th")).toHaveCount(8);
   await expect(page.locator(".model-catalog-table thead th")).toHaveText([
@@ -844,12 +847,18 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
     /Release/,
     "Updated",
   ]);
-  const releaseDates = await page
-    .locator(".model-catalog-table tbody tr td:nth-child(7)")
-    .allTextContents();
-  expect(releaseDates).toEqual(
-    [...releaseDates].sort((a, b) => b.localeCompare(a)),
-  );
+  const inputPrices = (
+    await page.locator(".model-price-cell > span:first-child").allTextContents()
+  ).map((value) => Number(value.match(/\$([\d.]+)/)?.[1]));
+  expect(inputPrices).toEqual([...inputPrices].sort((a, b) => a - b));
+  await expect(
+    page.locator('.model-catalog-table th[aria-sort="ascending"]'),
+  ).toContainText("Price");
+
+  await hideZero.uncheck();
+  await expect(page).toHaveURL(/hideZero=0/);
+  await hideZero.check();
+  await expect(page).toHaveURL(/\/api-pricing$/);
 
   let searchRscRequests = 0;
   page.on("request", (request) => {
@@ -868,12 +877,34 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   await expect(page).toHaveURL(/\/api-pricing$/);
 
   const modelLink = page.locator(".model-catalog-table tbody th a").first();
+  await expect(modelLink).toHaveAttribute("target", "_blank");
+  const detailPagePromise = page.context().waitForEvent("page");
   await modelLink.click();
-  await expect(page).toHaveURL(/\/models\/.+\/.+/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Providers" })).toBeVisible();
-  await expect(page.locator(".model-provider-table thead th")).toHaveCount(14);
+  const detailPage = await detailPagePromise;
+  await detailPage.waitForLoadState("domcontentloaded");
+  await expect(page).toHaveURL(/\/api-pricing$/);
+  await expect(detailPage).toHaveURL(/\/models\/.+\/.+/, {
+    timeout: 15_000,
+  });
+  await expect(
+    detailPage.getByRole("heading", { name: "Providers" }),
+  ).toBeVisible();
+  await expect(
+    detailPage.locator(".model-provider-table thead th"),
+  ).toHaveCount(14);
+  const inputPriceHeader = detailPage.getByRole("columnheader", {
+    name: /Input Price/,
+  });
+  await expect(inputPriceHeader).toHaveAttribute("aria-sort", "ascending");
+  const outputPriceHeader = detailPage.getByRole("columnheader", {
+    name: /Output Price/,
+  });
+  await outputPriceHeader.getByRole("button").click();
+  await expect(outputPriceHeader).toHaveAttribute("aria-sort", "ascending");
+  await outputPriceHeader.getByRole("button").click();
+  await expect(outputPriceHeader).toHaveAttribute("aria-sort", "descending");
   expect(
-    await page
+    await detailPage
       .locator('script[type="application/ld+json"]')
       .evaluateAll((scripts) =>
         scripts.some((script) =>
@@ -881,6 +912,7 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
         ),
       ),
   ).toBe(true);
+  await detailPage.close();
 });
 
 test("model catalog scrolls locally without phone-width page overflow", async ({

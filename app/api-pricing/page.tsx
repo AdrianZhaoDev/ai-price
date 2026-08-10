@@ -33,15 +33,21 @@ export default async function ApiPricingPage({
     {
       "@context": "https://schema.org",
       "@type": "Dataset",
-      name: "Low Price Radar API 模型目录",
+      name: "Low Price Radar API 价格排行榜",
       description:
-        "models.dev canonical 模型规格与 provider 最低输入、输出价格。",
+        "AI 模型 API 价格排行榜，收录 models.dev canonical 模型规格与 provider 最低输入、输出价格。",
       url: absoluteUrl("/api-pricing"),
       license: "https://github.com/anomalyco/models.dev/blob/dev/LICENSE",
+      isAccessibleForFree: true,
+      dateModified: models
+        .map((model) => model.detailChangedAt ?? model.updatedDate)
+        .sort((left, right) => right.localeCompare(left))[0],
     },
     {
       "@context": "https://schema.org",
       "@type": "ItemList",
+      name: "API 价格排行榜模型列表",
+      itemListOrder: "https://schema.org/ItemListUnordered",
       numberOfItems: models.length,
       itemListElement: models.map((model, index) => ({
         "@type": "ListItem",

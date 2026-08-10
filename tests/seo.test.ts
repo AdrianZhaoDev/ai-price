@@ -45,6 +45,10 @@ describe("SEO routes", () => {
       "/china-ai-subscriptions",
     );
     expect(metadataForMode("api").alternates?.canonical).toBe("/api-pricing");
+    expect(metadataForMode("api").title).toEqual({
+      absolute: "AI 模型 API 价格与规格排行榜",
+    });
+    expect(metadataForMode("api").description).toContain("API 价格排行榜");
     expect(metadataForMode("global").description?.length).toBeGreaterThan(70);
   });
 

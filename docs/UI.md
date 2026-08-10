@@ -86,11 +86,15 @@ font-family:
 - API 排行和明细以人民币为主；海外 API 在人民币价格下方显示 USD 官方原价和
   汇率，桌面与手机点击排行都定位到对应平台与模型。
 - 价格与排行变化使用行内微角标，不增加列；悬浮、键盘聚焦或轻触后展示前后价格、
-  名次和确认时间。API 模型目录标题区常驻“订阅新模型”入口，只汇总新增 canonical model。
+  名次和确认时间。API 价格排行榜标题区常驻“订阅新模型”入口，只汇总新增 canonical model。
 
-API 模型目录使用约 1480px 的独立内容宽度和严格八列行式表格：Model、Lab、Context、
+API 价格排行榜使用约 1480px 的独立内容宽度和严格八列行式表格：Model、Lab、Context、
 Output、Input、Price、Release、Updated。窄屏仅表格容器横向滚动，Model 列固定，页面
 本身不得横向溢出。
+
+排行榜默认勾选“不显示 0 价格”，并按最低输入价正序排列；缺失价格始终位于末尾。
+模型名称在新页签打开详情。详情页 Providers 表默认按 Input Price 正序，并允许点击
+Context、Output、Input Price、Output Price 表头切换排序方向。
 
 - 价格使用行式列表和轻量分隔，不堆叠信息卡片。
 

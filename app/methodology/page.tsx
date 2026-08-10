@@ -24,7 +24,7 @@ export default function MethodologyPage() {
         许可社区聚合数据，并保留固定 commit 证据。
       </p>
       <section>
-        <h2>API 模型目录的来源边界</h2>
+        <h2>API 价格排行榜的数据来源边界</h2>
         <p>
           API 模型榜单和模型详情每 4 小时从 models.dev 的固定 Git commit
           导入。输入、输出价格统一为 USD / 百万 tokens；alpha 与 deprecated

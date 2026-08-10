@@ -288,19 +288,37 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
     "href",
     "https://lowpriceradar.com/models/google/gemini-2.5-flash",
   );
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    /.{70,}/,
+  );
+  await expect(page.locator('meta[property="og:image"]')).toHaveCount(1);
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+    "content",
+    "summary_large_image",
+  );
+  const detailStructuredData = await page
+    .locator('script[type="application/ld+json"]')
+    .allTextContents();
   expect(
-    await page
-      .locator('script[type="application/ld+json"]')
-      .evaluateAll((scripts) =>
-        scripts.some((script) =>
-          script.textContent?.includes("BreadcrumbList"),
-        ),
-      ),
+    detailStructuredData.some((value) => value.includes("BreadcrumbList")),
+  ).toBe(true);
+  expect(
+    detailStructuredData.some((value) => value.includes('"Dataset"')),
   ).toBe(true);
 
   const missing = await request.get("/models/unknown/does-not-exist");
   expect(missing.status()).toBe(404);
   await page.goto("/api-pricing?lab=google");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    /noindex,\s*follow/,
+  );
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://lowpriceradar.com/api-pricing",
+  );
+  await page.goto("/api-pricing?hideZero=0");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     "content",
     /noindex,\s*follow/,

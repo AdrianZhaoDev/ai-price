@@ -45,7 +45,7 @@ export const modeSeo: Record<PriceMode, ModeSeo> = {
     path: "/api-pricing",
     title: "AI 模型 API 价格与规格排行榜",
     description:
-      "浏览 models.dev 模型目录，比较各模型的 Lab、Context、最大输出、输入模态、最低输入与输出价格、发布日期和更新时间。",
+      "查看 AI 模型 API 价格排行榜，比较 models.dev 收录模型的 Lab、Context、最大输出、输入模态、最低输入与输出价格、Provider 来源、发布日期和更新时间。",
     keywords: [
       "AI API 价格",
       "大模型 API 价格",

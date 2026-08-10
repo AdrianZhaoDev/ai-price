@@ -65,6 +65,7 @@ export type ModelDetail = ModelCatalogSummary & {
 
 export type ModelCatalogFilters = {
   query?: string;
+  hideZeroPrice?: boolean;
   labs?: string[];
   providers?: string[];
   contextMin?: number;
