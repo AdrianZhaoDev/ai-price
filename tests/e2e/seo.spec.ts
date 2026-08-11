@@ -284,7 +284,7 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
   test.skip(isMobile, "SEO output is device-independent.");
   await page.goto("/models/google/gemini-2.5-flash");
   await expect(page).toHaveTitle(
-    /Gemini 2.5 Flash（google\/gemini-2\.5-flash）API 价格与模型规格/,
+    /Gemini 2.5 Flash · google\/gemini-2\.5-flash API 价格/,
   );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
@@ -302,15 +302,26 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
     "content",
     "summary_large_image",
   );
-  const detailStructuredData = await page
-    .locator('script[type="application/ld+json"]')
-    .allTextContents();
-  expect(
-    detailStructuredData.some((value) => value.includes("BreadcrumbList")),
-  ).toBe(true);
-  expect(
-    detailStructuredData.some((value) => value.includes('"Dataset"')),
-  ).toBe(true);
+  const detailStructuredData = (
+    await page.locator('script[type="application/ld+json"]').allTextContents()
+  ).flatMap((value) => {
+    const parsed = JSON.parse(value) as
+      Record<string, unknown> | Record<string, unknown>[];
+    return Array.isArray(parsed) ? parsed : [parsed];
+  });
+  expect(detailStructuredData).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ "@type": "BreadcrumbList" }),
+    ]),
+  );
+  const dataset = detailStructuredData.find(
+    (entry) => entry["@type"] === "Dataset",
+  );
+  expect(dataset).toMatchObject({
+    isPartOf: "https://lowpriceradar.com/api-pricing",
+  });
+  expect(String(dataset?.description).length).toBeGreaterThanOrEqual(50);
+  expect(String(dataset?.description).length).toBeLessThanOrEqual(155);
 
   const missing = await request.get("/models/unknown/does-not-exist");
   expect(missing.status()).toBe(404);

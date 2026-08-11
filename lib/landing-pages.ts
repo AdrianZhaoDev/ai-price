@@ -21,6 +21,26 @@ export type LandingPageDefinition = {
 };
 
 export const LANDING_CONTENT_UPDATED_AT = "2026-07-31T00:00:00.000Z";
+const LANDING_TITLE_MAX_LENGTH = 60;
+const LANDING_DESCRIPTION_MIN_LENGTH = 70;
+const LANDING_DESCRIPTION_MAX_LENGTH = 155;
+
+function truncateMetadata(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+}
+
+function landingMetadataDescription(value: string, locale: Locale): string {
+  const expanded =
+    value.length >= LANDING_DESCRIPTION_MIN_LENGTH
+      ? value
+      : `${value}${
+          locale === "en"
+            ? " Includes current plans or models, source links, and the latest verification time."
+            : "同时展示当前可用套餐或模型、官方来源、价格口径、最近核验时间与数据说明。"
+        }`;
+  return truncateMetadata(expanded, LANDING_DESCRIPTION_MAX_LENGTH);
+}
 
 const globalProduct = (
   slug: string,
@@ -447,9 +467,9 @@ export function landingCopy(
     const isPlan = Boolean(page.parentSlug);
     return {
       title: isPlan
-        ? `${page.name} global price comparison: official regional prices | ${SITE_NAME}`
-        : `${page.name} global subscription prices: official regions and lowest price | ${SITE_NAME}`,
-      description: `Compare official ${page.name} prices across App Store regions, including original amounts, CNY references, billing periods, regional spreads, and traceable sources.`,
+        ? `${page.name} Global Price Comparison | ${SITE_NAME}`
+        : `${page.name} Global Subscription Prices | ${SITE_NAME}`,
+      description: `Compare official ${page.name} App Store prices by region, with original amounts, CNY references, billing periods, regional spreads, and source links.`,
       heading: isPlan
         ? `${page.name} global price comparison`
         : `${page.name} global subscription price comparison`,
@@ -468,7 +488,7 @@ export function landingCopy(
         ? `${page.name} subscription prices`
         : `${page.name} API prices`;
   return {
-    title: `${focus}: official plans, models and billing | ${SITE_NAME}`,
+    title: `${focus} | ${SITE_NAME}`,
     description:
       hasSubscription && hasApi
         ? `Compare official ${page.name} subscription plans and API prices, including billing periods, units, verification times, and traceable sources.`
@@ -496,8 +516,8 @@ export function metadataForLandingPage(
   const imageUrl = absoluteUrl("/og.png");
   const isEnglish = locale === "en";
   const copy = landingCopy(page, locale);
-  const title = copy.title;
-  const description = copy.description;
+  const title = truncateMetadata(copy.title, LANDING_TITLE_MAX_LENGTH);
+  const description = landingMetadataDescription(copy.description, locale);
   return {
     title: { absolute: title },
     description,

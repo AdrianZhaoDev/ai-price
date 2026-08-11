@@ -53,11 +53,26 @@ export function relatedModelsFor(
   models: ModelCatalogSummary[],
   limit = 6,
 ): ModelCatalogSummary[] {
-  return models
-    .filter(
-      (candidate) =>
-        candidate.id !== model.id && isIndexableModelSummary(candidate),
-    )
+  const indexableModels = models.filter(isIndexableModelSummary);
+  const stableOrder = [...indexableModels].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
+  const modelIndex = stableOrder.findIndex(
+    (candidate) => candidate.id === model.id,
+  );
+  const neighbors =
+    modelIndex < 0 || stableOrder.length < 2
+      ? []
+      : [
+          stableOrder[
+            (modelIndex - 1 + stableOrder.length) % stableOrder.length
+          ],
+          stableOrder[(modelIndex + 1) % stableOrder.length],
+        ].filter((candidate): candidate is ModelCatalogSummary =>
+          Boolean(candidate && candidate.id !== model.id),
+        );
+  const ranked = indexableModels
+    .filter((candidate) => candidate.id !== model.id)
     .map((candidate) => {
       const modalityOverlap = candidate.inputModalities.filter((modality) =>
         model.inputModalities.includes(modality),
@@ -79,6 +94,21 @@ export function relatedModelsFor(
         right.candidate.updatedDate.localeCompare(left.candidate.updatedDate) ||
         left.candidate.name.localeCompare(right.candidate.name),
     )
-    .slice(0, limit)
     .map(({ candidate }) => candidate);
+
+  const selected = neighbors.slice(0, limit);
+  const selectedIds = new Set(selected.map((candidate) => candidate.id));
+  for (const candidate of ranked) {
+    if (selected.length >= limit) break;
+    if (!selectedIds.has(candidate.id)) {
+      selected.push(candidate);
+      selectedIds.add(candidate.id);
+    }
+  }
+  const rank = new Map(
+    ranked.map((candidate, index) => [candidate.id, index] as const),
+  );
+  return selected.sort(
+    (left, right) => (rank.get(left.id) ?? 0) - (rank.get(right.id) ?? 0),
+  );
 }

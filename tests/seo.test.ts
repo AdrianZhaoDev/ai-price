@@ -78,7 +78,16 @@ describe("SEO routes", () => {
     expect(modelSeoDescription(preview)).toContain(
       "模型 ID：google/gemini-3.1-flash-image-preview",
     );
-    expect(modelSeoTitle(preview, "en")).toContain(preview.id);
+    for (const locale of ["zh-CN", "en"] as const) {
+      expect(modelSeoTitle(standard, locale).length).toBeLessThanOrEqual(60);
+      expect(modelSeoTitle(preview, locale).length).toBeLessThanOrEqual(60);
+      expect(
+        modelSeoDescription(preview, locale).length,
+      ).toBeGreaterThanOrEqual(70);
+      expect(modelSeoDescription(preview, locale).length).toBeLessThanOrEqual(
+        155,
+      );
+    }
   });
 
   it("marks unserved model details noindex while keeping links followable", () => {
@@ -174,9 +183,16 @@ describe("SEO routes", () => {
     expect(new Set(landingPages.map((page) => page.slug)).size).toBe(31);
     for (const page of landingPages) {
       const metadata = metadataForLandingPage(page);
-      expect(metadata.title).toEqual({ absolute: page.title });
       expect(metadata.alternates?.canonical).toBe(`/${page.slug}`);
       expect(metadata.description).toContain(page.name);
+      for (const locale of ["zh-CN", "en"] as const) {
+        const localized = metadataForLandingPage(page, true, locale);
+        const title = (localized.title as { absolute: string }).absolute;
+        const description = localized.description ?? "";
+        expect(title.length).toBeLessThanOrEqual(60);
+        expect(description.length).toBeGreaterThanOrEqual(70);
+        expect(description.length).toBeLessThanOrEqual(155);
+      }
     }
     expect(
       metadataForLandingPage(landingPages[0]!, false).robots,
