@@ -6,8 +6,13 @@ import {
   formatApiCny,
   formatCny,
   formatFxRate,
+  formatOfferAnnotation,
+  formatOfferDisplayPrice,
+  formatOfferPlanName,
   formatOfferPrice,
+  formatOfferUnit,
   formatPeriod,
+  formatProviderDescription,
   formatRegionName,
   isComparableOffer,
   lowestComparableOffer,
@@ -57,6 +62,121 @@ describe("price formatting", () => {
     expect(
       formatRegionName({ regionCode: "US", regionName: "美国" }, "zh-CN"),
     ).toBe("美国");
+    expect(formatRegionName({ regionName: "全球" }, "en")).toBe("Global");
+    expect(formatRegionName({ regionName: "未知地区" }, "en", "Region")).toBe(
+      "Region",
+    );
+  });
+
+  it("localizes explanatory pricing data while preserving product names", () => {
+    const provider = {
+      id: "chatgpt",
+      name: "ChatGPT",
+      description: "OpenAI 官方 iOS 应用订阅",
+      mode: "global" as const,
+      sourceType: "app_store" as const,
+    };
+    expect(formatProviderDescription(provider, "en")).toBe(
+      "Official OpenAI iOS app subscriptions",
+    );
+    expect(formatProviderDescription(provider, "zh-CN")).toBe(
+      "OpenAI 官方 iOS 应用订阅",
+    );
+    expect(
+      formatOfferPlanName(
+        {
+          planName: "gpt-5.6 · 缓存输入",
+          modelName: "gpt-5.6",
+          priceTier: undefined,
+          priceType: "cached_input",
+        },
+        "en",
+      ),
+    ).toBe("gpt-5.6 · Cached input");
+    expect(
+      formatOfferPlanName(
+        {
+          planName: "个人专业版",
+          modelName: undefined,
+          priceTier: undefined,
+          priceType: undefined,
+        },
+        "en",
+      ),
+    ).toBe("个人专业版");
+    expect(
+      formatOfferPlanName(
+        {
+          planName: "Gemini 2.5 Pro · 输入 · 长上下文 · 档位 2",
+          modelName: "Gemini 2.5 Pro",
+          priceTier: "长上下文 · 档位 2",
+          priceType: "input",
+        },
+        "en",
+      ),
+    ).toBe("Gemini 2.5 Pro · Input · Long context · Variant 2");
+    expect(
+      formatOfferAnnotation({ note: "含 5 TB 存储" }, provider, "en"),
+    ).toBe("Includes 5 TB storage");
+    expect(formatOfferUnit("50,000 积分/月", "en")).toBe(
+      "50,000 credits/month",
+    );
+    expect(formatOfferUnit("1.3亿 Tokens / 月", "en")).toBe(
+      "130M Tokens/month",
+    );
+    expect(formatOfferUnit("/百万 tokens（Token Plan 折算）", "en")).toBe(
+      "/million tokens (Token Plan equivalent)",
+    );
+    expect(formatOfferUnit("/千次", "en")).toBe("/1,000 calls");
+    expect(formatOfferUnit("/张", "en")).toBe("/images");
+    expect(formatOfferUnit("/分钟", "en")).toBe("/minutes");
+    expect(formatOfferUnit("/秒", "en")).toBe("/seconds");
+    expect(formatOfferUnit("/字符", "en")).toBe("/characters");
+    expect(formatOfferUnit("/每小时", "en")).toBe("/hour");
+    expect(
+      formatOfferAnnotation(
+        { category: "中国内地", priceTier: "标准" },
+        provider,
+        "en",
+      ),
+    ).toBe("Chinese mainland · Standard");
+  });
+
+  it("localizes non-numeric source price states", () => {
+    expect(
+      formatOfferDisplayPrice(
+        {
+          ...offer,
+          amountMinor: null,
+          currency: null,
+          displayPrice: "等待首次核验",
+          status: "pending",
+        },
+        "en",
+      ),
+    ).toBe("Awaiting first verification");
+    expect(
+      formatOfferDisplayPrice(
+        {
+          ...offer,
+          amountMinor: null,
+          currency: null,
+          displayPrice: "输入 ¥1 · 输出 ¥4",
+        },
+        "en",
+      ),
+    ).toBe("Input ¥1 · Output ¥4");
+    expect(
+      formatOfferDisplayPrice(
+        {
+          ...offer,
+          amountMinor: null,
+          currency: null,
+          displayPrice: "新的官方价格说明",
+        },
+        "en",
+      ),
+    ).toBe("See official source");
   });
 
   it("formats persisted or derived exchange rates and price comparisons", () => {

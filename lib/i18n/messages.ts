@@ -209,6 +209,7 @@ const zh: LocaleMessages = {
     releaseTo: "Release 止",
     updatedFrom: "Updated 起",
     updatedTo: "Updated 止",
+    datePlaceholder: "YYYY-MM-DD",
     resultCount: (visible, total) => `${visible} / ${total} 个模型`,
     paginationLabel: "模型目录分页",
     previousPage: "上一页",
@@ -463,6 +464,7 @@ const zh: LocaleMessages = {
   },
   result: {
     statusTitle: "订阅状态",
+    metadataDescription: "查看价格关注订阅请求的处理结果。",
     confirmedTitle: "价格关注已生效",
     confirmedDescription: "以后只有价格或套餐发生变化时，我们才会发送邮件。",
     unsubscribedTitle: "已经退订",
@@ -698,6 +700,7 @@ const en: LocaleMessages = {
     releaseTo: "Release to",
     updatedFrom: "Updated from",
     updatedTo: "Updated to",
+    datePlaceholder: "YYYY-MM-DD",
     resultCount: (visible, total) => `${visible} / ${total} models`,
     paginationLabel: "Model directory pagination",
     previousPage: "Previous",
@@ -963,6 +966,7 @@ const en: LocaleMessages = {
   },
   result: {
     statusTitle: "Subscription status",
+    metadataDescription: "View the result of your price-alert request.",
     confirmedTitle: "Price alert is active",
     confirmedDescription:
       "We will email you only when the price or plan changes.",

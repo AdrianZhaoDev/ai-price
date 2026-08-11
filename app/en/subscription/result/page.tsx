@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: getMessages("en").result.statusTitle,
+  description: getMessages("en").result.metadataDescription,
   robots: { index: false, follow: false },
 };
 

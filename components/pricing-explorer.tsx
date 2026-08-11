@@ -17,7 +17,11 @@ import {
   formatFxRate,
   formatFxDate,
   formatCny,
-  formatOfferPrice,
+  formatOfferAnnotation,
+  formatOfferDisplayPrice,
+  formatOfferPlanName,
+  formatOfferUnit,
+  formatProviderDescription,
   formatRegionName,
   displayableOffers,
   lowestComparableOffer,
@@ -822,7 +826,9 @@ export function PricingExplorer({
                       <div className="provider-name-line">
                         <h2>{selectedProvider.name}</h2>
                       </div>
-                      <p>{selectedProvider.description}</p>
+                      <p>
+                        {formatProviderDescription(selectedProvider, locale)}
+                      </p>
                     </div>
                   </div>
                   <div className="provider-actions">
@@ -1021,7 +1027,9 @@ export function PricingExplorer({
                             role="cell"
                             data-rank={rank}
                           >
-                            <strong>{offer.displayPrice}</strong>
+                            <strong>
+                              {formatOfferDisplayPrice(offer, locale)}
+                            </strong>
                             {offer.lastPriceChange ? (
                               <ChangeBadge
                                 label={
@@ -1111,16 +1119,14 @@ export function PricingExplorer({
                                   #{rank}
                                 </span>
                               ) : null}
-                              {offer.planName}
+                              {formatOfferPlanName(offer, locale)}
                             </strong>
                             <small>
-                              {offer.note ??
-                                (activeMode === "api"
-                                  ? [offer.category, offer.priceTier]
-                                      .filter(Boolean)
-                                      .join(" · ") ||
-                                    selectedProvider.description
-                                  : selectedProvider.description)}
+                              {formatOfferAnnotation(
+                                offer,
+                                selectedProvider,
+                                locale,
+                              )}
                             </small>
                           </span>
                         </div>
@@ -1133,7 +1139,7 @@ export function PricingExplorer({
                             {activeMode === "api" &&
                             offer.convertedCny !== undefined
                               ? formatApiCny(offer.convertedCny, locale)
-                              : formatOfferPrice(offer, locale)}
+                              : formatOfferDisplayPrice(offer, locale)}
                           </strong>
                           {offer.lastPriceChange ? (
                             <ChangeBadge
@@ -1158,12 +1164,12 @@ export function PricingExplorer({
                             <small>
                               {activeMode === "api" &&
                               offer.currency.toUpperCase() !== "CNY"
-                                ? `${formatOfferPrice(offer, locale)} · ${formatFxRate(offer, locale)} · ${formatFxDate(offer, locale)}`
+                                ? `${formatOfferDisplayPrice(offer, locale)} · ${formatFxRate(offer, locale)} · ${formatFxDate(offer, locale)}`
                                 : offer.currency}
                               {activeMode === "api" && offer.unit ? (
                                 <span className="mobile-api-unit">
                                   {" "}
-                                  · {offer.unit}
+                                  · {formatOfferUnit(offer.unit, locale)}
                                 </span>
                               ) : null}
                               {activeMode !== "api" &&
@@ -1183,7 +1189,11 @@ export function PricingExplorer({
                         >
                           {activeMode === "api" ? (
                             <span>
-                              {offer.unit ?? messages.pricing.perOfficialUnit}
+                              {formatOfferUnit(
+                                offer.unit,
+                                locale,
+                                messages.pricing.perOfficialUnit,
+                              )}
                             </span>
                           ) : (
                             <strong>

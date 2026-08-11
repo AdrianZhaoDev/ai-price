@@ -20,6 +20,72 @@ import { SubscriptionSheet } from "./subscription-sheet";
 
 type SortKey = NonNullable<ModelCatalogFilters["sort"]>;
 
+function isValidIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function CatalogDateInput({
+  locale,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  locale: Locale;
+  value?: string;
+  placeholder: string;
+  onCommit: (value?: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const valid = draft === "" || isValidIsoDate(draft);
+
+  if (locale !== "en") {
+    return (
+      <input
+        type="date"
+        value={value ?? ""}
+        onChange={(event) => onCommit(event.target.value || undefined)}
+      />
+    );
+  }
+
+  function commit() {
+    if (valid) onCommit(draft || undefined);
+    else setDraft(value ?? "");
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      maxLength={10}
+      pattern="\d{4}-\d{2}-\d{2}"
+      placeholder={placeholder}
+      value={draft}
+      aria-invalid={!valid}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setDraft(value ?? "");
+        }
+      }}
+    />
+  );
+}
+
 function formatTokens(value?: number) {
   if (value === undefined) return "—";
   return value >= 1_000_000
@@ -338,42 +404,42 @@ export function ModelCatalogExplorer({
               </label>
               <label>
                 <span>{messages.apiCatalog.releaseFrom}</span>
-                <input
-                  type="date"
+                <CatalogDateInput
+                  key={filters.releaseFrom ?? "release-from-empty"}
+                  locale={locale}
+                  placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.releaseFrom ?? ""}
-                  onChange={(event) =>
-                    update("releaseFrom", event.target.value || undefined)
-                  }
+                  onCommit={(value) => update("releaseFrom", value)}
                 />
               </label>
               <label>
                 <span>{messages.apiCatalog.releaseTo}</span>
-                <input
-                  type="date"
+                <CatalogDateInput
+                  key={filters.releaseTo ?? "release-to-empty"}
+                  locale={locale}
+                  placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.releaseTo ?? ""}
-                  onChange={(event) =>
-                    update("releaseTo", event.target.value || undefined)
-                  }
+                  onCommit={(value) => update("releaseTo", value)}
                 />
               </label>
               <label>
                 <span>{messages.apiCatalog.updatedFrom}</span>
-                <input
-                  type="date"
+                <CatalogDateInput
+                  key={filters.updatedFrom ?? "updated-from-empty"}
+                  locale={locale}
+                  placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.updatedFrom ?? ""}
-                  onChange={(event) =>
-                    update("updatedFrom", event.target.value || undefined)
-                  }
+                  onCommit={(value) => update("updatedFrom", value)}
                 />
               </label>
               <label>
                 <span>{messages.apiCatalog.updatedTo}</span>
-                <input
-                  type="date"
+                <CatalogDateInput
+                  key={filters.updatedTo ?? "updated-to-empty"}
+                  locale={locale}
+                  placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.updatedTo ?? ""}
-                  onChange={(event) =>
-                    update("updatedTo", event.target.value || undefined)
-                  }
+                  onCommit={(value) => update("updatedTo", value)}
                 />
               </label>
             </div>
