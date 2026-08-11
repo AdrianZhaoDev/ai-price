@@ -99,6 +99,39 @@ const englishPriceTypeLabels: Record<
   other: "Other",
 };
 
+const englishPricingMetadata: Record<string, string> = {
+  中国内地: "Chinese mainland",
+  中国大陆: "Chinese mainland",
+  全球: "Global",
+  标准: "Standard",
+  标准档: "Standard tier",
+  高速档: "High-speed tier",
+  免费层: "Free tier",
+  非通用模型: "Specialized model",
+  标准实时: "Standard",
+  长上下文: "Long context",
+  存储费: "Storage",
+  模型调用: "Model inference",
+  在线推理: "Online inference",
+  按量付费: "Pay as you go",
+  限时折扣: "Limited-time discount",
+  火山方舟: "Volcano Ark",
+  官方API定价: "Official API pricing",
+  "官方 API 定价": "Official API pricing",
+  "TeleAI 官方套餐": "Official TeleAI plan",
+  "Token Plan 标准成员折算": "Token Plan standard-member equivalent",
+};
+
+function formatEnglishPricingMetadata(value: string): string | undefined {
+  const translated = englishPricingMetadata[value];
+  if (translated) return translated;
+  const variant = value.match(/^档位\s*(\d+)$/);
+  if (variant) return `Variant ${variant[1]}`;
+  const table = value.match(/^价目表\s*(\d+)$/);
+  if (table) return `Pricing table ${table[1]}`;
+  return hanCharacters.test(value) ? undefined : value;
+}
+
 const englishProviderDescriptions: Record<string, string> = {
   chatgpt: "Official OpenAI iOS app subscriptions",
   gemini: "Google Gemini and Google AI subscriptions",
@@ -169,23 +202,10 @@ export function formatOfferPlanName(
   locale: Locale = "zh-CN",
 ): string {
   if (locale === "en" && offer.modelName && offer.priceType) {
-    const tierTranslations: Record<string, string> = {
-      免费层: "Free tier",
-      非通用模型: "Specialized model",
-      标准实时: "Standard",
-      长上下文: "Long context",
-      存储费: "Storage",
-      标准档: "Standard tier",
-      高速档: "High-speed tier",
-    };
     const tier = offer.priceTier
       ?.split(" · ")
-      .map(
-        (part) =>
-          tierTranslations[part] ??
-          part.replace(/^档位\s*(\d+)$/, "Variant $1"),
-      )
-      .filter((part) => !hanCharacters.test(part))
+      .map(formatEnglishPricingMetadata)
+      .filter((part): part is string => Boolean(part))
       .join(" · ");
     return [offer.modelName, englishPriceTypeLabels[offer.priceType], tier]
       .filter(Boolean)
@@ -243,10 +263,24 @@ export function formatOfferUnit(
     .replace(/积分/g, "credits")
     .replace(/每模型/g, "per model")
     .replace(/次调用/g, "calls")
+    .replace(/每千次/g, "1,000 calls")
+    .replace(/千次/g, "1,000 calls")
+    .replace(/每次/g, "call")
+    .replace(/每张/g, "image")
+    .replace(/每分钟/g, "minute")
+    .replace(/每小时/g, "hour")
+    .replace(/每秒/g, "second")
+    .replace(/每字符/g, "character")
+    .replace(/次/g, "calls")
+    .replace(/张/g, "images")
+    .replace(/分钟/g, "minutes")
     .replace(/个月/g, " months")
     .replace(/小时/g, "hours")
+    .replace(/秒/g, "seconds")
+    .replace(/字符/g, "characters")
     .replace(/天/g, " days")
     .replace(/月/g, "month")
+    .replace(/按官方单位/g, "Official unit")
     .replace(/\s+/g, " ")
     .trim();
   value = value.replace(/\s*\/\s*/g, "/");
@@ -293,12 +327,14 @@ export function formatOfferAnnotation(
 
   const metadataTranslations: Record<string, string> = {
     官方标准实时价: "Official standard real-time pricing",
-    标准实时: "Standard real-time",
   };
   const metadata = [offer.category, offer.priceTier]
     .filter((value): value is string => Boolean(value))
-    .map((value) => metadataTranslations[value] ?? value)
-    .filter((value) => !hanCharacters.test(value))
+    .map(
+      (value) =>
+        metadataTranslations[value] ?? formatEnglishPricingMetadata(value),
+    )
+    .filter((value): value is string => Boolean(value))
     .join(" · ");
   return metadata || formatProviderDescription(provider, locale);
 }

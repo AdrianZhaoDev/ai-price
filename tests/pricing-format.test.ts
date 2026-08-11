@@ -127,6 +127,19 @@ describe("price formatting", () => {
     expect(formatOfferUnit("/百万 tokens（Token Plan 折算）", "en")).toBe(
       "/million tokens (Token Plan equivalent)",
     );
+    expect(formatOfferUnit("/千次", "en")).toBe("/1,000 calls");
+    expect(formatOfferUnit("/张", "en")).toBe("/images");
+    expect(formatOfferUnit("/分钟", "en")).toBe("/minutes");
+    expect(formatOfferUnit("/秒", "en")).toBe("/seconds");
+    expect(formatOfferUnit("/字符", "en")).toBe("/characters");
+    expect(formatOfferUnit("/每小时", "en")).toBe("/hour");
+    expect(
+      formatOfferAnnotation(
+        { category: "中国内地", priceTier: "标准" },
+        provider,
+        "en",
+      ),
+    ).toBe("Chinese mainland · Standard");
   });
 
   it("localizes non-numeric source price states", () => {
