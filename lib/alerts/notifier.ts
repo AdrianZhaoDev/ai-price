@@ -95,7 +95,7 @@ export async function notifyPriceChangeDigest(
           : recipient.locale === "en"
             ? "Compare lower-priced regions"
             : "查看还有更便宜的地区吗？";
-    const dedupeKey = `price-change:${digest.runId}:${digest.providerSlug}:${digest.planSlug}:${hashEmail(recipient.email)}:${recipient.locale}`;
+    const dedupeKey = `price-change:${digest.runId}:${digest.providerSlug}:${digest.planSlug}:${hashEmail(recipient.email)}${recipient.locale === "en" ? ":en" : ""}`;
     const deliveryId = await reserveEmailDelivery({
       type: "price_change",
       recipient: recipient.email,
@@ -322,7 +322,7 @@ export async function notifyApiRankingChanges(
         previousRank: change.previousRank,
         previousDisplayPrice: change.previousDisplayPrice,
       }));
-    const dedupeKey = `api-ranking:${runId}:${hashEmail(recipient.email)}:${recipient.locale}`;
+    const dedupeKey = `api-ranking:${runId}:${hashEmail(recipient.email)}${recipient.locale === "en" ? ":en" : ""}`;
     const deliveryId = await reserveEmailDelivery({
       type: "api_ranking_change",
       recipient: recipient.email,

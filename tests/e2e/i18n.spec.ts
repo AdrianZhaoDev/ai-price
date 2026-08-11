@@ -146,6 +146,7 @@ test("keeps public assets, document anchors, and privacy copy localized", async 
   await expect(
     page.getByText(/ai-price-locale cookie for one year/i),
   ).toBeVisible();
+  await expect(page.getByText(/subscription locale/i)).toBeVisible();
 });
 
 test("hides the model catalog background while the subscription dialog is open", async ({

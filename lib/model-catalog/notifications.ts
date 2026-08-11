@@ -67,7 +67,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
     for (const subscriber of subscribers.filter(
       (candidate) => candidate.activeSince <= eventCreatedAt,
     )) {
-      const dedupeKey = `model-catalog:${importId}:${hashEmail(subscriber.email)}:${subscriber.locale}`;
+      const dedupeKey = `model-catalog:${importId}:${hashEmail(subscriber.email)}${subscriber.locale === "en" ? ":en" : ""}`;
       const reservation = await reserveEmailDelivery({
         type: "model_catalog_added",
         recipient: subscriber.email,

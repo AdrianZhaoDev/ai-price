@@ -405,7 +405,7 @@ const zh: LocaleMessages = {
       {
         title: "保存内容",
         paragraphs: [
-          "系统保存标准化邮箱、邮箱哈希、关注的产品或套餐、订阅状态和邮件送达记录。退订及历史确认令牌只保存不可逆哈希。",
+          "系统保存标准化邮箱、邮箱哈希、关注的产品或套餐、订阅语言、订阅状态和邮件送达记录。订阅语言仅用于发送对应语言的确认与价格通知。退订及历史确认令牌只保存不可逆哈希。",
         ],
       },
       {
@@ -894,7 +894,7 @@ const en: LocaleMessages = {
       {
         title: "What we store",
         paragraphs: [
-          "The system stores a normalized email, an email hash, the product or plan being followed, subscription status, and delivery records. Unsubscribe and historical confirmation tokens are stored only as irreversible hashes.",
+          "The system stores a normalized email, an email hash, the product or plan being followed, the subscription locale, subscription status, and delivery records. The locale is used only to send confirmations and price alerts in the selected language. Unsubscribe and historical confirmation tokens are stored only as irreversible hashes.",
         ],
       },
       {

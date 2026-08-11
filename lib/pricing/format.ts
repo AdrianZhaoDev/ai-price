@@ -81,6 +81,27 @@ export function formatOfferPrice(
   return `${amount}${period}`;
 }
 
+export function formatRegionName(
+  offer: Pick<PriceOffer, "regionCode" | "regionName">,
+  locale: Locale = "zh-CN",
+  fallback = "—",
+): string {
+  if (locale === "en" && offer.regionCode) {
+    try {
+      return (
+        new Intl.DisplayNames(["en"], { type: "region" }).of(
+          offer.regionCode.toUpperCase(),
+        ) ??
+        offer.regionName ??
+        offer.regionCode
+      );
+    } catch {
+      // Keep source data visible when a provider emits a nonstandard code.
+    }
+  }
+  return offer.regionName ?? offer.regionCode ?? fallback;
+}
+
 const zeroDecimalCurrencies = new Set(["CLP", "IDR", "JPY", "KRW", "VND"]);
 
 export function formatFxRate(

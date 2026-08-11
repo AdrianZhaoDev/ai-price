@@ -8,6 +8,7 @@ import {
   formatFxRate,
   formatOfferPrice,
   formatPeriod,
+  formatRegionName,
   isComparableOffer,
   lowestComparableOffer,
   lowestThreeRanks,
@@ -47,6 +48,15 @@ describe("price formatting", () => {
     expect(formatApiCny(0.025)).toBe("¥0.025");
     expect(formatApiCny(6.999999)).toBe("¥6.999999");
     expect(formatApiCny(Number.NaN)).toBe("—");
+  });
+
+  it("localizes region names from stable region codes", () => {
+    expect(
+      formatRegionName({ regionCode: "US", regionName: "美国" }, "en"),
+    ).toBe("United States");
+    expect(
+      formatRegionName({ regionCode: "US", regionName: "美国" }, "zh-CN"),
+    ).toBe("美国");
   });
 
   it("formats persisted or derived exchange rates and price comparisons", () => {

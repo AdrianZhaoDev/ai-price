@@ -12,6 +12,7 @@ import {
   formatCny,
   formatOfferPrice,
   formatPeriod,
+  formatRegionName,
 } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 import {
@@ -61,15 +62,17 @@ function groupConclusion(
     prefix: current ? messages.current : messages.recentVerified,
     label: group.label,
     regionCount: group.regionCount,
-    minimumRegion:
-      group.minimum.regionName ??
-      group.minimum.regionCode ??
+    minimumRegion: formatRegionName(
+      group.minimum,
+      locale,
       messages.unknownRegion,
+    ),
     minimumPrice: formatCny(group.minimum.convertedCny, locale),
-    maximumRegion:
-      group.maximum.regionName ??
-      group.maximum.regionCode ??
+    maximumRegion: formatRegionName(
+      group.maximum,
+      locale,
       messages.unknownRegion,
+    ),
     maximumPrice: formatCny(group.maximum.convertedCny, locale),
     spread: group.spreadPercent?.toFixed(1) ?? "—",
   });
