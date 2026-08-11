@@ -458,7 +458,7 @@ describe("SEO landing page registry", () => {
     ]);
     expect(data.quality.lastCheckedAt).toBe("2026-07-31T08:00:00.000Z");
     expect(data.quality.priceModifiedAt).toBe("2026-08-01T08:00:00.000Z");
-    expect(data.quality.pageModifiedAt).toBe("2026-08-01T08:00:00.000Z");
+    expect(data.quality.pageModifiedAt).toBe("2026-08-11T00:00:00.000Z");
   });
 
   it("publishes only quality-approved landing pages with stable lastmod values", () => {
@@ -497,12 +497,12 @@ describe("SEO landing page registry", () => {
     expect(
       landingEntries.find((entry) => entry.url === absoluteUrl("/trae-price"))
         ?.lastModified,
-    ).toEqual(new Date("2026-08-01T08:00:00.000Z"));
+    ).toEqual(new Date("2026-08-11T00:00:00.000Z"));
     expect(
       landingEntries.find(
         (entry) => entry.url === absoluteUrl("/en/trae-price"),
       )?.lastModified,
-    ).toEqual(new Date("2026-08-01T08:00:00.000Z"));
+    ).toEqual(new Date("2026-08-11T00:00:00.000Z"));
     expect(entries.some((entry) => entry.url.includes("?"))).toBe(false);
     expect(entries.every((entry) => entry.changeFrequency === undefined)).toBe(
       true,

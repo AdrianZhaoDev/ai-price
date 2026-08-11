@@ -20,7 +20,7 @@ export type LandingPageDefinition = {
   contentUpdatedAt: string;
 };
 
-export const LANDING_CONTENT_UPDATED_AT = "2026-07-31T00:00:00.000Z";
+export const LANDING_CONTENT_UPDATED_AT = "2026-08-11T00:00:00.000Z";
 const LANDING_TITLE_MAX_LENGTH = 60;
 const LANDING_DESCRIPTION_MIN_LENGTH = 70;
 const LANDING_DESCRIPTION_MAX_LENGTH = 155;

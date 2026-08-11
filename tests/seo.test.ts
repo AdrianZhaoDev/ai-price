@@ -16,7 +16,10 @@ import {
   modelSeoDescription,
   modelSeoTitle,
 } from "@/lib/model-catalog/seo";
-import type { ModelDetail } from "@/lib/model-catalog/types";
+import type {
+  ModelCatalogSummary,
+  ModelDetail,
+} from "@/lib/model-catalog/types";
 import {
   absoluteUrl,
   metadataForDocument,
@@ -176,6 +179,42 @@ describe("SEO routes", () => {
         ),
     ).toBe(true);
     expect(new Set(urls).size).toBe(urls.length);
+  });
+
+  it("advances model lastmod when the page template changes", () => {
+    const model = {
+      id: "lab/legacy-model",
+      name: "Legacy Model",
+      labId: "lab",
+      labName: "Lab",
+      description: "A served model with useful pricing and specification data.",
+      inputModalities: ["text"],
+      releaseDate: "2025-01-01",
+      updatedDate: "2026-07-01",
+      providerCount: 1,
+      providerIds: ["provider"],
+      providerNames: ["Provider"],
+      active: true,
+      origin: "models.dev",
+    } satisfies ModelCatalogSummary;
+    const entries = buildSitemap(
+      {
+        global: providersForMode("global"),
+        "china-subscription": providersForMode("china-subscription"),
+        api: providersForMode("api"),
+      },
+      new Date("2026-08-11T12:00:00.000Z"),
+      [model],
+    );
+
+    for (const path of [
+      "/models/lab/legacy-model",
+      "/en/models/lab/legacy-model",
+    ]) {
+      expect(
+        entries.find((entry) => entry.url === absoluteUrl(path))?.lastModified,
+      ).toEqual(new Date("2026-08-11T00:00:00.000Z"));
+    }
   });
 
   it("defines stable metadata for every SEO landing page", () => {
