@@ -110,4 +110,32 @@ describe("model catalog discovery", () => {
       "other/newest",
     ]);
   });
+
+  it("reserves stable neighbors so every indexable model receives model-page links", () => {
+    const models = [
+      summary("lab/atlas"),
+      summary("lab/bravo"),
+      summary("lab/charlie"),
+      summary("lab/delta"),
+      summary("lab/echo"),
+    ];
+
+    const related = relatedModelsFor(detail(), models, 3).map(
+      (model) => model.id,
+    );
+
+    expect(related).toContain("lab/bravo");
+    expect(related).toContain("lab/echo");
+    expect(new Set(related).size).toBe(related.length);
+  });
+
+  it("deduplicates the wraparound neighbor in a two-model catalog", () => {
+    const related = relatedModelsFor(
+      detail(),
+      [summary("lab/atlas"), summary("lab/bravo")],
+      6,
+    );
+
+    expect(related.map((model) => model.id)).toEqual(["lab/bravo"]);
+  });
 });

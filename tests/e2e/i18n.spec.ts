@@ -117,6 +117,31 @@ test("publishes English canonical, alternates, and structured language metadata"
   });
 });
 
+test("publishes reciprocal hreflang for landing and model detail pages", async ({
+  page,
+}) => {
+  for (const [chinesePath, englishPath] of [
+    ["/deepseek-price", "/en/deepseek-price"],
+    ["/models/google/gemini-2.5-flash", "/en/models/google/gemini-2.5-flash"],
+  ] as const) {
+    await page.goto(chinesePath);
+    await expect(
+      page.locator('link[rel="alternate"][hreflang="zh-CN"]'),
+    ).toHaveAttribute("href", new RegExp(`${chinesePath}$`));
+    await expect(
+      page.locator('link[rel="alternate"][hreflang="en"]'),
+    ).toHaveAttribute("href", new RegExp(`${englishPath}$`));
+
+    await page.goto(englishPath);
+    await expect(
+      page.locator('link[rel="alternate"][hreflang="zh-CN"]'),
+    ).toHaveAttribute("href", new RegExp(`${chinesePath}$`));
+    await expect(
+      page.locator('link[rel="alternate"][hreflang="en"]'),
+    ).toHaveAttribute("href", new RegExp(`${englishPath}$`));
+  }
+});
+
 test("localizes explanatory pricing copy while preserving source names", async ({
   page,
 }) => {

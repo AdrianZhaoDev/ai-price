@@ -8,29 +8,65 @@ import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 type ModelSeoIdentity = Pick<ModelDetail, "id" | "name">;
 type ModelSeoSummary = Pick<ModelDetail, "id" | "name" | "description">;
 
+export const MODEL_TITLE_MAX_LENGTH = 60;
+export const MODEL_DESCRIPTION_MAX_LENGTH = 155;
+
+function stableIdSuffix(value: string): string {
+  let hash = 2_166_136_261;
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36).padStart(6, "0").slice(-6);
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
+}
+
+function compactModelId(id: string, maxLength: number): string {
+  if (id.length <= maxLength) return id;
+  const lab = id.split("/")[0] ?? "model";
+  const hash = stableIdSuffix(id);
+  const fixedLength = lab.length + hash.length + 3;
+  if (fixedLength >= maxLength) {
+    return `${truncate(lab, Math.max(3, maxLength - hash.length - 1))}#${hash}`;
+  }
+  const tailLength = maxLength - fixedLength;
+  return `${lab}/…${id.slice(-tailLength)}#${hash}`;
+}
+
 export function modelSeoTitle(
   model: ModelSeoIdentity,
   locale: Locale = "zh-CN",
 ): string {
-  return locale === "en"
-    ? `${model.name} (${model.id}) API prices and model specifications`
-    : `${model.name}（${model.id}）API 价格与模型规格`;
+  const suffix = locale === "en" ? " API Prices" : " API 价格";
+  const name = truncate(model.name, 26);
+  const idBudget = Math.max(
+    12,
+    MODEL_TITLE_MAX_LENGTH - name.length - suffix.length - 3,
+  );
+  return `${name} · ${compactModelId(model.id, idBudget)}${suffix}`;
 }
 
 export function modelSeoDescription(
   model: ModelSeoSummary,
   locale: Locale = "zh-CN",
 ): string {
-  return [
+  const description = [
     locale === "en" ? `Model ID: ${model.id}.` : `模型 ID：${model.id}。`,
     model.description,
     locale === "en"
       ? `Compare ${model.name} context, output limits, modalities, capabilities, and API prices by provider.`
       : `查看 ${model.name} 的上下文、最大输出、输入输出模态、能力与各提供商 API 价格。`,
+    locale === "en"
+      ? "Includes source attribution and the latest catalog change."
+      : "包含来源说明与最近目录变更。",
   ]
     .filter(Boolean)
-    .join(" ")
-    .slice(0, 180);
+    .join(" ");
+  return truncate(description, MODEL_DESCRIPTION_MAX_LENGTH);
 }
 
 export function modelSnapshotSummary(
@@ -63,7 +99,7 @@ export function metadataForModel(
   const imageUrl = absoluteUrl("/og.png");
 
   return {
-    title,
+    title: { absolute: title },
     description,
     keywords: [
       model.name,

@@ -3,7 +3,11 @@ import { ModelProviderTable } from "@/components/model-provider-table";
 import { StructuredData } from "@/components/structured-data";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { getMessages, type Locale } from "@/lib/i18n";
-import { modelSeoTitle, modelSnapshotSummary } from "@/lib/model-catalog/seo";
+import {
+  modelSeoDescription,
+  modelSeoTitle,
+  modelSnapshotSummary,
+} from "@/lib/model-catalog/seo";
 import type {
   ModelCatalogSummary,
   ModelDetail,
@@ -67,11 +71,7 @@ export function ModelDetailPage({
       "@context": "https://schema.org",
       "@type": "Dataset",
       name: modelTitle,
-      description:
-        model.description ??
-        (locale === "en"
-          ? `${model.name} model specifications and provider API prices.`
-          : `${model.name} 的模型规格与 Provider API 价格。`),
+      description: modelSeoDescription(model, locale),
       identifier: model.id,
       url: pageUrl,
       inLanguage: locale === "en" ? "en" : "zh-CN",
@@ -79,11 +79,7 @@ export function ModelDetailPage({
       datePublished: model.releaseDate,
       dateModified: model.detailChangedAt ?? model.updatedDate,
       creator: { "@type": "Organization", name: model.labName },
-      isPartOf: {
-        "@type": "Dataset",
-        name: messages.apiCatalog.title,
-        url: catalogUrl,
-      },
+      isPartOf: catalogUrl,
       license: "https://github.com/anomalyco/models.dev/blob/dev/LICENSE",
       isBasedOn: model.sourceUrl,
       variableMeasured: [
