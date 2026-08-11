@@ -128,4 +128,14 @@ describe("model catalog discovery", () => {
     expect(related).toContain("lab/echo");
     expect(new Set(related).size).toBe(related.length);
   });
+
+  it("deduplicates the wraparound neighbor in a two-model catalog", () => {
+    const related = relatedModelsFor(
+      detail(),
+      [summary("lab/atlas"), summary("lab/bravo")],
+      6,
+    );
+
+    expect(related.map((model) => model.id)).toEqual(["lab/bravo"]);
+  });
 });

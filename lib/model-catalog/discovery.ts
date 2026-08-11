@@ -60,7 +60,7 @@ export function relatedModelsFor(
   const modelIndex = stableOrder.findIndex(
     (candidate) => candidate.id === model.id,
   );
-  const neighbors =
+  const neighborCandidates =
     modelIndex < 0 || stableOrder.length < 2
       ? []
       : [
@@ -71,6 +71,11 @@ export function relatedModelsFor(
         ].filter((candidate): candidate is ModelCatalogSummary =>
           Boolean(candidate && candidate.id !== model.id),
         );
+  const neighbors = [
+    ...new Map(
+      neighborCandidates.map((candidate) => [candidate.id, candidate] as const),
+    ).values(),
+  ];
   const ranked = indexableModels
     .filter((candidate) => candidate.id !== model.id)
     .map((candidate) => {
