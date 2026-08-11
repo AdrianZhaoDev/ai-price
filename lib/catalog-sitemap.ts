@@ -6,6 +6,7 @@ import {
 } from "@/lib/landing-page-data";
 import { landingPages, landingPagePath } from "@/lib/landing-pages";
 import { loadCachedModelCatalogSummaries } from "@/lib/model-catalog/cache";
+import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type { ModelCatalogSummary } from "@/lib/model-catalog/types";
 import { absoluteUrl } from "@/lib/seo";
@@ -14,9 +15,9 @@ import { localizedPath, type Locale } from "@/lib/i18n";
 export const SITEMAP_PAGE_SIZE = 45_000;
 
 const CORE_PAGE_UPDATED_AT = {
-  "/": new Date("2026-07-31T00:00:00.000Z"),
-  "/china-ai-subscriptions": new Date("2026-07-31T00:00:00.000Z"),
-  "/api-pricing": new Date("2026-07-31T00:00:00.000Z"),
+  "/": new Date("2026-08-11T00:00:00.000Z"),
+  "/china-ai-subscriptions": new Date("2026-08-11T00:00:00.000Z"),
+  "/api-pricing": new Date("2026-08-11T00:00:00.000Z"),
   "/methodology": new Date("2026-07-31T00:00:00.000Z"),
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
 } as const;
@@ -56,12 +57,10 @@ export function buildSitemap(
       })),
     ),
     ...INDEXABLE_LOCALES.flatMap((locale) =>
-      models
-        .filter((model) => model.active)
-        .map((model) => ({
-          url: absoluteUrl(modelDetailPath(model.id, locale)),
-          lastModified: modelLastModified(model),
-        })),
+      models.filter(isIndexableModelSummary).map((model) => ({
+        url: absoluteUrl(modelDetailPath(model.id, locale)),
+        lastModified: modelLastModified(model),
+      })),
     ),
   ];
 }

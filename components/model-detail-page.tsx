@@ -3,7 +3,11 @@ import { ModelProviderTable } from "@/components/model-provider-table";
 import { StructuredData } from "@/components/structured-data";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { getMessages, type Locale } from "@/lib/i18n";
-import type { ModelDetail } from "@/lib/model-catalog/types";
+import { modelSeoTitle, modelSnapshotSummary } from "@/lib/model-catalog/seo";
+import type {
+  ModelCatalogSummary,
+  ModelDetail,
+} from "@/lib/model-catalog/types";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { absoluteUrl, modeHref } from "@/lib/seo";
 
@@ -27,19 +31,19 @@ function yesNo(value: boolean | undefined, locale: Locale): string {
 
 export function ModelDetailPage({
   model,
+  relatedModels = [],
   locale = "zh-CN",
 }: {
   model: ModelDetail;
+  relatedModels?: ModelCatalogSummary[];
   locale?: Locale;
 }) {
   const messages = getMessages(locale);
   const detailMessages = messages.modelDetail;
   const pageUrl = absoluteUrl(modelDetailPath(model.id, locale));
   const catalogUrl = absoluteUrl(modeHref("api", locale));
-  const modelTitle =
-    locale === "en"
-      ? `${model.name} API prices and model specifications`
-      : `${model.name} API 价格与模型规格`;
+  const modelTitle = modelSeoTitle(model, locale);
+  const snapshotSummary = modelSnapshotSummary(model, locale);
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -121,7 +125,10 @@ export function ModelDetailPage({
     [detailMessages.facts.output, tokens(model.output, locale)],
     [detailMessages.facts.knowledge, model.knowledge ?? "—"],
     [detailMessages.facts.release, model.releaseDate],
-    [detailMessages.facts.updated, model.updatedDate],
+    [
+      detailMessages.facts.updated,
+      (model.detailChangedAt ?? model.updatedDate).slice(0, 10),
+    ],
     [
       detailMessages.facts.weights,
       model.openWeights
@@ -176,9 +183,13 @@ export function ModelDetailPage({
             {model.labName} · {detailMessages.origin[model.origin]}
           </p>
           <h1>{model.name}</h1>
-          <p>{model.description ?? detailMessages.noDescription}</p>
+          <p>{model.description ?? snapshotSummary}</p>
           <code>{model.id}</code>
         </header>
+        <section className="model-snapshot" aria-labelledby="snapshot-title">
+          <h2 id="snapshot-title">{detailMessages.snapshotTitle}</h2>
+          <p>{snapshotSummary}</p>
+        </section>
         <dl className="model-facts">
           {facts.map(([label, value]) => (
             <div key={label}>
@@ -213,6 +224,27 @@ export function ModelDetailPage({
           </div>
           <ModelProviderTable providers={model.providers} locale={locale} />
         </section>
+        {relatedModels.length ? (
+          <section className="model-related" aria-labelledby="related-title">
+            <div className="model-section-heading">
+              <div>
+                <h2 id="related-title">{detailMessages.relatedModels}</h2>
+                <p>{detailMessages.relatedDescription}</p>
+              </div>
+            </div>
+            <ul>
+              {relatedModels.map((related) => (
+                <li key={related.id}>
+                  <Link href={modelDetailPath(related.id, locale)}>
+                    <strong>{related.name}</strong>
+                    <span>{related.labName}</span>
+                    <small>{related.id}</small>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <aside className="model-provenance">
           <strong>{detailMessages.provenanceTitle}</strong>
           <p>{detailMessages.provenanceDescription}</p>

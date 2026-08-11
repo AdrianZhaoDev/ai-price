@@ -12,6 +12,12 @@ import {
   metadataForLandingPage,
 } from "@/lib/landing-pages";
 import {
+  metadataForModel,
+  modelSeoDescription,
+  modelSeoTitle,
+} from "@/lib/model-catalog/seo";
+import type { ModelDetail } from "@/lib/model-catalog/types";
+import {
   absoluteUrl,
   metadataForDocument,
   metadataForMode,
@@ -40,7 +46,8 @@ describe("SEO routes", () => {
   });
 
   it("builds canonical metadata for each pricing mode", () => {
-    expect(metadataForMode("global").alternates?.canonical).toBe("/");
+    expect(absoluteUrl("/")).toBe(SITE_ORIGIN);
+    expect(metadataForMode("global").alternates?.canonical).toBe(SITE_ORIGIN);
     expect(metadataForMode("china-subscription").alternates?.canonical).toBe(
       "/china-ai-subscriptions",
     );
@@ -50,6 +57,56 @@ describe("SEO routes", () => {
     });
     expect(metadataForMode("api").description).toContain("API 价格排行榜");
     expect(metadataForMode("global").description?.length).toBeGreaterThan(70);
+  });
+
+  it("disambiguates SEO metadata for models with the same display name", () => {
+    const standard = {
+      id: "google/gemini-3.1-flash-image",
+      name: "Nano Banana 2",
+      description:
+        "Image model for prompt-driven generation, editing, and visual design workflows",
+    };
+    const preview = {
+      ...standard,
+      id: "google/gemini-3.1-flash-image-preview",
+    };
+
+    expect(modelSeoTitle(standard)).not.toBe(modelSeoTitle(preview));
+    expect(modelSeoDescription(standard)).not.toBe(
+      modelSeoDescription(preview),
+    );
+    expect(modelSeoDescription(preview)).toContain(
+      "模型 ID：google/gemini-3.1-flash-image-preview",
+    );
+    expect(modelSeoTitle(preview, "en")).toContain(preview.id);
+  });
+
+  it("marks unserved model details noindex while keeping links followable", () => {
+    const model = {
+      id: "lab/unserved",
+      name: "Unserved",
+      labId: "lab",
+      labName: "Lab",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      releaseDate: "2026-01-01",
+      updatedDate: "2026-08-11",
+      providerCount: 0,
+      providerIds: [],
+      providerNames: [],
+      active: true,
+      origin: "models.dev",
+      openWeights: false,
+      capabilities: {},
+      providers: [],
+      catalogVersion: "a".repeat(40),
+      sourceUrl: "https://example.com/model.toml",
+    } satisfies ModelDetail;
+
+    expect(metadataForModel(model).robots).toEqual({
+      index: false,
+      follow: true,
+    });
   });
 
   it("builds complete social metadata for document pages", () => {

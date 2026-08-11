@@ -5,7 +5,7 @@ const publicPages = [
     path: "/",
     title: "AI订阅全球价格对比",
     canonical: "https://lowpriceradar.com",
-    sitemapUrl: "https://lowpriceradar.com/",
+    sitemapUrl: "https://lowpriceradar.com",
   },
   {
     path: "/china-ai-subscriptions",
@@ -283,7 +283,9 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
 }) => {
   test.skip(isMobile, "SEO output is device-independent.");
   await page.goto("/models/google/gemini-2.5-flash");
-  await expect(page).toHaveTitle(/Gemini 2.5 Flash API 价格与模型规格/);
+  await expect(page).toHaveTitle(
+    /Gemini 2.5 Flash（google\/gemini-2\.5-flash）API 价格与模型规格/,
+  );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
     "https://lowpriceradar.com/models/google/gemini-2.5-flash",
