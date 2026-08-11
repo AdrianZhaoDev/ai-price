@@ -54,7 +54,7 @@ export function SiteHeader({
               <Link
                 key={mode.id}
                 href={modeHref(mode.id, locale)}
-                prefetch
+                prefetch={mode.id === "api" ? false : undefined}
                 className="nav-item pressable"
                 data-mode={mode.id}
                 aria-current={activeMode === mode.id ? "page" : undefined}

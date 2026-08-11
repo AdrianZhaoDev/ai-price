@@ -3,13 +3,13 @@
 import { Bell, ChevronDown, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { getMessages, type Locale } from "@/lib/i18n";
 import {
   DEFAULT_MODEL_CATALOG_FILTERS,
-  filterAndSortModelCatalog,
   parseOptionalNumber,
 } from "@/lib/model-catalog/filters";
+import type { ModelCatalogFacets } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type {
   ModelCatalogFilters,
@@ -38,50 +38,36 @@ function formatPrice(value?: number) {
 export function ModelCatalogExplorer({
   locale = "zh-CN",
   models,
+  facets,
   initialFilters,
+  totalCount,
+  currentPage,
+  pageCount,
+  children,
 }: {
   locale?: Locale;
   models: ModelCatalogSummary[];
+  facets: ModelCatalogFacets;
   initialFilters: ModelCatalogFilters;
+  totalCount: number;
+  currentPage: number;
+  pageCount: number;
+  children?: ReactNode;
 }) {
   const messages = getMessages(locale);
   const router = useRouter();
   const [filters, setFilters] = useState(initialFilters);
+  const [queryDraft, setQueryDraft] = useState(initialFilters.query ?? "");
   const [moreOpen, setMoreOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const labs = useMemo(
-    () =>
-      [
-        ...new Map(
-          models.map((model) => [model.labId, model.labName]),
-        ).entries(),
-      ].sort((a, b) => a[1].localeCompare(b[1])),
-    [models],
-  );
-  const providers = useMemo(
-    () =>
-      [
-        ...new Map(
-          models.flatMap((model) =>
-            model.providerIds.map(
-              (id, index) => [id, model.providerNames[index] ?? id] as const,
-            ),
-          ),
-        ).entries(),
-      ].sort((a, b) => a[1].localeCompare(b[1])),
-    [models],
-  );
-  const modalities = useMemo(
-    () => [...new Set(models.flatMap((model) => model.inputModalities))].sort(),
-    [models],
-  );
+  const { labs, providers, modalities } = facets;
 
   function commit(next: ModelCatalogFilters) {
     setFilters(next);
     router.replace(catalogHref(next), { scroll: false });
   }
 
-  function catalogHref(next: ModelCatalogFilters) {
+  function catalogHref(next: ModelCatalogFilters, page = 1) {
     const params = new URLSearchParams();
     if (next.query) params.set("q", next.query);
     if (next.hideZeroPrice === false) params.set("hideZero", "0");
@@ -113,20 +99,15 @@ export function ModelCatalogExplorer({
         : "desc";
     if (next.direction && next.direction !== defaultDirection)
       params.set("direction", next.direction);
+    if (page > 1) params.set("page", String(page));
     const prefix = locale === "en" ? "/en/api-pricing" : "/api-pricing";
     return `${prefix}${params.size ? `?${params}` : ""}`;
   }
 
-  function updateQuery(value: string | undefined) {
-    const next = { ...filters, query: value };
-    setFilters(next);
-    window.history.replaceState(window.history.state, "", catalogHref(next));
+  function submitQuery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    commit({ ...filters, query: queryDraft.trim() || undefined });
   }
-
-  const visible = useMemo(
-    () => filterAndSortModelCatalog(models, filters),
-    [filters, models],
-  );
 
   const activeFilterCount = [
     filters.query,
@@ -207,19 +188,23 @@ export function ModelCatalogExplorer({
             {messages.apiCatalog.subscribeNewModel}
           </button>
         </section>
-        <section
+        <form
           className="model-filter-bar"
           aria-label={messages.apiCatalog.filterLabel}
+          onSubmit={submitQuery}
         >
           <label className="model-search">
             <span>{messages.apiCatalog.searchLabel}</span>
             <input
               type="search"
-              value={filters.query ?? ""}
-              onChange={(event) => updateQuery(event.target.value || undefined)}
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
               placeholder={messages.apiCatalog.searchPlaceholder}
             />
           </label>
+          <button type="submit" className="model-search-submit pressable">
+            {messages.apiCatalog.searchSubmit}
+          </button>
           <label>
             <span>{messages.apiCatalog.labs}</span>
             <select
@@ -393,16 +378,19 @@ export function ModelCatalogExplorer({
               </label>
             </div>
           ) : null}
-        </section>
+        </form>
         <div className="model-results">
           <span>
-            {messages.apiCatalog.resultCount(visible.length, models.length)}
+            {messages.apiCatalog.resultCount(models.length, totalCount)}
           </span>
           {activeFilterCount > 0 ? (
             <button
               type="button"
               className="model-clear pressable"
-              onClick={() => commit(DEFAULT_MODEL_CATALOG_FILTERS)}
+              onClick={() => {
+                setQueryDraft("");
+                commit(DEFAULT_MODEL_CATALOG_FILTERS);
+              }}
             >
               <RotateCcw size={14} />
               {messages.apiCatalog.clearFilters}
@@ -489,7 +477,7 @@ export function ModelCatalogExplorer({
               </tr>
             </thead>
             <tbody>
-              {visible.map((model) => (
+              {models.map((model) => (
                 <tr key={model.id}>
                   <th scope="row">
                     <Link
@@ -529,12 +517,39 @@ export function ModelCatalogExplorer({
               ))}
             </tbody>
           </table>
-          {visible.length === 0 ? (
+          {models.length === 0 ? (
             <div className="model-empty">
               <strong>{messages.apiCatalog.noModels}</strong>
               <p>{messages.apiCatalog.widenFilters}</p>
             </div>
           ) : null}
+          {pageCount > 1 ? (
+            <nav
+              className="model-pagination"
+              aria-label={messages.apiCatalog.paginationLabel}
+            >
+              {currentPage > 1 ? (
+                <Link href={catalogHref(filters, currentPage - 1)}>
+                  {messages.apiCatalog.previousPage}
+                </Link>
+              ) : (
+                <span aria-disabled="true">
+                  {messages.apiCatalog.previousPage}
+                </span>
+              )}
+              <strong>
+                {messages.apiCatalog.pageStatus(currentPage, pageCount)}
+              </strong>
+              {currentPage < pageCount ? (
+                <Link href={catalogHref(filters, currentPage + 1)}>
+                  {messages.apiCatalog.nextPage}
+                </Link>
+              ) : (
+                <span aria-disabled="true">{messages.apiCatalog.nextPage}</span>
+              )}
+            </nav>
+          ) : null}
+          {children}
         </div>
       </main>
       <SiteFooter

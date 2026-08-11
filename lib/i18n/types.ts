@@ -171,6 +171,7 @@ export type LocaleMessages = {
     filterLabel: string;
     searchLabel: string;
     searchPlaceholder: string;
+    searchSubmit: string;
     hideZeroPrices: string;
     openDetailsNewTab: string;
     detailsNewTabSr: string;
@@ -190,6 +191,12 @@ export type LocaleMessages = {
     updatedFrom: string;
     updatedTo: string;
     resultCount: (visible: number, total: number) => string;
+    paginationLabel: string;
+    previousPage: string;
+    nextPage: string;
+    pageStatus: (current: number, total: number) => string;
+    allModelsTitle: string;
+    allModelsSummary: (count: number) => string;
     clearFilters: string;
     sourceNote: string;
     scrollLabel: string;
@@ -208,6 +215,9 @@ export type LocaleMessages = {
     catalog: string;
     archived: string;
     noDescription: string;
+    snapshotTitle: string;
+    relatedModels: string;
+    relatedDescription: string;
     facts: Record<string, string>;
     capabilities: string;
     servingOptions: string;

@@ -11,7 +11,12 @@ import {
   landingPages,
   metadataForLandingPage,
 } from "@/lib/landing-pages";
-import { modelSeoDescription, modelSeoTitle } from "@/lib/model-catalog/seo";
+import {
+  metadataForModel,
+  modelSeoDescription,
+  modelSeoTitle,
+} from "@/lib/model-catalog/seo";
+import type { ModelDetail } from "@/lib/model-catalog/types";
 import {
   absoluteUrl,
   metadataForDocument,
@@ -73,6 +78,35 @@ describe("SEO routes", () => {
     expect(modelSeoDescription(preview)).toContain(
       "模型 ID：google/gemini-3.1-flash-image-preview",
     );
+    expect(modelSeoTitle(preview, "en")).toContain(preview.id);
+  });
+
+  it("marks unserved model details noindex while keeping links followable", () => {
+    const model = {
+      id: "lab/unserved",
+      name: "Unserved",
+      labId: "lab",
+      labName: "Lab",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      releaseDate: "2026-01-01",
+      updatedDate: "2026-08-11",
+      providerCount: 0,
+      providerIds: [],
+      providerNames: [],
+      active: true,
+      origin: "models.dev",
+      openWeights: false,
+      capabilities: {},
+      providers: [],
+      catalogVersion: "a".repeat(40),
+      sourceUrl: "https://example.com/model.toml",
+    } satisfies ModelDetail;
+
+    expect(metadataForModel(model).robots).toEqual({
+      index: false,
+      follow: true,
+    });
   });
 
   it("builds complete social metadata for document pages", () => {

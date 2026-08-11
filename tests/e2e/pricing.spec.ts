@@ -872,9 +872,16 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
     }
   });
   await page.getByRole("searchbox", { name: "模型" }).fill("Gemini");
+  await expect(page).toHaveURL(/\/api-pricing$/);
+  await page.getByRole("button", { name: "搜索", exact: true }).click();
   await expect(page).toHaveURL(/q=Gemini/);
-  await expect(page.locator(".model-catalog-table tbody tr")).toHaveCount(1);
-  expect(searchRscRequests).toBe(0);
+  await expect(
+    page.locator(".model-catalog-table tbody tr").first(),
+  ).toContainText(/Gemini/i);
+  expect(
+    await page.locator(".model-catalog-table tbody tr").count(),
+  ).toBeGreaterThan(0);
+  expect(searchRscRequests).toBeGreaterThan(0);
   await page.getByRole("button", { name: /清除筛选/ }).click();
   await expect(page).toHaveURL(/\/api-pricing$/);
 
@@ -890,6 +897,12 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   });
   await expect(
     detailPage.getByRole("heading", { name: "提供商" }),
+  ).toBeVisible();
+  await expect(
+    detailPage.getByRole("heading", { name: "当前价格与规格快照" }),
+  ).toBeVisible();
+  await expect(
+    detailPage.getByRole("heading", { name: "相关模型" }),
   ).toBeVisible();
   await expect(
     detailPage.locator(".model-provider-table thead th"),
@@ -1032,6 +1045,7 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
 
   await page.setViewportSize({ width: 390, height: 812 });
   await page.goto("/");
+  await expect(page.locator('.app-shell[data-hydrated="true"]')).toBeVisible();
   await page.evaluate(() => {
     Object.assign(window, { __pricingNavigationMarker: "retained" });
   });

@@ -71,31 +71,38 @@ export async function loadModelCatalogSummaries(
   const database =
     options.database ?? (isReadDatabaseConfigured() ? getReadDatabase() : null);
   if (!database) return fallbackSummaries(activeOnly);
-  const rows = await database
-    .select({ model: modelCatalogModels, lab: modelLabs })
-    .from(modelCatalogModels)
-    .innerJoin(modelLabs, eq(modelLabs.id, modelCatalogModels.labId))
-    .where(activeOnly ? eq(modelCatalogModels.active, true) : undefined)
-    .orderBy(desc(modelCatalogModels.releaseDate), modelCatalogModels.name);
-  const providerRows = await database.select().from(modelCatalogProviders);
+  const [rows, providerRows, offeringRows] = await Promise.all([
+    database
+      .select({ model: modelCatalogModels, lab: modelLabs })
+      .from(modelCatalogModels)
+      .innerJoin(modelLabs, eq(modelLabs.id, modelCatalogModels.labId))
+      .where(activeOnly ? eq(modelCatalogModels.active, true) : undefined)
+      .orderBy(desc(modelCatalogModels.releaseDate), modelCatalogModels.name),
+    database
+      .select({
+        id: modelCatalogProviders.id,
+        name: modelCatalogProviders.name,
+      })
+      .from(modelCatalogProviders),
+    database
+      .select({
+        modelId: modelProviderOfferings.canonicalModelId,
+        providerId: modelProviderOfferings.providerId,
+      })
+      .from(modelProviderOfferings)
+      .where(
+        and(
+          eq(modelProviderOfferings.active, true),
+          or(
+            isNull(modelProviderOfferings.status),
+            notInArray(modelProviderOfferings.status, ["alpha", "deprecated"]),
+          ),
+        ),
+      ),
+  ]);
   const providerNames = new Map(
     providerRows.map((provider) => [provider.id, provider.name]),
   );
-  const offeringRows = await database
-    .select({
-      modelId: modelProviderOfferings.canonicalModelId,
-      providerId: modelProviderOfferings.providerId,
-    })
-    .from(modelProviderOfferings)
-    .where(
-      and(
-        eq(modelProviderOfferings.active, true),
-        or(
-          isNull(modelProviderOfferings.status),
-          notInArray(modelProviderOfferings.status, ["alpha", "deprecated"]),
-        ),
-      ),
-    );
   const providersByModel = new Map<string, Set<string>>();
   for (const offering of offeringRows) {
     const values = providersByModel.get(offering.modelId) ?? new Set<string>();

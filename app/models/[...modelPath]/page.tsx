@@ -1,5 +1,9 @@
 import { ModelDetailPage } from "@/components/model-detail-page";
-import { loadCachedModelDetail } from "@/lib/model-catalog/cache";
+import {
+  loadCachedModelCatalogSummaries,
+  loadCachedModelDetail,
+} from "@/lib/model-catalog/cache";
+import { relatedModelsFor } from "@/lib/model-catalog/discovery";
 import { metadataForModel } from "@/lib/model-catalog/seo";
 import { modelIdFromPath } from "@/lib/model-catalog/paths";
 import { notFound } from "next/navigation";
@@ -29,7 +33,16 @@ export default async function ModelPage({
   params: Promise<{ modelPath: string[] }>;
 }) {
   const { modelPath } = await params;
-  const model = await loadCachedModelDetail(modelIdFromPath(modelPath));
+  const [model, summaries] = await Promise.all([
+    loadCachedModelDetail(modelIdFromPath(modelPath)),
+    loadCachedModelCatalogSummaries(),
+  ]);
   if (!model) notFound();
-  return <ModelDetailPage model={model} locale="zh-CN" />;
+  return (
+    <ModelDetailPage
+      model={model}
+      relatedModels={relatedModelsFor(model, summaries)}
+      locale="zh-CN"
+    />
+  );
 }

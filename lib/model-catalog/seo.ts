@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Locale } from "@/lib/i18n";
 import type { ModelDetail } from "@/lib/model-catalog/types";
+import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 
@@ -32,6 +33,26 @@ export function modelSeoDescription(
     .slice(0, 180);
 }
 
+export function modelSnapshotSummary(
+  model: ModelDetail,
+  locale: Locale = "zh-CN",
+): string {
+  const context = model.context?.toLocaleString(
+    locale === "en" ? "en-US" : "zh-CN",
+  );
+  const inputPrice = model.minInputPrice?.toLocaleString("en-US", {
+    maximumFractionDigits: 4,
+  });
+  const outputPrice = model.minOutputPrice?.toLocaleString("en-US", {
+    maximumFractionDigits: 4,
+  });
+  const updated = (model.detailChangedAt ?? model.updatedDate).slice(0, 10);
+
+  return locale === "en"
+    ? `${model.labName}'s ${model.name} (${model.id})${model.family ? ` belongs to the ${model.family} family` : ""}. This snapshot compares ${model.providerIds.length} active providers${context ? `, a ${context}-token context window` : ""}${inputPrice ? `, input prices from $${inputPrice}` : ""}${outputPrice ? `, and output prices from $${outputPrice}` : ""} per million tokens. Last catalog change: ${updated}.`
+    : `${model.labName} 的 ${model.name}（${model.id}）${model.family ? `属于 ${model.family} 系列，` : ""}当前汇总 ${model.providerIds.length} 个有效提供商${context ? `、${context} tokens 上下文` : ""}${inputPrice ? `、每百万 tokens 最低输入价 $${inputPrice}` : ""}${outputPrice ? `、最低输出价 $${outputPrice}` : ""}。最近目录变更：${updated}。`;
+}
+
 export function metadataForModel(
   model: ModelDetail,
   locale: Locale = "zh-CN",
@@ -60,7 +81,9 @@ export function metadataForModel(
         "x-default": modelDetailPath(model.id, "zh-CN"),
       },
     },
-    robots: model.active ? undefined : { index: false, follow: true },
+    robots: isIndexableModelSummary(model)
+      ? undefined
+      : { index: false, follow: true },
     openGraph: {
       type: "article",
       locale: locale === "en" ? "en_US" : "zh_CN",
