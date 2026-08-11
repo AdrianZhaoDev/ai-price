@@ -3,10 +3,12 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Bell, Check, X } from "lucide-react";
 import { trackTrafficEvent } from "@/lib/analytics/traffic";
+import { getMessages, type Locale } from "@/lib/i18n";
 import type { PriceMode } from "@/lib/pricing/types";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type SubscriptionSheetProps = {
+  locale?: Locale;
   open: boolean;
   scopeLabel: string;
   providerId: string;
@@ -46,6 +48,7 @@ function failureKind(error: unknown): SubscriptionFailureKind {
 }
 
 export function SubscriptionSheet({
+  locale = "zh-CN",
   open,
   scopeLabel,
   providerId,
@@ -54,6 +57,7 @@ export function SubscriptionSheet({
   subscriptionType = "price",
   onClose,
 }: SubscriptionSheetProps) {
+  const messages = getMessages(locale);
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
   const [resultStatus, setResultStatus] =
@@ -136,12 +140,12 @@ export function SubscriptionSheet({
       response = await fetch("/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, locale }),
       });
     } catch {
       throw new SubscriptionRequestError(
         "network",
-        "网络连接失败，请稍后重试。",
+        messages.subscription.networkError,
       );
     }
 
@@ -156,7 +160,7 @@ export function SubscriptionSheet({
     } catch {
       throw new SubscriptionRequestError(
         "invalid_response",
-        "服务响应异常，请稍后重试。",
+        messages.subscription.invalidResponse,
       );
     }
     const status: SubscriptionResultStatus | undefined =
@@ -176,7 +180,7 @@ export function SubscriptionSheet({
     const subscriptionKey = `${normalizedEmail}:${subscriptionType}:${providerId}:${planId || "*"}`;
     if (lastSuccessfulSubscriptionRef.current === subscriptionKey) {
       setState("success");
-      setMessage("您已订阅，请勿重复订阅。");
+      setMessage(messages.subscription.alreadySubmitted);
       setResultStatus("already_subscribed");
       return;
     }
@@ -221,12 +225,12 @@ export function SubscriptionSheet({
       if (!result.ok) {
         throw new SubscriptionRequestError(
           "http",
-          result.message || "暂时无法创建订阅，请稍后重试。",
+          result.message || messages.subscription.createError,
         );
       }
 
       setState("success");
-      setMessage(result.message || "您已订阅成功！");
+      setMessage(result.message || messages.subscription.success);
       setResultStatus("subscribed");
       lastSuccessfulSubscriptionRef.current = subscriptionKey;
       trackTrafficEvent("subscription_submit_succeeded", {
@@ -258,7 +262,7 @@ export function SubscriptionSheet({
       setMessage(
         error instanceof Error
           ? error.message
-          : "暂时无法创建订阅，请稍后重试。",
+          : messages.subscription.createError,
       );
     }
   }
@@ -275,11 +279,11 @@ export function SubscriptionSheet({
       if (!result.ok) {
         throw new SubscriptionRequestError(
           "http",
-          result.message || "暂时无法创建订阅，请稍后重试。",
+          result.message || messages.subscription.createError,
         );
       }
       setState("success");
-      setMessage(result.message || "您已订阅成功！");
+      setMessage(result.message || messages.subscription.success);
       setResultStatus("subscribed");
       lastSuccessfulSubscriptionRef.current = `${email.trim().toLowerCase()}:api_model_new:api-model-new:*`;
       trackTrafficEvent("subscription_submit_succeeded", {
@@ -301,7 +305,7 @@ export function SubscriptionSheet({
       setMessage(
         error instanceof Error
           ? error.message
-          : "暂时无法创建订阅，请稍后重试。",
+          : messages.subscription.createError,
       );
     }
   }
@@ -340,7 +344,7 @@ export function SubscriptionSheet({
                 type="button"
                 className="icon-button pressable"
                 onClick={closeSheet}
-                aria-label="关闭价格订阅"
+                aria-label={messages.subscription.closeLabel}
               >
                 <X size={19} />
               </button>
@@ -355,27 +359,28 @@ export function SubscriptionSheet({
                 <p>
                   {resultStatus === "already_subscribed"
                     ? subscriptionType === "api_model_new"
-                      ? "无需再次提交；目录出现新的 canonical model 时我们会发送摘要。"
-                      : "无需再次提交；价格或套餐变化时我们会发送邮件。"
-                    : "订阅成功通知邮件将在后台发送，无需点击确认。"}
+                      ? messages.subscription.alreadySubscribedModel
+                      : messages.subscription.alreadySubscribedPrice
+                    : messages.subscription.backgroundDelivery}
                 </p>
                 <button
                   type="button"
                   className="primary-button pressable"
                   onClick={closeSheet}
                 >
-                  完成
+                  {messages.subscription.done}
                 </button>
               </div>
             ) : state === "fallback_confirm" ||
               state === "fallback_submitting" ? (
               <div className="sheet-fallback-confirm">
-                <p className="eyebrow">一次掌握全部变化</p>
-                <h2 id="subscription-title">订阅次数有点多</h2>
-                <p>
-                  您近期提交了较多订阅。要不要改为订阅 API 新模型？目录出现新的
-                  canonical model 时，我们会发送摘要。
+                <p className="eyebrow">
+                  {messages.subscription.fallbackEyebrow}
                 </p>
+                <h2 id="subscription-title">
+                  {messages.subscription.fallbackTitle}
+                </h2>
+                <p>{messages.subscription.fallbackDescription}</p>
                 <div className="sheet-confirm-actions">
                   <button
                     ref={fallbackConfirmRef}
@@ -385,8 +390,8 @@ export function SubscriptionSheet({
                     onClick={() => void confirmRankingFallback()}
                   >
                     {state === "fallback_submitting"
-                      ? "正在订阅…"
-                      : "确认订阅新模型"}
+                      ? messages.subscription.subscribing
+                      : messages.subscription.confirmNewModel}
                   </button>
                   <button
                     type="button"
@@ -394,7 +399,7 @@ export function SubscriptionSheet({
                     disabled={state === "fallback_submitting"}
                     onClick={closeSheet}
                   >
-                    暂不订阅
+                    {messages.subscription.notNow}
                   </button>
                 </div>
               </div>
@@ -403,23 +408,25 @@ export function SubscriptionSheet({
                 <div className="sheet-copy">
                   <p className="eyebrow">
                     {subscriptionType === "api_model_new"
-                      ? "新模型通知"
-                      : "价格变动通知"}
+                      ? messages.subscription.newModelNotice
+                      : messages.subscription.priceNotice}
                   </p>
                   <h2 id="subscription-title">
                     {subscriptionType === "api_model_new"
-                      ? "订阅 API 新模型"
-                      : `关注 ${scopeLabel}`}
+                      ? messages.subscription.subscribeNewModel
+                      : messages.subscription.followScope(scopeLabel)}
                   </h2>
                   <p>
                     {subscriptionType === "api_model_new"
-                      ? "目录出现新的 canonical model 时，我们会发送一封汇总邮件。"
-                      : "提交后立即生效，仅在价格或套餐发生变化时发送邮件。"}
+                      ? messages.subscription.newModelDescription
+                      : messages.subscription.priceDescription}
                   </p>
                 </div>
 
                 <form onSubmit={onSubmit} className="subscription-form">
-                  <label htmlFor="price-email">邮箱</label>
+                  <label htmlFor="price-email">
+                    {messages.subscription.email}
+                  </label>
                   <input
                     ref={emailRef}
                     id="price-email"
@@ -427,7 +434,7 @@ export function SubscriptionSheet({
                     type="email"
                     inputMode="email"
                     autoComplete="email"
-                    placeholder="you@example.com"
+                    placeholder={messages.subscription.emailPlaceholder}
                     required
                     value={email}
                     onChange={(event) => setEmail(event.currentTarget.value)}
@@ -449,10 +456,12 @@ export function SubscriptionSheet({
                     className="primary-button pressable"
                     disabled={state === "submitting"}
                   >
-                    {state === "submitting" ? "正在订阅…" : "立即订阅"}
+                    {state === "submitting"
+                      ? messages.subscription.subscribing
+                      : messages.subscription.subscribeNow}
                   </button>
                   <p className="form-note">
-                    可随时退订，我们不会发送营销邮件。
+                    {messages.subscription.unsubscribeNote}
                   </p>
                 </form>
               </>

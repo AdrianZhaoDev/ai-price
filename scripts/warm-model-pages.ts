@@ -12,8 +12,12 @@ async function main() {
     throw new Error("No active model pages are available to warm.");
   const paths = [
     "/api-pricing",
+    "/en/api-pricing",
     "/sitemap.xml",
-    ...models.map((model) => modelDetailPath(model.id)),
+    ...models.flatMap((model) => [
+      modelDetailPath(model.id),
+      modelDetailPath(model.id, "en"),
+    ]),
   ];
   let warmed = 0;
   for (let index = 0; index < paths.length; index += 5) {

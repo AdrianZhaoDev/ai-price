@@ -86,12 +86,26 @@ describe("SEO routes", () => {
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
     ]);
+    expect(urls.slice(0, 10)).toEqual([
+      absoluteUrl("/"),
+      absoluteUrl("/china-ai-subscriptions"),
+      absoluteUrl("/api-pricing"),
+      absoluteUrl("/methodology"),
+      absoluteUrl("/privacy"),
+      absoluteUrl("/en"),
+      absoluteUrl("/en/china-ai-subscriptions"),
+      absoluteUrl("/en/api-pricing"),
+      absoluteUrl("/en/methodology"),
+      absoluteUrl("/en/privacy"),
+    ]);
     expect(
       urls
-        .slice(5)
+        .slice(10)
         .every((url) =>
           landingPages.some(
-            (page) => absoluteUrl(landingPagePath(page)) === url,
+            (page) =>
+              absoluteUrl(landingPagePath(page)) === url ||
+              absoluteUrl(landingPagePath(page, "en")) === url,
           ),
         ),
     ).toBe(true);
@@ -122,11 +136,20 @@ describe("SEO routes", () => {
     expect(result.rules).toMatchObject({
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/api/", "/pricing-data/", "/subscription/"],
+      disallow: [
+        "/admin",
+        "/api/",
+        "/pricing-data/",
+        "/subscription/",
+        "/en/subscription/",
+      ],
     });
     expect(
       result.rules && !Array.isArray(result.rules) && result.rules.disallow,
     ).toContain("/pricing-data/");
+    expect(
+      result.rules && !Array.isArray(result.rules) && result.rules.disallow,
+    ).toContain("/en/subscription/");
     expect(
       result.rules &&
         !Array.isArray(result.rules) &&

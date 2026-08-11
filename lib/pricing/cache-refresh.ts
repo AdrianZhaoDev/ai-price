@@ -62,14 +62,11 @@ export async function refreshPricingCacheAfterCollection({
     }
   }
 
-  const paths = changedModelIds.map(
-    (modelId) =>
-      `/models/${modelId
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/")}`,
-  );
-  if (catalogChanged) paths.push("/api-pricing");
+  const paths = changedModelIds.flatMap((modelId) => [
+    modelDetailPath(modelId),
+    modelDetailPath(modelId, "en"),
+  ]);
+  if (catalogChanged) paths.push("/api-pricing", "/en/api-pricing");
   paths.push("/sitemap.xml");
   for (let index = 0; index < paths.length; index += 5) {
     const batch = paths.slice(index, index + 5);
@@ -93,3 +90,4 @@ export async function refreshPricingCacheAfterCollection({
 
   return { refreshed: true };
 }
+import { modelDetailPath } from "@/lib/model-catalog/paths";

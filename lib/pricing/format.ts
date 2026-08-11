@@ -1,50 +1,71 @@
 import type { BillingPeriod, PriceOffer, PriceStatus } from "./types";
+import type { Locale } from "@/lib/i18n";
 
 export const API_INITIAL_VISIBLE_COUNT = 10;
 
-const periodLabels: Record<BillingPeriod, string> = {
-  week: "/周",
-  month: "/月",
-  quarter: "/季",
-  year: "/年",
-  one_time: "一次性",
-  usage: "",
+const periodLabels: Record<Locale, Record<BillingPeriod, string>> = {
+  "zh-CN": {
+    week: "/周",
+    month: "/月",
+    quarter: "/季",
+    year: "/年",
+    one_time: "一次性",
+    usage: "",
+  },
+  en: {
+    week: "/week",
+    month: "/month",
+    quarter: "/quarter",
+    year: "/year",
+    one_time: "one-time",
+    usage: "",
+  },
 };
 
-export function formatPeriod(period: BillingPeriod): string {
-  return periodLabels[period];
+function intlLocale(locale: Locale): string {
+  return locale === "en" ? "en-US" : "zh-CN";
 }
 
-export function formatCny(value?: number): string {
+export function formatPeriod(
+  period: BillingPeriod,
+  locale: Locale = "zh-CN",
+): string {
+  return periodLabels[locale][period];
+}
+
+export function formatCny(value?: number, locale: Locale = "zh-CN"): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "—";
   }
 
-  return new Intl.NumberFormat("zh-CN", {
+  return new Intl.NumberFormat(intlLocale(locale), {
     style: "currency",
     currency: "CNY",
     maximumFractionDigits: 2,
   }).format(value);
 }
 
-export function formatApiCny(value?: number): string {
+export function formatApiCny(value?: number, locale: Locale = "zh-CN"): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "—";
   }
 
-  return new Intl.NumberFormat("zh-CN", {
+  return new Intl.NumberFormat(intlLocale(locale), {
     style: "currency",
     currency: "CNY",
     maximumFractionDigits: 6,
   }).format(value);
 }
 
-export function formatOfferPrice(offer: PriceOffer): string {
+export function formatOfferPrice(
+  offer: PriceOffer,
+  locale: Locale = "zh-CN",
+): string {
   if (offer.amountMinor === null || offer.currency === null) {
     return offer.displayPrice;
   }
 
-  const period = formatPeriod(offer.billingPeriod);
+  const period = formatPeriod(offer.billingPeriod, locale);
   if (!period || offer.displayPrice.trim().endsWith(period)) {
     return offer.displayPrice;
   }
@@ -53,7 +74,10 @@ export function formatOfferPrice(offer: PriceOffer): string {
 
 const zeroDecimalCurrencies = new Set(["CLP", "IDR", "JPY", "KRW", "VND"]);
 
-export function formatFxRate(offer: PriceOffer): string {
+export function formatFxRate(
+  offer: PriceOffer,
+  locale: Locale = "zh-CN",
+): string {
   if (!offer.currency) return "—";
 
   const fractionDigits = zeroDecimalCurrencies.has(offer.currency.toUpperCase())
@@ -72,21 +96,60 @@ export function formatFxRate(offer: PriceOffer): string {
       : undefined);
 
   if (rate === undefined || !Number.isFinite(rate)) {
-    return `1 ${offer.currency} ≈ —`;
+    return locale === "en"
+      ? `1 ${offer.currency} ≈ —`
+      : `1 ${offer.currency} ≈ —`;
   }
 
   const maximumFractionDigits = rate >= 100 ? 2 : rate >= 0.01 ? 4 : 6;
-  const formatted = new Intl.NumberFormat("zh-CN", {
+  const formatted = new Intl.NumberFormat(intlLocale(locale), {
     minimumFractionDigits: Math.min(2, maximumFractionDigits),
     maximumFractionDigits,
   }).format(rate);
   return `1 ${offer.currency} ≈ ¥${formatted}`;
 }
 
-export function formatFxDate(offer: PriceOffer): string {
+export function formatFxDate(
+  offer: PriceOffer,
+  locale: Locale = "zh-CN",
+): string {
   const date = offer.fxRateObservedAt?.slice(0, 10);
-  return date ? `汇率 ${date}` : "汇率日期未知";
+  if (date) return locale === "en" ? `FX date ${date}` : `汇率 ${date}`;
+  return locale === "en" ? "FX date unknown" : "汇率日期未知";
 }
+
+/*
+ * Keep these labels in this module for callers that do not render through a
+ * page component yet. The optional locale keeps existing Chinese callers and
+ * tests backwards compatible.
+ */
+export function statusLabel(
+  status: PriceStatus,
+  locale: Locale = "zh-CN",
+): string {
+  const labels: Record<Locale, Record<PriceStatus, string>> = {
+    "zh-CN": {
+      verified: "已核验",
+      stale: "可能过期",
+      pending: "等待采集",
+      unpublished: "未公开固定价",
+    },
+    en: {
+      verified: "Verified",
+      stale: "Potentially stale",
+      pending: "Pending collection",
+      unpublished: "No public fixed price",
+    },
+  };
+
+  return labels[locale][status];
+}
+
+/* The following helpers are data-shape operations and are locale agnostic. */
+
+/*
+ * Keep the old exports below this comment unchanged in behavior.
+ */
 
 export function compareCnyPrice(
   value?: number,
@@ -108,17 +171,6 @@ export function compareCnyPrice(
     difference,
     percentage: (difference / minimum) * 100,
   };
-}
-
-export function statusLabel(status: PriceStatus): string {
-  const labels: Record<PriceStatus, string> = {
-    verified: "已核验",
-    stale: "可能过期",
-    pending: "等待采集",
-    unpublished: "未公开固定价",
-  };
-
-  return labels[status];
 }
 
 export function isComparableOffer(offer: PriceOffer): boolean {

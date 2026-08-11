@@ -2,6 +2,7 @@
 
 import { ProviderMark } from "@/components/icons/provider-mark";
 import { ChangeBadge } from "@/components/change-badge";
+import { getMessages, type Locale } from "@/lib/i18n";
 import {
   apiRankingEntries,
   findRankingFocusEntry,
@@ -15,6 +16,7 @@ import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
 import { useEffect, useId, useMemo, useRef } from "react";
 
 type ApiPriceRankingProps = {
+  locale?: Locale;
   providers: ProviderCatalogItem[];
   changes?: ApiRankingChange[];
   onSelectEntry: (selection: ApiRankingSelection) => void;
@@ -43,14 +45,20 @@ const metrics: Array<{ id: ApiRankingMetric; label: string }> = [
   { id: "output", label: "输出" },
 ];
 
-function CompactPrice({ offer }: { offer: PriceOffer | undefined }) {
+function CompactPrice({
+  offer,
+  locale,
+}: {
+  offer: PriceOffer | undefined;
+  locale: Locale;
+}) {
   if (!offer) return <>—</>;
   const value = rankingCnyValue(offer);
   return (
     <>
-      <strong>{formatApiCny(value)}</strong>
+      <strong>{formatApiCny(value, locale)}</strong>
       {offer.currency?.toUpperCase() !== "CNY" ? (
-        <small>{formatOfferPrice(offer)}</small>
+        <small>{formatOfferPrice(offer, locale)}</small>
       ) : null}
     </>
   );
@@ -73,6 +81,7 @@ function selectedOffer(
 }
 
 export function ApiPriceRanking({
+  locale = "zh-CN",
   providers,
   changes = [],
   onSelectEntry,
@@ -81,6 +90,7 @@ export function ApiPriceRanking({
   onMetricChange,
   focusRequest,
 }: ApiPriceRankingProps) {
+  const messages = getMessages(locale);
   const titleId = useId();
   const entryRefs = useRef(new Map<string, HTMLButtonElement>());
   const highlightedEntryRef = useRef<HTMLButtonElement | null>(null);
@@ -147,18 +157,29 @@ export function ApiPriceRanking({
     <aside className="api-ranking" aria-labelledby={titleId}>
       <div className="api-ranking-heading">
         <div>
-          <p className="api-ranking-kicker">/百万 tokens</p>
-          <h2 id={titleId}>API 价格排行榜</h2>
+          <p className="api-ranking-kicker">
+            / {locale === "en" ? "million tokens" : "百万 tokens"}
+          </p>
+          <h2 id={titleId}>
+            {locale === "en" ? "API price ranking" : "API 价格排行榜"}
+          </h2>
         </div>
         <div className="api-ranking-heading-actions">
-          <span>{entries.length} 个模型</span>
+          <span>
+            {messages.apiCatalog.resultCount(entries.length, entries.length)}
+          </span>
           <button type="button" onClick={onSubscribe}>
-            订阅排行榜变动
+            {locale === "en"
+              ? "Subscribe to ranking changes"
+              : "订阅排行榜变动"}
           </button>
         </div>
       </div>
 
-      <div className="api-ranking-switch" aria-label="选择排行价格">
+      <div
+        className="api-ranking-switch"
+        aria-label={locale === "en" ? "Choose ranking price" : "选择排行价格"}
+      >
         {metrics.map((item) => (
           <button
             type="button"
@@ -167,16 +188,20 @@ export function ApiPriceRanking({
             aria-pressed={metric === item.id}
             onClick={() => onMetricChange(item.id)}
           >
-            {item.label}
+            {item.id === "cached_input"
+              ? messages.landing.cache
+              : item.id === "input"
+                ? messages.landing.input
+                : messages.landing.output}
           </button>
         ))}
       </div>
 
       <div className="api-ranking-columns" aria-hidden="true">
-        <span>模型</span>
-        <span>缓存</span>
-        <span>非缓存</span>
-        <span>输出</span>
+        <span>{messages.apiCatalog.columns.model}</span>
+        <span>{messages.landing.cache}</span>
+        <span>{locale === "en" ? "Input" : "非缓存"}</span>
+        <span>{messages.landing.output}</span>
       </div>
 
       <ol className="api-ranking-list">
@@ -184,13 +209,15 @@ export function ApiPriceRanking({
           const offer = selectedOffer(entry, metric);
           const change = changesByEntry.get(entry.id);
           const rankLabel = change?.isNew
-            ? "新"
+            ? locale === "en"
+              ? "New"
+              : "新"
             : change?.rankDelta
               ? `${change.rankDelta > 0 ? "↑" : "↓"}${Math.abs(change.rankDelta)}`
               : change?.priceDirection === "decrease"
-                ? "降价"
+                ? messages.pricing.priceDecrease
                 : change?.priceDirection === "increase"
-                  ? "涨价"
+                  ? messages.pricing.priceIncrease
                   : null;
           const rankTone = change?.isNew
             ? "info"
@@ -204,14 +231,20 @@ export function ApiPriceRanking({
           const changeDetails = change
             ? [
                 change.isNew
-                  ? `新上榜 · 当前第 ${change.currentRank} 名`
-                  : `原排名 ${change.previousRank ?? "—"} · 现排名 ${change.currentRank}`,
+                  ? locale === "en"
+                    ? `New · rank ${change.currentRank}`
+                    : `新上榜 · 当前第 ${change.currentRank} 名`
+                  : locale === "en"
+                    ? `Previous rank ${change.previousRank ?? "—"} · current rank ${change.currentRank}`
+                    : `原排名 ${change.previousRank ?? "—"} · 现排名 ${change.currentRank}`,
                 change.rankDelta
-                  ? `${change.rankDelta > 0 ? "上升" : "下降"} ${Math.abs(change.rankDelta)} 名`
-                  : "排名未变",
-                `原价格 ${change.previousDisplayPrice ?? "—"} · 现价格 ${change.currentDisplayPrice ?? "—"}`,
-                `人民币参考 ${change.previousPriceCny === null ? "—" : formatApiCny(change.previousPriceCny)} → ${change.currentPriceCny === null ? "—" : formatApiCny(change.currentPriceCny)}`,
-                `确认时间 ${new Date(change.changedAt).toLocaleString("zh-CN", { hour12: false })}`,
+                  ? `${locale === "en" ? (change.rankDelta > 0 ? "Up" : "Down") : change.rankDelta > 0 ? "上升" : "下降"} ${Math.abs(change.rankDelta)} ${locale === "en" ? "places" : "名"}`
+                  : locale === "en"
+                    ? "Rank unchanged"
+                    : "排名未变",
+                `${locale === "en" ? "Previous price" : "原价格"} ${change.previousDisplayPrice ?? "—"} · ${locale === "en" ? "current price" : "现价格"} ${change.currentDisplayPrice ?? "—"}`,
+                `${messages.landing.cnyOrUnit} ${change.previousPriceCny === null ? "—" : formatApiCny(change.previousPriceCny, locale)} → ${change.currentPriceCny === null ? "—" : formatApiCny(change.currentPriceCny, locale)}`,
+                `${locale === "en" ? "Confirmed" : "确认时间"} ${new Date(change.changedAt).toLocaleString(locale === "en" ? "en-US" : "zh-CN", { hour12: false })}`,
               ]
             : [];
           return (
@@ -222,7 +255,7 @@ export function ApiPriceRanking({
                 data-provider-id={entry.providerId}
                 data-model-slug={entry.modelSlug}
                 data-offer-id={offer?.id}
-                aria-label={`查看 ${entry.providerName} ${entry.modelName} 价格`}
+                aria-label={`${locale === "en" ? "View" : "查看"} ${entry.providerName} ${entry.modelName} ${locale === "en" ? "price" : "价格"}`}
                 ref={(node) => {
                   if (node) {
                     entryRefs.current.set(entry.id, node);
@@ -252,19 +285,22 @@ export function ApiPriceRanking({
                   </span>
                 </span>
                 <span
-                  data-label="缓存输入"
+                  data-label={messages.landing.cache}
                   data-highlight={metric === "cached_input"}
                 >
-                  <CompactPrice offer={entry.cachedInput} />
+                  <CompactPrice offer={entry.cachedInput} locale={locale} />
                 </span>
                 <span
-                  data-label="非缓存输入"
+                  data-label={locale === "en" ? "Input" : "非缓存输入"}
                   data-highlight={metric === "input"}
                 >
-                  <CompactPrice offer={entry.input} />
+                  <CompactPrice offer={entry.input} locale={locale} />
                 </span>
-                <span data-label="输出" data-highlight={metric === "output"}>
-                  <CompactPrice offer={entry.output} />
+                <span
+                  data-label={messages.landing.output}
+                  data-highlight={metric === "output"}
+                >
+                  <CompactPrice offer={entry.output} locale={locale} />
                 </span>
               </button>
               {change && rankLabel ? (
@@ -272,7 +308,7 @@ export function ApiPriceRanking({
                   className="api-ranking-change"
                   label={rankLabel}
                   tone={rankTone}
-                  ariaLabel={`${entry.modelName} 排行榜变化：${rankLabel}`}
+                  ariaLabel={`${entry.modelName} ${locale === "en" ? "ranking change" : "排行榜变化"}: ${rankLabel}`}
                   details={changeDetails}
                 />
               ) : null}
@@ -283,7 +319,9 @@ export function ApiPriceRanking({
 
       {entries.length === 0 ? (
         <p className="api-ranking-empty">
-          暂无统一为每百万 tokens 的完整价格组。
+          {locale === "en"
+            ? "No complete per-million-token price groups are available."
+            : "暂无统一为每百万 tokens 的完整价格组。"}
         </p>
       ) : null}
     </aside>

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { StructuredData } from "@/components/structured-data";
+import { DEFAULT_LOCALE, getMessages, type Locale } from "@/lib/i18n";
 import {
   absoluteUrl,
   SITE_NAME,
@@ -55,18 +57,26 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestLocale = (await headers()).get("x-ai-price-locale");
+  const locale: Locale = requestLocale === "en" ? "en" : DEFAULT_LOCALE;
+  const messages = getMessages(locale);
   const structuredData = [
     {
       "@context": "https://schema.org",
       "@type": "Organization",
       "@id": `${SITE_ORIGIN}/#organization`,
       name: SITE_NAME,
-      alternateName: [SITE_POSITIONING, "lowpriceradar.com"],
+      alternateName: [
+        locale === "en" ? messages.brand.tagline : SITE_POSITIONING,
+        "lowpriceradar.com",
+      ],
       url: SITE_ORIGIN,
       logo: absoluteUrl("/icon.svg"),
     },
@@ -75,9 +85,12 @@ export default function RootLayout({
       "@type": "WebSite",
       "@id": `${SITE_ORIGIN}/#website`,
       name: SITE_NAME,
-      alternateName: [SITE_POSITIONING, "lowpriceradar.com"],
+      alternateName: [
+        locale === "en" ? messages.brand.tagline : SITE_POSITIONING,
+        "lowpriceradar.com",
+      ],
       url: SITE_ORIGIN,
-      inLanguage: "zh-CN",
+      inLanguage: locale === "en" ? "en" : "zh-CN",
       publisher: {
         "@id": `${SITE_ORIGIN}/#organization`,
       },
@@ -85,7 +98,11 @@ export default function RootLayout({
   ];
 
   return (
-    <html lang="zh-CN" data-theme="atelier" suppressHydrationWarning>
+    <html
+      lang={locale === "en" ? "en" : "zh-CN"}
+      data-theme="atelier"
+      suppressHydrationWarning
+    >
       <body>
         <StructuredData data={structuredData} />
         {children}

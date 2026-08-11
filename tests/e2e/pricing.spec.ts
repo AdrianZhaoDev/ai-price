@@ -351,6 +351,7 @@ test("offers one-click ranking fallback and reuses the entered email", async ({
     subscriptionType: "api_model_new",
     email: "reader@example.com",
     rankingFallback: true,
+    locale: "zh-CN",
   });
   const events = await readTrafficEvents(page);
   expect(events.map((entry) => entry.event)).toEqual([
@@ -427,6 +428,7 @@ test("submits the new-model subscription", async ({ page }) => {
     subscriptionType: "api_model_new",
     email: "ranking@example.com",
     rankingFallback: false,
+    locale: "zh-CN",
   });
 });
 
@@ -838,14 +840,14 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   await expect(page.locator(".provider-section")).toHaveCount(0);
   await expect(page.locator(".model-catalog-table thead th")).toHaveCount(8);
   await expect(page.locator(".model-catalog-table thead th")).toHaveText([
-    "Model",
-    "Lab",
-    "Context",
-    "Output",
-    "Input",
-    /Price/,
-    /Release/,
-    "Updated",
+    "模型",
+    "实验室",
+    "上下文",
+    "输出",
+    "输入",
+    /价格/,
+    /发布/,
+    "更新",
   ]);
   const inputPrices = (
     await page.locator(".model-price-cell > span:first-child").allTextContents()
@@ -853,7 +855,7 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
   expect(inputPrices).toEqual([...inputPrices].sort((a, b) => a - b));
   await expect(
     page.locator('.model-catalog-table th[aria-sort="ascending"]'),
-  ).toContainText("Price");
+  ).toContainText("价格");
 
   await hideZero.uncheck();
   await expect(page).toHaveURL(/hideZero=0/);
@@ -869,7 +871,7 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
       searchRscRequests += 1;
     }
   });
-  await page.getByRole("searchbox", { name: "Model" }).fill("Gemini");
+  await page.getByRole("searchbox", { name: "模型" }).fill("Gemini");
   await expect(page).toHaveURL(/q=Gemini/);
   await expect(page.locator(".model-catalog-table tbody tr")).toHaveCount(1);
   expect(searchRscRequests).toBe(0);
@@ -887,7 +889,7 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
     timeout: 15_000,
   });
   await expect(
-    detailPage.getByRole("heading", { name: "Providers" }),
+    detailPage.getByRole("heading", { name: "提供商" }),
   ).toBeVisible();
   await expect(
     detailPage.locator(".model-provider-table thead th"),
@@ -897,11 +899,11 @@ test("model catalog has eight sortable columns, filters, and detail navigation",
     "true",
   );
   const inputPriceHeader = detailPage.getByRole("columnheader", {
-    name: /Input Price/,
+    name: /输入价格/,
   });
   await expect(inputPriceHeader).toHaveAttribute("aria-sort", "ascending");
   const outputPriceHeader = detailPage.getByRole("columnheader", {
-    name: /Output Price/,
+    name: /输出价格/,
   });
   await outputPriceHeader.getByRole("button").click();
   await expect(outputPriceHeader).toHaveAttribute("aria-sort", "ascending");

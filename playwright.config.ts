@@ -4,7 +4,7 @@ const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${port}`;
 const webServerCommand =
   process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ??
-  `npm run build && npm run start -- -p ${port}`;
+  `npx next build --webpack && npx next start --port ${port}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -25,11 +25,11 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], locale: "zh-CN" },
     },
     {
       name: "mobile",
-      use: { ...devices["Pixel 7"] },
+      use: { ...devices["Pixel 7"], locale: "zh-CN" },
     },
   ],
 });

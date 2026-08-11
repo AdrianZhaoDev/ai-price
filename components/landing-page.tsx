@@ -1,26 +1,32 @@
 import { ProviderMark } from "@/components/icons/provider-mark";
 import { StructuredData } from "@/components/structured-data";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SiteFooter, SiteHeader } from "@/components/site-header";
 import {
   apiModelsForLandingPage,
   offersForLandingPage,
   type ComparablePriceGroup,
   type LandingPageData,
 } from "@/lib/landing-page-data";
-import { absoluteUrl, modeSeo, SITE_NAME, SITE_POSITIONING } from "@/lib/seo";
+import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 import {
   formatCny,
   formatOfferPrice,
   formatPeriod,
 } from "@/lib/pricing/format";
 import type { PriceOffer, ProviderCatalogItem } from "@/lib/pricing/types";
-import { landingPageBySlug, relatedLandingPages } from "@/lib/landing-pages";
+import {
+  landingCopy,
+  landingPageBySlug,
+  landingPagePath,
+  relatedLandingPages,
+} from "@/lib/landing-pages";
+import { getMessages, type Locale } from "@/lib/i18n";
 import { ArrowUpRight, Clock3, Database, Globe2 } from "lucide-react";
 import Link from "next/link";
 
-function formatCheckedAt(value?: string): string {
-  if (!value) return "等待首次采集";
-  return new Intl.DateTimeFormat("zh-CN", {
+function formatCheckedAt(value: string | undefined, locale: Locale): string {
+  if (!value) return getMessages(locale).landing.initialCollection;
+  return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", {
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -31,83 +37,89 @@ function formatCheckedAt(value?: string): string {
   }).format(new Date(value));
 }
 
-function freshnessLabel(data: LandingPageData): string {
-  const labels = {
-    fresh: "数据新鲜",
-    delayed: "更新稍有延迟",
-    stale: "数据可能过期",
-    unknown: "等待首次核验",
-  } as const;
-  return labels[data.quality.freshness];
+function freshnessLabel(data: LandingPageData, locale: Locale): string {
+  return getMessages(locale).landing.status[data.quality.freshness];
 }
 
-function priceTypeLabel(priceType?: string): string {
-  if (priceType === "cached_input") return "缓存输入";
-  if (priceType === "input") return "输入";
-  if (priceType === "output") return "输出";
-  if (priceType === "cache_write") return "缓存写入";
-  return "其他计费";
+function priceTypeLabel(priceType: string | undefined, locale: Locale): string {
+  return getMessages(locale).landing.priceType[priceType ?? "other"];
 }
 
 function groupConclusion(
   group: ComparablePriceGroup,
   current: boolean,
+  locale: Locale,
 ): string {
+  const messages = getMessages(locale).landing;
   if (group.regionCount < 3 || !group.minimum || !group.maximum) {
-    return `${group.label} 当前收录 ${group.regionCount} 个地区，暂不足以生成稳定的地区价差结论。`;
+    return messages.insufficientRegionConclusion(
+      group.label,
+      group.regionCount,
+    );
   }
-  const prefix = current ? "当前" : "最近一次有效核验中，";
-  return `${prefix}${group.label} 覆盖 ${group.regionCount} 个地区，最低为 ${group.minimum.regionName ?? group.minimum.regionCode ?? "已收录地区"} ${formatCny(group.minimum.convertedCny)}，最高为 ${group.maximum.regionName ?? group.maximum.regionCode ?? "已收录地区"} ${formatCny(group.maximum.convertedCny)}，价差约 ${group.spreadPercent?.toFixed(1) ?? "—"}%。`;
+  return messages.regionConclusion({
+    prefix: current ? messages.current : messages.recentVerified,
+    label: group.label,
+    regionCount: group.regionCount,
+    minimumRegion:
+      group.minimum.regionName ??
+      group.minimum.regionCode ??
+      messages.unknownRegion,
+    minimumPrice: formatCny(group.minimum.convertedCny, locale),
+    maximumRegion:
+      group.maximum.regionName ??
+      group.maximum.regionCode ??
+      messages.unknownRegion,
+    maximumPrice: formatCny(group.maximum.convertedCny, locale),
+    spread: group.spreadPercent?.toFixed(1) ?? "—",
+  });
 }
 
-function pageConclusion(data: LandingPageData): string {
+function pageConclusion(data: LandingPageData, locale: Locale): string {
+  const messages = getMessages(locale).landing;
   const { page, quality, summary } = data;
   const current = quality.freshness !== "stale";
   if (page.type === "global") {
     const comparable = summary.subscriptionGroups.find(
       (group) => group.regionCount >= 3,
     );
-    if (comparable) return groupConclusion(comparable, current);
-    return `${page.name} 当前收录 ${summary.offerCount} 条官方报价，但同一套餐变体尚不足 3 个地区，因此不跨套餐生成最低价。`;
+    if (comparable) return groupConclusion(comparable, current, locale);
+    return messages.summaryNoStablePlan(page.name, summary.offerCount);
   }
   const parts: string[] = [];
   if (summary.subscriptionGroups.length > 0) {
-    parts.push(
-      `已收录 ${summary.subscriptionGroups.length} 个有效订阅套餐或计费周期`,
-    );
+    parts.push(messages.summarySubscription(summary.subscriptionGroups.length));
   }
   if (summary.modelCount > 0) {
-    parts.push(`API 部分覆盖 ${summary.modelCount} 个具有稳定标识的模型`);
+    parts.push(messages.summaryApiModels(summary.modelCount));
   }
   if (summary.tokenHighlights.length > 0) {
     const metrics = summary.tokenHighlights
       .map(
         (item) =>
-          `${priceTypeLabel(item.priceType)}最低参考为 ${item.modelName} ${item.offer.displayPrice}${item.offer.unit ?? ""}`,
+          `${priceTypeLabel(item.priceType, locale)}${locale === "en" ? " minimum reference is " : "最低参考为 "}${item.modelName} ${item.offer.displayPrice}${item.offer.unit ?? ""}`,
       )
       .join("；");
     parts.push(metrics);
   }
   if (parts.length === 0) {
-    return `${page.name} 暂无达到公开展示门槛的有效价格，页面会在官方数据恢复后自动更新。`;
+    return messages.summaryNoOffers(page.name);
   }
-  const prefix = current
-    ? ""
-    : "数据已超过 24 小时未核验，以下为最近一次有效记录：";
-  return `${prefix}${parts.join("；")}。不同计价单位分别展示，不混入 Token 单价排行。`;
+  const prefix = current ? "" : messages.summaryStale;
+  return `${prefix}${parts.join(locale === "en" ? "; " : "；")}${locale === "en" ? ". " : "。"}${messages.summaryUnitNote}`;
 }
 
 function sourceFor(provider: ProviderCatalogItem): string {
   return provider.sourceUrl;
 }
 
-function offerValue(offer: PriceOffer): string {
+function offerValue(offer: PriceOffer, locale: Locale): string {
   if (offer.amountMinor === null) return offer.displayPrice;
-  return formatOfferPrice(offer);
+  return formatOfferPrice(offer, locale);
 }
 
-function sourceLabel(provider: ProviderCatalogItem): string {
-  return provider.sourceLabel || "官方来源";
+function sourceLabel(provider: ProviderCatalogItem, locale: Locale): string {
+  return provider.sourceLabel || getMessages(locale).common.officialSource;
 }
 
 function providerLastChecked(
@@ -120,12 +132,16 @@ function providerLastChecked(
     .at(-1);
 }
 
-function ctaLinks(data: LandingPageData): Array<{
+function ctaLinks(
+  data: LandingPageData,
+  locale: Locale,
+): Array<{
   href: string;
   label: string;
   description: string;
   primary?: boolean;
 }> {
+  const messages = getMessages(locale).landing;
   const { page } = data;
   if (page.type === "global") {
     const providerId = page.providerIds.global?.[0];
@@ -135,9 +151,9 @@ function ctaLinks(data: LandingPageData): Array<{
     if (plan) query.set("plan", plan);
     return [
       {
-        href: `/?${query.toString()}`,
-        label: "打开全球地区价格表",
-        description: "查看完整地区、原币价格与人民币参考价",
+        href: `${locale === "en" ? "/en" : "/"}?${query.toString()}`,
+        label: messages.openGlobalPriceTable,
+        description: messages.openGlobalPriceTableDescription,
         primary: true,
       },
     ];
@@ -153,17 +169,17 @@ function ctaLinks(data: LandingPageData): Array<{
   const apiProvider = page.providerIds.api?.[0];
   if (subscriptionProvider) {
     links.push({
-      href: `/china-ai-subscriptions?provider=${encodeURIComponent(subscriptionProvider)}`,
-      label: `比较 ${page.name} 的订阅价格`,
-      description: "查看同类套餐、计费周期与官方价格",
+      href: `${locale === "en" ? "/en/china-ai-subscriptions" : "/china-ai-subscriptions"}?provider=${encodeURIComponent(subscriptionProvider)}`,
+      label: messages.compareSubscription(page.name),
+      description: messages.compareSubscriptionDescription,
       primary: !apiProvider,
     });
   }
   if (apiProvider) {
     links.push({
-      href: `/api-pricing?provider=${encodeURIComponent(apiProvider)}`,
-      label: `查看 ${page.name} API 价格排行`,
-      description: "比较缓存输入、输入与输出单价",
+      href: `${locale === "en" ? "/en/api-pricing" : "/api-pricing"}?provider=${encodeURIComponent(apiProvider)}`,
+      label: messages.compareApi(page.name),
+      description: messages.compareApiDescription,
       primary: true,
     });
   }
@@ -174,15 +190,20 @@ function PriceRows({
   provider,
   offers,
   api = false,
+  locale,
 }: {
   provider: ProviderCatalogItem;
   offers: PriceOffer[];
   api?: boolean;
+  locale: Locale;
 }) {
+  const messages = getMessages(locale).landing;
   if (offers.length === 0) {
     return (
       <p className="landing-empty">
-        {api ? "暂无已核验的统一 API 价格。" : "暂无已核验的公开订阅价格。"}
+        {api
+          ? messages.noVerifiedApiPrices
+          : messages.noVerifiedSubscriptionPrices}
       </p>
     );
   }
@@ -191,13 +212,15 @@ function PriceRows({
     <div
       className="landing-price-table"
       role="table"
-      aria-label={`${provider.name}官方价格`}
+      aria-label={messages.officialPriceTable(provider.name)}
     >
       <div className="landing-price-header" role="row">
-        <span role="columnheader">方案 / 模型</span>
-        <span role="columnheader">官方价格</span>
-        <span role="columnheader">人民币参考 / 单位</span>
-        <span role="columnheader">来源</span>
+        <span role="columnheader">{messages.modelOrPlan}</span>
+        <span role="columnheader">{messages.providerOfficialPrice}</span>
+        <span role="columnheader">{messages.cnyOrUnit}</span>
+        <span role="columnheader">
+          {getMessages(locale).common.officialSource}
+        </span>
       </div>
       {offers.map((offer) => (
         <div className="landing-price-row" role="row" key={offer.id}>
@@ -210,13 +233,15 @@ function PriceRows({
             </small>
           </span>
           <span role="cell" className="landing-official-price">
-            <strong>{offerValue(offer)}</strong>
+            <strong>{offerValue(offer, locale)}</strong>
             {offer.currency ? <small>{offer.currency}</small> : null}
           </span>
           <span role="cell">
-            {api ? (offer.unit ?? "按官方单位") : formatCny(offer.convertedCny)}
+            {api
+              ? (offer.unit ?? getMessages(locale).pricing.perOfficialUnit)
+              : formatCny(offer.convertedCny, locale)}
             {!api && offer.billingPeriod !== "usage" ? (
-              <small>{formatPeriod(offer.billingPeriod)}</small>
+              <small>{formatPeriod(offer.billingPeriod, locale)}</small>
             ) : null}
           </span>
           <a
@@ -226,7 +251,7 @@ function PriceRows({
             target="_blank"
             rel="noreferrer"
           >
-            <span>{sourceLabel(provider)}</span>
+            <span>{sourceLabel(provider, locale)}</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
         </div>
@@ -239,11 +264,14 @@ function ProviderSection({
   provider,
   offers,
   api = false,
+  locale,
 }: {
   provider: ProviderCatalogItem;
   offers: PriceOffer[];
   api?: boolean;
+  locale: Locale;
 }) {
+  const messages = getMessages(locale);
   return (
     <section
       className="landing-data-section"
@@ -265,7 +293,9 @@ function ProviderSection({
           </span>
           <div>
             <p className="landing-kicker">
-              {api ? "官方 API 价格" : "官方订阅价格"}
+              {api
+                ? messages.landing.officialApiPrice
+                : messages.landing.officialSubscriptionPrice}
             </p>
             <h2 id={`${provider.id}-title`}>{provider.name}</h2>
           </div>
@@ -276,11 +306,17 @@ function ProviderSection({
           target="_blank"
           rel="noreferrer"
         >
-          官方来源 <ArrowUpRight size={14} aria-hidden="true" />
+          {messages.common.officialSource}{" "}
+          <ArrowUpRight size={14} aria-hidden="true" />
         </a>
       </div>
       <p className="landing-section-description">{provider.description}</p>
-      <PriceRows provider={provider} offers={offers} api={api} />
+      <PriceRows
+        provider={provider}
+        offers={offers}
+        api={api}
+        locale={locale}
+      />
     </section>
   );
 }
@@ -288,16 +324,19 @@ function ProviderSection({
 function CtaBlock({
   links,
   compact = false,
+  locale,
 }: {
   links: ReturnType<typeof ctaLinks>;
   compact?: boolean;
+  locale: Locale;
 }) {
+  const messages = getMessages(locale).landing;
   if (links.length === 0) return null;
   return (
     <section className={`landing-cta ${compact ? "landing-cta-compact" : ""}`}>
       <div>
-        <p className="landing-kicker">下一步</p>
-        <h2>想看它和其他产品的价格差距？</h2>
+        <p className="landing-kicker">{messages.nextStep}</p>
+        <h2>{messages.continueComparing}</h2>
       </div>
       <div className="landing-cta-links">
         {links.map((link) => (
@@ -318,7 +357,14 @@ function CtaBlock({
   );
 }
 
-function LandingSummary({ data }: { data: LandingPageData }) {
+function LandingSummary({
+  data,
+  locale,
+}: {
+  data: LandingPageData;
+  locale: Locale;
+}) {
+  const messages = getMessages(locale).landing;
   const comparableGroups = data.summary.subscriptionGroups.filter(
     (group) => group.regionCount > 0,
   );
@@ -328,17 +374,21 @@ function LandingSummary({ data }: { data: LandingPageData }) {
       aria-labelledby="landing-summary-title"
     >
       <div className="landing-summary-copy">
-        <p className="landing-kicker">价格结论</p>
-        <h2 id="landing-summary-title">先看这组数据说明了什么</h2>
-        <p>{pageConclusion(data)}</p>
+        <p className="landing-kicker">{messages.priceConclusion}</p>
+        <h2 id="landing-summary-title">{messages.conclusionTitle}</h2>
+        <p>{pageConclusion(data, locale)}</p>
       </div>
       <dl className="landing-summary-stats">
         <div>
-          <dt>有效报价</dt>
+          <dt>{messages.validOffers}</dt>
           <dd>{data.summary.offerCount}</dd>
         </div>
         <div>
-          <dt>{data.page.type === "global" ? "覆盖地区" : "稳定模型"}</dt>
+          <dt>
+            {data.page.type === "global"
+              ? messages.coveredRegions
+              : messages.stableModels}
+          </dt>
           <dd>
             {data.page.type === "global"
               ? data.summary.regionCount
@@ -346,16 +396,16 @@ function LandingSummary({ data }: { data: LandingPageData }) {
           </dd>
         </div>
         <div>
-          <dt>数据状态</dt>
+          <dt>{messages.dataStatus}</dt>
           <dd data-freshness={data.quality.freshness}>
-            {freshnessLabel(data)}
+            {freshnessLabel(data, locale)}
           </dd>
         </div>
       </dl>
       {comparableGroups.length > 0 ? (
         <div className="landing-group-notes">
           {comparableGroups.map((group) => (
-            <p key={group.key}>{groupConclusion(group, false)}</p>
+            <p key={group.key}>{groupConclusion(group, false, locale)}</p>
           ))}
         </div>
       ) : null}
@@ -363,19 +413,30 @@ function LandingSummary({ data }: { data: LandingPageData }) {
   );
 }
 
-function RelatedPricePages({ data }: { data: LandingPageData }) {
+function RelatedPricePages({
+  data,
+  locale,
+}: {
+  data: LandingPageData;
+  locale: Locale;
+}) {
+  const messages = getMessages(locale).landing;
   const related = relatedLandingPages(data.page);
   if (related.length === 0) return null;
   return (
-    <nav className="landing-related" aria-label="相关价格页面">
+    <nav className="landing-related" aria-label={messages.relatedPages}>
       <div>
-        <p className="landing-kicker">继续比较</p>
-        <h2>相关价格页面</h2>
+        <p className="landing-kicker">{messages.continueComparing}</p>
+        <h2>{messages.relatedPages}</h2>
       </div>
       <div className="landing-related-links">
         {related.map((page) => (
-          <Link key={page.slug} href={`/${page.slug}`} prefetch={false}>
-            <span>{page.heading}</span>
+          <Link
+            key={page.slug}
+            href={landingPagePath(page, locale)}
+            prefetch={false}
+          >
+            <span>{landingCopy(page, locale).heading}</span>
             <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
         ))}
@@ -384,13 +445,21 @@ function RelatedPricePages({ data }: { data: LandingPageData }) {
   );
 }
 
-export async function LandingPage({ data }: { data: LandingPageData }) {
+export async function LandingPage({
+  data,
+  locale = "zh-CN",
+}: {
+  data: LandingPageData;
+  locale?: Locale;
+}) {
   const { page } = data;
+  const messages = getMessages(locale);
+  const copy = landingCopy(page, locale);
   const providers =
     page.type === "global"
       ? data.globalProviders
       : [...data.subscriptionProviders, ...data.apiProviders];
-  const links = ctaLinks(data);
+  const links = ctaLinks(data, locale);
   const modelRows = apiModelsForLandingPage(data.apiProviders);
   const checkedAt =
     data.quality.lastCheckedAt ?? providerLastChecked(providers);
@@ -405,7 +474,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
       "@type": "ListItem",
       position: 1,
       name: SITE_NAME,
-      item: absoluteUrl("/"),
+      item: absoluteUrl(locale === "en" ? "/en" : "/"),
     },
     ...(parent
       ? [
@@ -413,7 +482,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
             "@type": "ListItem",
             position: 2,
             name: parent.name,
-            item: absoluteUrl(`/${parent.slug}`),
+            item: absoluteUrl(landingPagePath(parent, locale)),
           },
         ]
       : []),
@@ -421,17 +490,17 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
       "@type": "ListItem",
       position: parent ? 3 : 2,
       name: page.name,
-      item: absoluteUrl(`/${page.slug}`),
+      item: absoluteUrl(landingPagePath(page, locale)),
     },
   ];
   const structuredData = [
     {
       "@context": "https://schema.org",
       "@type": "Dataset",
-      name: page.title,
-      description: page.description,
-      url: absoluteUrl(`/${page.slug}`),
-      inLanguage: "zh-CN",
+      name: copy.title,
+      description: copy.description,
+      url: absoluteUrl(landingPagePath(page, locale)),
+      inLanguage: locale === "en" ? "en" : "zh-CN",
       dateModified: data.quality.pageModifiedAt,
       keywords: page.aliases,
       creator: {
@@ -452,48 +521,31 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
       <StructuredData data={structuredData} />
       <div className="landing-shell">
         <a className="skip-link" href="#main-content">
-          跳至主要内容
+          {messages.common.skipToContent}
         </a>
-        <header className="site-header landing-header">
-          <Link href="/" className="brand" aria-label={`${SITE_NAME}首页`}>
-            <span className="brand-mark" aria-hidden="true">
-              <span />
-              <span />
-            </span>
-            <span className="brand-copy">
-              <strong>{SITE_NAME}</strong>
-              <small>{SITE_POSITIONING}</small>
-            </span>
-          </Link>
-          <nav className="desktop-nav" aria-label="价格模式">
-            <Link href={modeSeo.global.path} className="nav-item pressable">
-              全球区价
-            </Link>
-            <Link
-              href={modeSeo["china-subscription"].path}
-              className="nav-item pressable"
-            >
-              国内订阅
-            </Link>
-            <Link href={modeSeo.api.path} className="nav-item pressable">
-              API 价格排行榜
-            </Link>
-          </nav>
-          <div className="header-actions">
-            <div className="sync-state" title="价格与汇率通常每 4 小时同轮核验">
-              <span className="sync-dot" />每 4 小时
-            </div>
-            <ThemeToggle />
-          </div>
-        </header>
+        <SiteHeader
+          locale={locale}
+          showSync
+          syncLabel={messages.common.syncEveryFourHours}
+          syncTitle={
+            locale === "en"
+              ? "Prices and FX are usually checked in the same four-hour cycle"
+              : "价格与汇率通常每 4 小时同轮核验"
+          }
+        />
 
         <main id="main-content" className="landing-main">
-          <nav className="landing-breadcrumbs" aria-label="面包屑">
-            <Link href="/">{SITE_NAME}</Link>
+          <nav
+            className="landing-breadcrumbs"
+            aria-label={messages.landing.breadcrumb}
+          >
+            <Link href={locale === "en" ? "/en" : "/"}>{SITE_NAME}</Link>
             <span aria-hidden="true">/</span>
             {parent ? (
               <>
-                <Link href={`/${parent.slug}`}>{parent.name}</Link>
+                <Link href={landingPagePath(parent, locale)}>
+                  {landingCopy(parent, locale).heading}
+                </Link>
                 <span aria-hidden="true">/</span>
               </>
             ) : null}
@@ -503,14 +555,15 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
             <div className="landing-hero-copy">
               <p className="eyebrow">
                 <span className="eyebrow-line" />
-                官方价格索引
+                {messages.landing.indexLabel}
               </p>
-              <h1 id="landing-title">{page.heading}</h1>
-              <p className="landing-hero-intro">{page.intro}</p>
+              <h1 id="landing-title">{copy.heading}</h1>
+              <p className="landing-hero-intro">{copy.intro}</p>
               <div className="landing-meta-line">
                 <span>
                   <Clock3 size={15} aria-hidden="true" />
-                  最近核验 {formatCheckedAt(checkedAt)}
+                  {messages.landing.checkedAt}{" "}
+                  {formatCheckedAt(checkedAt, locale)}
                 </span>
                 <span>
                   {page.type === "global" ? (
@@ -518,22 +571,23 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                   ) : (
                     <Database size={15} aria-hidden="true" />
                   )}
-                  {providers.length} 个官方来源
+                  {messages.pricing.officialSourceCount(providers.length)}
                 </span>
                 <span data-freshness={data.quality.freshness}>
-                  {freshnessLabel(data)}
+                  {freshnessLabel(data, locale)}
                 </span>
               </div>
             </div>
             <div className="landing-hero-action">
               <p className="landing-aliases">
-                相关名称：{page.aliases.join("、")}
+                {messages.landing.relatedNames}
+                {page.aliases.join(locale === "en" ? ", " : "、")}
               </p>
-              <CtaBlock links={links} />
+              <CtaBlock links={links} locale={locale} />
             </div>
           </section>
 
-          <LandingSummary data={data} />
+          <LandingSummary data={data} locale={locale} />
 
           <div className="landing-data-stack">
             {page.type === "global"
@@ -541,6 +595,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                   <ProviderSection
                     key={provider.id}
                     provider={provider}
+                    locale={locale}
                     offers={visibleGlobalOffers.filter((offer) =>
                       provider.offers.some(
                         (candidate) => candidate.id === offer.id,
@@ -553,6 +608,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
               <ProviderSection
                 key={provider.id}
                 provider={provider}
+                locale={locale}
                 offers={offersForLandingPage(page, provider)}
               />
             ))}
@@ -561,6 +617,7 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                 key={provider.id}
                 provider={provider}
                 api
+                locale={locale}
                 offers={provider.offers
                   .filter(
                     (offer) =>
@@ -580,23 +637,26 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
             >
               <div className="landing-section-heading">
                 <div>
-                  <p className="landing-kicker">模型索引</p>
-                  <h2 id="model-index-title">按模型查看 API 价格</h2>
+                  <p className="landing-kicker">
+                    {messages.landing.modelIndex}
+                  </p>
+                  <h2 id="model-index-title">
+                    {messages.landing.modelPriceIndex}
+                  </h2>
                 </div>
                 <span className="landing-count">
-                  {modelRows.length} 个稳定模型
+                  {messages.landing.stableModelsCount(modelRows.length)}
                 </span>
               </div>
               <p className="landing-section-description">
-                模型名称和官方价格来自可追溯的 API
-                价目表；点击模型可在排行榜中查看完整计费项。
+                {messages.landing.modelIndexDescription}
               </p>
               {modelRows.length > 0 ? (
                 <div className="landing-model-list">
                   {modelRows.map((model) => (
                     <Link
                       key={`${model.providerId}-${model.slug}`}
-                      href={`/api-pricing?provider=${encodeURIComponent(model.providerId)}&model=${encodeURIComponent(model.slug)}`}
+                      href={`${locale === "en" ? "/en/api-pricing" : "/api-pricing"}?provider=${encodeURIComponent(model.providerId)}&model=${encodeURIComponent(model.slug)}`}
                       className="landing-model-link"
                       prefetch={false}
                     >
@@ -608,10 +668,10 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                         {model.offers.slice(0, 3).map((offer) => (
                           <small key={offer.id}>
                             {offer.priceType === "cached_input"
-                              ? "缓存"
+                              ? messages.landing.cache
                               : offer.priceType === "output"
-                                ? "输出"
-                                : "输入"}{" "}
+                                ? messages.landing.output
+                                : messages.landing.input}{" "}
                             {offer.displayPrice}
                             {offer.unit ? ` ${offer.unit}` : ""}
                           </small>
@@ -623,26 +683,20 @@ export async function LandingPage({ data }: { data: LandingPageData }) {
                 </div>
               ) : (
                 <p className="landing-empty">
-                  当前数据尚未提供稳定的模型标识，完整价格请查看 API 排行榜。
+                  {messages.landing.apiModelFallback}
                 </p>
               )}
             </section>
           ) : null}
 
-          <RelatedPricePages data={data} />
-          <CtaBlock links={links} compact />
+          <RelatedPricePages data={data} locale={locale} />
+          <CtaBlock links={links} compact locale={locale} />
         </main>
 
-        <footer className="site-footer landing-footer">
-          <div>
-            <strong>{SITE_NAME}</strong>
-            <p>{SITE_POSITIONING} · 看清官方价格，再决定如何订阅或调用。</p>
-          </div>
-          <div className="footer-links">
-            <Link href="/methodology">采集方法</Link>
-            <Link href="/privacy">隐私</Link>
-          </div>
-        </footer>
+        <SiteFooter
+          locale={locale}
+          description={messages.landing.footerDescription}
+        />
       </div>
     </>
   );

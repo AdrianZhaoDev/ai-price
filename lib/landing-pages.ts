@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 import type { PriceMode } from "@/lib/pricing/types";
+import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
 
 export type LandingPageType = "global" | "domestic";
 
@@ -355,37 +356,178 @@ export const landingPageBySlug = new Map(
   landingPages.map((page) => [page.slug, page]),
 );
 
-export function landingPagePath(page: LandingPageDefinition): string {
-  return `/${page.slug}`;
+export type LandingPageCopy = Pick<
+  LandingPageDefinition,
+  "title" | "description" | "heading" | "intro"
+>;
+
+const englishLandingIntros: Record<string, string> = {
+  "chatgpt-price":
+    "See official App Store subscription prices for ChatGPT Plus, Pro, and Go worldwide.",
+  "claude-price":
+    "See official App Store subscription prices for Claude Pro and Max worldwide.",
+  "gemini-price":
+    "See official App Store subscription prices for Google AI Pro, Ultra, and Plus worldwide.",
+  "grok-price":
+    "See official App Store subscription prices for the SuperGrok plan family worldwide.",
+  "chatgpt-plus-price":
+    "Compare the official monthly ChatGPT Plus price across global App Store regions.",
+  "chatgpt-go-price":
+    "Compare official ChatGPT Go subscription prices and regional differences across global App Store regions.",
+  "chatgpt-pro-price":
+    "Compare official regional prices for ChatGPT Pro, Pro 5x, and Pro 20x variants.",
+  "claude-pro-price":
+    "Compare official monthly and annual Claude Pro prices across App Store regions.",
+  "claude-max-price":
+    "Compare official regional subscription prices for Claude Max 5x and Max 20x.",
+  "gemini-pro-price":
+    "Compare official Google AI Pro prices across storage and billing-period variants.",
+  "glm-price":
+    "Compare official Zhipu GLM resource packs, Coding Plan subscriptions, and BigModel API prices.",
+  "kimi-price":
+    "Compare official Kimi membership plans with Moonshot API models and billing units.",
+  "stepfun-price":
+    "Compare official StepFun subscriptions with Step Plan API prices.",
+  "minimax-price":
+    "Compare the official MiniMax Token Plan with text, speech, and video API prices.",
+  "qwen-price":
+    "Compare the official Qwen Token Plan with model API prices from Alibaba Cloud Model Studio.",
+  "baidu-qianfan-price":
+    "Compare Baidu Qianfan token benefits with official ERNIE model API prices and verification status.",
+  "spark-price":
+    "Compare the official Spark Token Plan with model API billing information.",
+  "mimo-price":
+    "Compare the official Xiaomi MiMo Token Plan with MiMo API prices.",
+  "huawei-maas-price":
+    "Compare the official Huawei Cloud MaaS Token Plan with MaaS API prices.",
+  "comate-price":
+    "Review official Baidu Comate subscription plans and billing periods.",
+  "qoder-price":
+    "Review official Alibaba Qoder CN developer subscriptions and included quotas.",
+  "trae-price":
+    "Review official TRAE membership plans, billing periods, and published prices.",
+  "codebuddy-price":
+    "Review official Tencent CodeBuddy and WorkBuddy subscription plans and recurring monthly prices.",
+  "sensenova-price":
+    "Review the published status and official price information for the SenseNova Token Plan.",
+  "deepseek-price":
+    "Review official DeepSeek API prices for input, cached input, and output tokens.",
+  "doubao-price":
+    "Review official billing for Doubao and Volcano Ark models, image, video, and speech services.",
+  "hunyuan-price":
+    "Review official Tencent Hunyuan API prices for input, output, and cached tokens.",
+  "baichuan-price":
+    "Review official Baichuan model API prices for input and output tokens.",
+  "longcat-price":
+    "Review official LongCat model API prices and time-limited discounts from Meituan.",
+  "siliconflow-price":
+    "Review official SiliconFlow API prices for model input, cached input, and output.",
+  "teleai-price":
+    "Review published TeleAI model and QPS product prices from China Telecom.",
+};
+
+/**
+ * Editorial copy is localized at the page boundary. Product names, aliases,
+ * provider names, plans, and imported descriptions remain source data.
+ */
+export function landingCopy(
+  page: LandingPageDefinition,
+  locale: Locale = DEFAULT_LOCALE,
+): LandingPageCopy {
+  if (locale !== "en") {
+    return {
+      title: page.title,
+      description: page.description,
+      heading: page.heading,
+      intro: page.intro,
+    };
+  }
+
+  if (page.type === "global") {
+    const isPlan = Boolean(page.parentSlug);
+    return {
+      title: isPlan
+        ? `${page.name} global price comparison: official regional prices | ${SITE_NAME}`
+        : `${page.name} global subscription prices: official regions and lowest price | ${SITE_NAME}`,
+      description: `Compare official ${page.name} prices across App Store regions, including original amounts, CNY references, billing periods, regional spreads, and traceable sources.`,
+      heading: isPlan
+        ? `${page.name} global price comparison`
+        : `${page.name} global subscription price comparison`,
+      intro: englishLandingIntros[page.slug]!,
+    };
+  }
+
+  const hasSubscription = Boolean(
+    page.providerIds["china-subscription"]?.length,
+  );
+  const hasApi = Boolean(page.providerIds.api?.length);
+  const focus =
+    hasSubscription && hasApi
+      ? `${page.name} subscription and API prices`
+      : hasSubscription
+        ? `${page.name} subscription prices`
+        : `${page.name} API prices`;
+  return {
+    title: `${focus}: official plans, models and billing | ${SITE_NAME}`,
+    description:
+      hasSubscription && hasApi
+        ? `Compare official ${page.name} subscription plans and API prices, including billing periods, units, verification times, and traceable sources.`
+        : hasSubscription
+          ? `Compare official ${page.name} subscription plans, including billing periods, included quotas, verification times, and traceable sources.`
+          : `Compare official ${page.name} API prices, including billing units, verification times, and traceable sources.`,
+    heading: focus,
+    intro: englishLandingIntros[page.slug]!,
+  };
+}
+
+export function landingPagePath(
+  page: LandingPageDefinition,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  return localizedPath(locale, `/${page.slug}`);
 }
 
 export function metadataForLandingPage(
   page: LandingPageDefinition,
   indexable = true,
+  locale: Locale = DEFAULT_LOCALE,
 ): Metadata {
-  const path = landingPagePath(page);
+  const path = landingPagePath(page, locale);
   const imageUrl = absoluteUrl("/og.png");
+  const isEnglish = locale === "en";
+  const copy = landingCopy(page, locale);
+  const title = copy.title;
+  const description = copy.description;
   return {
-    title: { absolute: page.title },
-    description: page.description,
-    keywords: [page.name, ...page.aliases, "价格", "官方价格"],
-    alternates: { canonical: path },
+    title: { absolute: title },
+    description,
+    keywords: isEnglish
+      ? [page.name, ...page.aliases, "AI price", "official price"]
+      : [page.name, ...page.aliases, "价格", "官方价格"],
+    alternates: {
+      canonical: path,
+      languages: {
+        "zh-CN": landingPagePath(page, "zh-CN"),
+        en: landingPagePath(page, "en"),
+        "x-default": landingPagePath(page, "zh-CN"),
+      },
+    },
     robots: indexable
       ? { index: true, follow: true }
       : { index: false, follow: true },
     openGraph: {
       type: "article",
-      locale: "zh_CN",
+      locale: isEnglish ? "en_US" : "zh_CN",
       url: path,
       siteName: SITE_NAME,
-      title: page.title,
-      description: page.description,
-      images: [{ url: imageUrl, width: 1731, height: 909, alt: page.title }],
+      title,
+      description,
+      images: [{ url: imageUrl, width: 1731, height: 909, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
-      title: page.title,
-      description: page.description,
+      title,
+      description,
       images: [imageUrl],
     },
   };

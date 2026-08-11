@@ -1,15 +1,23 @@
 import { PricingExplorer } from "@/components/pricing-explorer";
 import { StructuredData } from "@/components/structured-data";
+import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { modes } from "@/lib/data/catalog";
 import { landingPagePath, landingPagesForMode } from "@/lib/landing-pages";
 import { loadCachedPricingPageData } from "@/lib/pricing/page-cache";
 import { prepareProvidersForClient } from "@/lib/pricing/client-catalog";
 import type { PriceMode } from "@/lib/pricing/types";
-import { absoluteUrl, modeSeo, SITE_NAME, SITE_ORIGIN } from "@/lib/seo";
+import {
+  absoluteUrl,
+  modeSeoByLocale,
+  SITE_NAME,
+  SITE_ORIGIN,
+} from "@/lib/seo";
 import Link from "next/link";
+import { DEFAULT_LOCALE, getMessages, type Locale } from "@/lib/i18n";
 
 type PricingPageProps = {
   mode: PriceMode;
+  locale?: Locale;
   query?: {
     providerId?: string;
     planId?: string;
@@ -17,7 +25,11 @@ type PricingPageProps = {
   };
 };
 
-export async function PricingPage({ mode, query }: PricingPageProps) {
+export async function PricingPage({
+  mode,
+  query,
+  locale = DEFAULT_LOCALE,
+}: PricingPageProps) {
   const {
     lastCheckedAt,
     priceModifiedAt,
@@ -31,31 +43,46 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
     mode,
     query?.providerId,
   );
-  const seo = modeSeo[mode];
+  const seo = modeSeoByLocale[locale][mode];
+  const messages = getMessages(locale);
   const priceIndexLinks = landingPagesForMode(mode).map((page) => ({
-    href: landingPagePath(page),
+    href: landingPagePath(page, locale),
     label: page.name,
     description:
       page.type === "global"
-        ? "全球官方订阅地区价格"
+        ? locale === "en"
+          ? "Global official subscription prices"
+          : "全球官方订阅地区价格"
         : page.providerIds["china-subscription"]?.length &&
             page.providerIds.api?.length
-          ? "订阅与 API 官方价格"
+          ? locale === "en"
+            ? "Official subscription and API prices"
+            : "订阅与 API 官方价格"
           : page.providerIds.api?.length
-            ? "模型 API 官方价格"
-            : "官方订阅套餐价格",
+            ? locale === "en"
+              ? "Official model API prices"
+              : "模型 API 官方价格"
+            : locale === "en"
+              ? "Official subscription plans"
+              : "官方订阅套餐价格",
   }));
   if (mode === "global") {
     priceIndexLinks.push(
       {
-        href: modeSeo["china-subscription"].path,
-        label: "国内 AI 订阅",
-        description: "查看国内官方会员与资源包",
+        href: modeSeoByLocale[locale]["china-subscription"].path,
+        label: messages.pricing.domesticSubscriptionLink,
+        description:
+          locale === "en"
+            ? "View official China plans and resource packs"
+            : "查看国内官方会员与资源包",
       },
       {
-        href: modeSeo.api.path,
-        label: "API 价格排行榜",
-        description: "比较模型输入、输出与缓存单价",
+        href: modeSeoByLocale[locale].api.path,
+        label: messages.pricing.apiRankingLink,
+        description:
+          locale === "en"
+            ? "Compare model input, output, and cache unit prices"
+            : "比较模型输入、输出与缓存单价",
       },
     );
   }
@@ -67,7 +94,7 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
       name: seo.title,
       description: seo.description,
       url: absoluteUrl(seo.path),
-      inLanguage: "zh-CN",
+      inLanguage: locale === "en" ? "en" : "zh-CN",
       ...(priceModifiedAt ? { dateModified: priceModifiedAt } : {}),
       creator: {
         "@type": "Organization",
@@ -76,13 +103,24 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
       },
       variableMeasured:
         mode === "api"
-          ? ["缓存输入价格", "非缓存输入价格", "输出价格"]
-          : ["官方原币价格", "人民币参考价", "订阅周期"],
+          ? locale === "en"
+            ? ["Cached input price", "Input price", "Output price"]
+            : ["缓存输入价格", "非缓存输入价格", "输出价格"]
+          : locale === "en"
+            ? [
+                "Official original-currency price",
+                "CNY reference",
+                "Billing period",
+              ]
+            : ["官方原币价格", "人民币参考价", "订阅周期"],
     },
     {
       "@context": "https://schema.org",
       "@type": "ItemList",
-      name: `${seo.title}官方来源`,
+      name:
+        locale === "en"
+          ? `${seo.title} official sources`
+          : `${seo.title}官方来源`,
       numberOfItems: providerSources.length,
       itemListElement: providerSources.map((provider, index) => ({
         "@type": "ListItem",
@@ -100,6 +138,7 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
         <PricingExplorer
           key={`${mode}:${lastCheckedAt ?? "seed"}`}
           initialMode={mode}
+          locale={locale}
           modes={modes}
           providers={clientCatalog.providers}
           deferredProviderIds={clientCatalog.deferredProviderIds}
@@ -110,20 +149,42 @@ export async function PricingPage({ mode, query }: PricingPageProps) {
           priceIndexLinks={priceIndexLinks}
         />
       ) : (
-        <main id="main-content" className="pricing-empty-state">
-          <p className="eyebrow">Low Price Radar · AI订阅全球比价</p>
-          <h1>{seo.title}</h1>
-          <p>该分类暂时没有可展示的有效报价，采集恢复后会自动重新显示。</p>
-          <nav aria-label="其他价格分类">
-            {modes
-              .filter((entry) => entry.id !== mode)
-              .map((entry) => (
-                <Link key={entry.id} href={modeSeo[entry.id].path}>
-                  查看{entry.shortLabel}
-                </Link>
-              ))}
-          </nav>
-        </main>
+        <div className="app-shell pricing-shell">
+          <a className="skip-link" href="#main-content">
+            {messages.common.skipToContent}
+          </a>
+          <SiteHeader
+            locale={locale}
+            activeMode={mode}
+            showSync
+            syncLabel={messages.common.syncEveryFourHours}
+            syncTitle={messages.common.syncTitle}
+          />
+          <main id="main-content" className="pricing-empty-state">
+            <p className="eyebrow">
+              Low Price Radar · {messages.brand.tagline}
+            </p>
+            <h1>
+              {locale === "en" ? messages.pricing.titles[mode] : seo.title}
+            </h1>
+            <p>{messages.pricing.emptyDescription}</p>
+            <nav aria-label={messages.pricing.otherCategories}>
+              {modes
+                .filter((entry) => entry.id !== mode)
+                .map((entry) => (
+                  <Link
+                    key={entry.id}
+                    href={modeSeoByLocale[locale][entry.id].path}
+                  >
+                    {messages.pricing.viewCategory(
+                      messages.nav.modes[entry.id],
+                    )}
+                  </Link>
+                ))}
+            </nav>
+          </main>
+          <SiteFooter locale={locale} />
+        </div>
       )}
     </>
   );

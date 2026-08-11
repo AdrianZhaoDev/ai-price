@@ -85,4 +85,30 @@ describe("pricing cache refresh", () => {
       changedModelIds: changedModelIds.slice(1000),
     });
   });
+
+  it("warms both localized catalog and model paths", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+
+    await refreshPricingCacheAfterCollection({
+      environment: "production",
+      secret: "collector-secret",
+      catalogChanged: true,
+      changedModelIds: ["openai/gpt-5"],
+      fetchImplementation,
+      warmBaseUrl: "https://lowpriceradar.com",
+    });
+
+    const warmedPaths = fetchImplementation.mock.calls
+      .filter(([, init]) => init?.method !== "POST")
+      .map(([url]) => new URL(String(url)).pathname);
+    expect(warmedPaths).toEqual([
+      "/models/openai/gpt-5",
+      "/en/models/openai/gpt-5",
+      "/api-pricing",
+      "/en/api-pricing",
+      "/sitemap.xml",
+    ]);
+  });
 });

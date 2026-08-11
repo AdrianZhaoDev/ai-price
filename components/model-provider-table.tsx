@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getMessages, type Locale, type LocaleMessages } from "@/lib/i18n";
 import {
   sortModelProviderOfferings,
   type ModelProviderSortKey,
@@ -18,8 +19,16 @@ function price(value?: number) {
     : `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
 }
 
-function yesNo(value?: boolean) {
-  return value === undefined ? "—" : value ? "是" : "否";
+function yesNo(value: boolean | undefined, locale: Locale) {
+  return value === undefined
+    ? "—"
+    : value
+      ? locale === "en"
+        ? "Yes"
+        : "是"
+      : locale === "en"
+        ? "No"
+        : "否";
 }
 
 function priceTierDetails(costDetails?: Record<string, unknown>) {
@@ -31,30 +40,33 @@ function priceTierDetails(costDetails?: Record<string, unknown>) {
 }
 
 const headers: Array<{
-  label: string;
+  key: keyof LocaleMessages["modelDetail"]["providerColumns"];
   sort?: ModelProviderSortKey;
 }> = [
-  { label: "Provider" },
-  { label: "Lab" },
-  { label: "Model ID" },
-  { label: "Context", sort: "context" },
-  { label: "Output", sort: "output" },
-  { label: "Input Price", sort: "inputPrice" },
-  { label: "Output Price", sort: "outputPrice" },
-  { label: "Price tiers" },
-  { label: "Reasoning" },
-  { label: "Tool Call" },
-  { label: "Structured" },
-  { label: "Temperature" },
-  { label: "状态" },
-  { label: "来源" },
+  { key: "provider" },
+  { key: "lab" },
+  { key: "modelId" },
+  { key: "context", sort: "context" },
+  { key: "output", sort: "output" },
+  { key: "inputPrice", sort: "inputPrice" },
+  { key: "outputPrice", sort: "outputPrice" },
+  { key: "priceTiers" },
+  { key: "reasoning" },
+  { key: "toolCall" },
+  { key: "structured" },
+  { key: "temperature" },
+  { key: "status" },
+  { key: "source" },
 ];
 
 export function ModelProviderTable({
+  locale = "zh-CN",
   providers,
 }: {
+  locale?: Locale;
   providers: ModelProviderOffering[];
 }) {
+  const messages = getMessages(locale);
   const [sort, setSort] = useState<ModelProviderSortKey>("inputPrice");
   const [direction, setDirection] = useState<"asc" | "desc">("asc");
   const tableRef = useRef<HTMLTableElement>(null);
@@ -80,17 +92,23 @@ export function ModelProviderTable({
     <div
       className="model-table-scroll"
       tabIndex={0}
-      aria-label="Provider 报价表，可横向滚动"
+      aria-label={
+        locale === "en"
+          ? "Provider quote table, horizontally scrollable"
+          : "提供商报价表，可横向滚动"
+      }
     >
       <table ref={tableRef} className="model-provider-table">
         <caption className="sr-only">
-          Provider 模型规格与输入、输出价格比较
+          {locale === "en"
+            ? "Provider model specifications and input/output price comparison"
+            : "提供商模型规格与输入、输出价格比较"}
         </caption>
         <thead>
           <tr>
             {headers.map((header) => (
               <th
-                key={header.label}
+                key={header.key}
                 scope="col"
                 aria-sort={
                   header.sort === sort
@@ -104,9 +122,11 @@ export function ModelProviderTable({
                   <button
                     type="button"
                     onClick={() => sortBy(header.sort!)}
-                    aria-label={`按 ${header.label} 排序`}
+                    aria-label={messages.apiCatalog.sortBy(
+                      messages.modelDetail.providerColumns[header.key],
+                    )}
                   >
-                    {header.label}
+                    {messages.modelDetail.providerColumns[header.key]}
                     <span aria-hidden="true">
                       {header.sort === sort
                         ? direction === "asc"
@@ -116,7 +136,7 @@ export function ModelProviderTable({
                     </span>
                   </button>
                 ) : (
-                  header.label
+                  messages.modelDetail.providerColumns[header.key]
                 )}
               </th>
             ))}
@@ -129,7 +149,7 @@ export function ModelProviderTable({
               <tr key={`${provider.providerId}:${provider.providerModelId}`}>
                 <th scope="row">
                   <Link
-                    href={`/api-pricing?provider=${encodeURIComponent(provider.providerId)}`}
+                    href={`${locale === "en" ? "/en/api-pricing" : "/api-pricing"}?provider=${encodeURIComponent(provider.providerId)}`}
                   >
                     {provider.providerName}
                   </Link>
@@ -151,7 +171,9 @@ export function ModelProviderTable({
                   {tierDetails ? (
                     <details className="model-price-tiers">
                       <summary>
-                        {Object.keys(tierDetails).length} 项明细
+                        {messages.modelDetail.tierDetails(
+                          Object.keys(tierDetails).length,
+                        )}
                       </summary>
                       <pre>{JSON.stringify(tierDetails, null, 2)}</pre>
                     </details>
@@ -159,15 +181,15 @@ export function ModelProviderTable({
                     "—"
                   )}
                 </td>
-                <td>{yesNo(provider.capabilities.reasoning)}</td>
-                <td>{yesNo(provider.capabilities.toolCall)}</td>
-                <td>{yesNo(provider.capabilities.structuredOutput)}</td>
-                <td>{yesNo(provider.capabilities.temperature)}</td>
+                <td>{yesNo(provider.capabilities.reasoning, locale)}</td>
+                <td>{yesNo(provider.capabilities.toolCall, locale)}</td>
+                <td>{yesNo(provider.capabilities.structuredOutput, locale)}</td>
+                <td>{yesNo(provider.capabilities.temperature, locale)}</td>
                 <td>
                   <span
                     className={`model-status model-status-${provider.status ?? "active"}`}
                   >
-                    {provider.status ?? "active"}
+                    {messages.modelDetail.status[provider.status ?? "active"]}
                   </span>
                 </td>
                 <td>
@@ -177,7 +199,7 @@ export function ModelProviderTable({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      查看 ↗
+                      {messages.modelDetail.view}
                     </a>
                   ) : (
                     "—"
