@@ -116,8 +116,8 @@ Nginx 统计必须解析 `ai_price` JSON access log，并分别计算过去 24 �
 按 `uri` 统计，不得尝试恢复或报告查询参数；至少输出路径 × 状态码 Top 20、请求耗时
 P50/P75/P95，以及以下互斥分类：
 
-- `scanner_404`：404 且路径符合常见探测目标，例如 `.env`、`.git`、WordPress、PHP、
-  phpMyAdmin、cgi-bin 或随机漏洞路径；
+- `scanner_404`：404 且路径符合常见探测目标，例如 `.env`、`.git`、WordPress（含
+  `/wp-json`）、PHP、phpMyAdmin、cgi-bin 或随机漏洞路径；
 - `application_4xx`：已知应用路由或接口产生的 400/401/403/404/409/429；
 - `client_cancelled_499`：客户端或边缘在源站响应前断开；
 - `other_4xx`：无法归入以上类别的其他 4xx，列出主要路径供复核；
