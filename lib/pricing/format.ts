@@ -1,4 +1,9 @@
-import type { BillingPeriod, PriceOffer, PriceStatus } from "./types";
+import type {
+  BillingPeriod,
+  PriceOffer,
+  PriceStatus,
+  ProviderCatalogItem,
+} from "./types";
 import type { Locale } from "@/lib/i18n";
 
 export const API_INITIAL_VISIBLE_COUNT = 10;
@@ -81,6 +86,202 @@ export function formatOfferPrice(
   return `${amount}${period}`;
 }
 
+const hanCharacters = /[\u3400-\u9fff]/;
+
+const englishPriceTypeLabels: Record<
+  NonNullable<PriceOffer["priceType"]>,
+  string
+> = {
+  cached_input: "Cached input",
+  input: "Input",
+  output: "Output",
+  cache_write: "Cache write",
+  other: "Other",
+};
+
+const englishProviderDescriptions: Record<string, string> = {
+  chatgpt: "Official OpenAI iOS app subscriptions",
+  gemini: "Google Gemini and Google AI subscriptions",
+  claude: "Anthropic Claude subscriptions, including Claude Code benefits",
+  grok: "Official xAI Grok iOS app subscriptions",
+  "kimi-membership": "Four official membership tiers",
+  "stepfun-subscription": "Official membership and Step Plan subscriptions",
+  "minimax-token-plan": "Official monthly Token Plan subscriptions",
+  "qwen-token-plan": "Alibaba Cloud Model Studio monthly developer plans",
+  "baidu-token-package":
+    "Qianfan monthly model-credit packages with standard and first-purchase prices",
+  "spark-token-plan": "iFlytek MaaS Token Plan membership tiers",
+  "glm-resource-package": "Limited official GLM Token resource packages",
+  "glm-coding-plan":
+    "Official personal coding plans with monthly, quarterly, and annual billing",
+  "comate-subscription": "Official Baidu Comate personal subscriptions",
+  "qoder-subscription": "Personal Qoder subscriptions with monthly Credits",
+  "trae-subscription": "TRAE personal subscriptions and free plan",
+  "codebuddy-subscription":
+    "Official Tencent personal AI coding and productivity subscriptions",
+  "mimo-token-plan": "Xiaomi MiMo monthly and annual Token Plans",
+  "huawei-token-plan": "Huawei Cloud Token Plans for individual developers",
+  "sensenova-token-plan":
+    "Free during public beta; paid tiers have not been announced",
+  "deepseek-api": "Official usage-based model API pricing",
+  "doubao-api": "Official Doubao model pricing from Volcano Ark",
+  "qwen-api": "Alibaba Cloud Model Studio model services",
+  "kimi-api": "Official Moonshot API pricing",
+  "hunyuan-api": "Tencent Cloud Hunyuan and TokenHub pricing",
+  "ernie-api": "Baidu AI Cloud Qianfan model services",
+  "glm-api": "Official GLM pricing from BigModel",
+  "minimax-api": "Text, audio, image, and video models",
+  "stepfun-api": "Step Plan developer subscriptions",
+  "spark-api": "Token Plan member-price equivalents, not pay-as-you-go pricing",
+  "mimo-api": "Domestic usage-based pricing for Xiaomi MiMo-V2.5 models",
+  "baichuan-api": "Official API pricing for Baichuan-M3 models",
+  "longcat-api": "Official limited-time pricing for LongCat-2.0",
+  "siliconflow-api": "Live official model pricing from SiliconFlow",
+  "huawei-maas-api": "Token-based pricing for Huawei Cloud MaaS models",
+  "teleai-api": "QPS pricing for China Telecom TeleMM multimodal APIs",
+  "openai-api": "Official OpenAI standard, short-context Token pricing",
+  "claude-api": "Official Anthropic standard Token pricing",
+  "gemini-api": "Official paid Gemini Developer API pricing",
+  "grok-api": "Official xAI standard, short-context Token pricing",
+};
+
+export function formatProviderDescription(
+  provider: Pick<
+    ProviderCatalogItem,
+    "description" | "id" | "mode" | "name" | "sourceType"
+  >,
+  locale: Locale = "zh-CN",
+): string {
+  if (locale !== "en") return provider.description;
+  const translated = englishProviderDescriptions[provider.id];
+  if (translated) return translated;
+  if (provider.sourceType === "app_store") {
+    return `${provider.name} subscriptions from the official iOS app`;
+  }
+  if (provider.mode === "api") {
+    return `Official ${provider.name} API pricing`;
+  }
+  return `Official ${provider.name} subscription pricing`;
+}
+
+export function formatOfferPlanName(
+  offer: Pick<PriceOffer, "modelName" | "planName" | "priceType">,
+  locale: Locale = "zh-CN",
+): string {
+  if (locale === "en" && offer.modelName && offer.priceType) {
+    return `${offer.modelName} · ${englishPriceTypeLabels[offer.priceType]}`;
+  }
+  return offer.planName;
+}
+
+export function formatOfferDisplayPrice(
+  offer: PriceOffer,
+  locale: Locale = "zh-CN",
+): string {
+  const formatted = formatOfferPrice(offer, locale);
+  if (locale !== "en" || !hanCharacters.test(formatted)) return formatted;
+
+  const exactTranslations: Record<string, string> = {
+    等待采集: "Awaiting collection",
+    等待首轮采集: "Awaiting first collection",
+    等待首次核验: "Awaiting first verification",
+    查看官方价目: "See official pricing",
+    官方未公开统一固定价: "No single public fixed price",
+  };
+  const exact = exactTranslations[offer.displayPrice.trim()];
+  if (exact) return exact;
+
+  const inputOutput = offer.displayPrice.match(
+    /^输入\s+(.+?)\s*·\s*输出\s+(.+)$/,
+  );
+  if (inputOutput) return `Input ${inputOutput[1]} · Output ${inputOutput[2]}`;
+  if (offer.status === "pending" || offer.status === "unpublished") {
+    return statusLabel(offer.status, locale);
+  }
+  return offer.status === "stale"
+    ? "See official source (potentially stale)"
+    : "See official source";
+}
+
+export function formatOfferUnit(
+  unit: string | undefined,
+  locale: Locale = "zh-CN",
+  fallback = "",
+): string {
+  if (!unit || locale !== "en") return unit ?? fallback;
+  let value = unit
+    .replace(
+      /(\d+(?:\.\d+)?)亿/g,
+      (_, amount: string) => `${Number(amount) * 100}M`,
+    )
+    .replace(
+      /(\d+(?:\.\d+)?)万/g,
+      (_, amount: string) => `${Number(amount) / 100}M`,
+    )
+    .replace(/百万/g, "million")
+    .replace(/积分/g, "credits")
+    .replace(/每模型/g, "per model")
+    .replace(/次调用/g, "calls")
+    .replace(/个月/g, " months")
+    .replace(/小时/g, "hours")
+    .replace(/天/g, " days")
+    .replace(/月/g, "month")
+    .replace(/\s+/g, " ")
+    .trim();
+  value = value.replace(/\s*\/\s*/g, "/");
+  return hanCharacters.test(value) ? fallback : value;
+}
+
+export function formatOfferAnnotation(
+  offer: Pick<PriceOffer, "category" | "note" | "priceTier">,
+  provider: Pick<
+    ProviderCatalogItem,
+    "description" | "id" | "mode" | "name" | "sourceType"
+  >,
+  locale: Locale = "zh-CN",
+): string {
+  if (locale !== "en") {
+    if (offer.note) return offer.note;
+    if (provider.mode === "api") {
+      const metadata = [offer.category, offer.priceTier]
+        .filter(Boolean)
+        .join(" · ");
+      if (metadata) return metadata;
+    }
+    return provider.description;
+  }
+
+  if (offer.note) {
+    const storage = offer.note.match(/^含\s+(.+)\s+存储$/);
+    if (storage) return `Includes ${storage[1]} storage`;
+    const credits = offer.note.match(/^([\d,]+)\s*积分$/);
+    if (credits) return `${credits[1]} credits`;
+    const cacheInput = offer.note.match(/^缓存输入\s+(.+)$/);
+    if (cacheInput) return `Cached input ${cacheInput[1]}`;
+    const cacheRead = offer.note.match(/^缓存读取\s+(.+)$/);
+    if (cacheRead) return `Cache read ${cacheRead[1]}`;
+    const noteTranslations: Record<string, string> = {
+      日常使用: "Everyday use",
+      效率升级: "Productivity upgrade",
+      专业优选: "Professional use",
+      全能尊享: "Full-featured plan",
+    };
+    if (noteTranslations[offer.note]) return noteTranslations[offer.note];
+    if (!hanCharacters.test(offer.note)) return offer.note;
+  }
+
+  const metadataTranslations: Record<string, string> = {
+    官方标准实时价: "Official standard real-time pricing",
+    标准实时: "Standard real-time",
+  };
+  const metadata = [offer.category, offer.priceTier]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => metadataTranslations[value] ?? value)
+    .filter((value) => !hanCharacters.test(value))
+    .join(" · ");
+  return metadata || formatProviderDescription(provider, locale);
+}
+
 export function formatRegionName(
   offer: Pick<PriceOffer, "regionCode" | "regionName">,
   locale: Locale = "zh-CN",
@@ -91,13 +292,18 @@ export function formatRegionName(
       return (
         new Intl.DisplayNames(["en"], { type: "region" }).of(
           offer.regionCode.toUpperCase(),
-        ) ??
-        offer.regionName ??
-        offer.regionCode
+        ) ?? offer.regionCode
       );
     } catch {
       // Keep source data visible when a provider emits a nonstandard code.
     }
+  }
+  if (locale === "en") {
+    if (offer.regionName === "全球") return "Global";
+    if (offer.regionName && !hanCharacters.test(offer.regionName)) {
+      return offer.regionName;
+    }
+    return offer.regionCode ?? fallback;
   }
   return offer.regionName ?? offer.regionCode ?? fallback;
 }

@@ -117,6 +117,65 @@ test("publishes English canonical, alternates, and structured language metadata"
   });
 });
 
+test("localizes explanatory pricing copy while preserving source names", async ({
+  page,
+}) => {
+  await page.goto("/en?provider=chatgpt");
+  await expect(
+    page.getByText("Official OpenAI iOS app subscriptions"),
+  ).toBeVisible();
+  await expect(page.getByText("OpenAI 官方 iOS 应用订阅")).toHaveCount(0);
+  await expect(page.getByText("ChatGPT Plus").first()).toBeVisible();
+});
+
+test("uses locale-independent date filters on English pages", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ baseURL, locale: "zh-CN" });
+  const page = await context.newPage();
+  await page.goto("/en/api-pricing");
+  await page.getByRole("button", { name: "More filters" }).click();
+
+  for (const label of [
+    "Release from",
+    "Release to",
+    "Updated from",
+    "Updated to",
+  ]) {
+    const input = page.getByLabel(label);
+    await expect(input).toHaveAttribute("type", "text");
+    await expect(input).toHaveAttribute("placeholder", "YYYY-MM-DD");
+  }
+
+  await page.getByLabel("Release from").fill("2025-01-01");
+  await page.getByLabel("Release from").press("Tab");
+  await expect(page).toHaveURL(/releaseFrom=2025-01-01/);
+
+  await page.getByLabel("Release to").fill("2025-99-99");
+  await expect(page.getByLabel("Release to")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await page.getByLabel("Release to").press("Tab");
+  await expect(page.getByLabel("Release to")).toHaveValue("");
+  await expect(page).not.toHaveURL(/releaseTo=/);
+  await context.close();
+});
+
+test("does not inherit Chinese metadata on English subscription results", async ({
+  page,
+}) => {
+  await page.goto("/en/subscription/result?status=unsubscribed");
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    "View the result of your price-alert request.",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Unsubscribed" }),
+  ).toBeVisible();
+});
+
 test("keeps public assets, document anchors, and privacy copy localized", async ({
   page,
   request,

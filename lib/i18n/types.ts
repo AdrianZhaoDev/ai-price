@@ -189,6 +189,7 @@ export type LocaleMessages = {
     releaseTo: string;
     updatedFrom: string;
     updatedTo: string;
+    datePlaceholder: string;
     resultCount: (visible: number, total: number) => string;
     clearFilters: string;
     sourceNote: string;
@@ -278,6 +279,7 @@ export type LocaleMessages = {
   };
   result: {
     statusTitle: string;
+    metadataDescription: string;
     confirmedTitle: string;
     confirmedDescription: string;
     unsubscribedTitle: string;

@@ -10,7 +10,11 @@ import {
 import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 import {
   formatCny,
-  formatOfferPrice,
+  formatOfferAnnotation,
+  formatOfferDisplayPrice,
+  formatOfferPlanName,
+  formatOfferUnit,
+  formatProviderDescription,
   formatPeriod,
   formatRegionName,
 } from "@/lib/pricing/format";
@@ -100,7 +104,7 @@ function pageConclusion(data: LandingPageData, locale: Locale): string {
     const metrics = summary.tokenHighlights
       .map(
         (item) =>
-          `${priceTypeLabel(item.priceType, locale)}${locale === "en" ? " minimum reference is " : "最低参考为 "}${item.modelName} ${item.offer.displayPrice}${item.offer.unit ?? ""}`,
+          `${priceTypeLabel(item.priceType, locale)}${locale === "en" ? " minimum reference is " : "最低参考为 "}${item.modelName} ${formatOfferDisplayPrice(item.offer, locale)}${formatOfferUnit(item.offer.unit, locale)}`,
       )
       .join("；");
     parts.push(metrics);
@@ -117,8 +121,7 @@ function sourceFor(provider: ProviderCatalogItem): string {
 }
 
 function offerValue(offer: PriceOffer, locale: Locale): string {
-  if (offer.amountMinor === null) return offer.displayPrice;
-  return formatOfferPrice(offer, locale);
+  return formatOfferDisplayPrice(offer, locale);
 }
 
 function sourceLabel(provider: ProviderCatalogItem, locale: Locale): string {
@@ -228,11 +231,13 @@ function PriceRows({
       {offers.map((offer) => (
         <div className="landing-price-row" role="row" key={offer.id}>
           <span role="cell">
-            <strong>{offer.modelName ?? offer.planName}</strong>
+            <strong>
+              {offer.modelName ?? formatOfferPlanName(offer, locale)}
+            </strong>
             <small>
               {offer.modelName && offer.planName !== offer.modelName
-                ? offer.planName
-                : (offer.category ?? provider.description)}
+                ? formatOfferPlanName(offer, locale)
+                : formatOfferAnnotation(offer, provider, locale)}
             </small>
           </span>
           <span role="cell" className="landing-official-price">
@@ -241,7 +246,11 @@ function PriceRows({
           </span>
           <span role="cell">
             {api
-              ? (offer.unit ?? getMessages(locale).pricing.perOfficialUnit)
+              ? formatOfferUnit(
+                  offer.unit,
+                  locale,
+                  getMessages(locale).pricing.perOfficialUnit,
+                )
               : formatCny(offer.convertedCny, locale)}
             {!api && offer.billingPeriod !== "usage" ? (
               <small>{formatPeriod(offer.billingPeriod, locale)}</small>
@@ -313,7 +322,9 @@ function ProviderSection({
           <ArrowUpRight size={14} aria-hidden="true" />
         </a>
       </div>
-      <p className="landing-section-description">{provider.description}</p>
+      <p className="landing-section-description">
+        {formatProviderDescription(provider, locale)}
+      </p>
       <PriceRows
         provider={provider}
         offers={offers}
@@ -675,8 +686,10 @@ export async function LandingPage({
                               : offer.priceType === "output"
                                 ? messages.landing.output
                                 : messages.landing.input}{" "}
-                            {offer.displayPrice}
-                            {offer.unit ? ` ${offer.unit}` : ""}
+                            {formatOfferDisplayPrice(offer, locale)}
+                            {offer.unit
+                              ? ` ${formatOfferUnit(offer.unit, locale)}`
+                              : ""}
                           </small>
                         ))}
                       </span>
