@@ -2,6 +2,7 @@ import { providerCatalog } from "@/lib/data/catalog";
 import {
   formatOfferAnnotation,
   formatOfferDisplayPrice,
+  formatOfferPlanName,
   formatOfferUnit,
   formatProviderDescription,
 } from "@/lib/pricing/format";
@@ -21,6 +22,12 @@ describe("English pricing data display", () => {
       );
 
       for (const offer of provider.offers) {
+        if (offer.modelName && offer.priceType) {
+          expect(
+            formatOfferPlanName(offer, "en").replace(offer.modelName, ""),
+            `${provider.id}/${offer.id} plan label`,
+          ).not.toMatch(hanCharacters);
+        }
         expect(
           formatOfferDisplayPrice(offer, "en"),
           `${provider.id}/${offer.id} display price`,

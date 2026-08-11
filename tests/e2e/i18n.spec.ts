@@ -152,6 +152,11 @@ test("uses locale-independent date filters on English pages", async ({
   await page.getByLabel("Release from").press("Tab");
   await expect(page).toHaveURL(/releaseFrom=2025-01-01/);
 
+  await page.getByLabel("Release to").fill("2025-02-02");
+  await page.getByLabel("Release to").press("Escape");
+  await expect(page.getByLabel("Release to")).toHaveValue("");
+  await expect(page).not.toHaveURL(/releaseTo=/);
+
   await page.getByLabel("Release to").fill("2025-99-99");
   await expect(page.getByLabel("Release to")).toHaveAttribute(
     "aria-invalid",
@@ -160,6 +165,10 @@ test("uses locale-independent date filters on English pages", async ({
   await page.getByLabel("Release to").press("Tab");
   await expect(page.getByLabel("Release to")).toHaveValue("");
   await expect(page).not.toHaveURL(/releaseTo=/);
+
+  await page.goto("/api-pricing");
+  await page.getByRole("button", { name: "更多筛选" }).click();
+  await expect(page.getByLabel("Release 起")).toHaveAttribute("type", "date");
   await context.close();
 });
 

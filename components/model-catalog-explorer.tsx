@@ -35,16 +35,28 @@ function isValidIsoDate(value: string): boolean {
 }
 
 function CatalogDateInput({
+  locale,
   value,
   placeholder,
   onCommit,
 }: {
+  locale: Locale;
   value?: string;
   placeholder: string;
   onCommit: (value?: string) => void;
 }) {
   const [draft, setDraft] = useState(value ?? "");
   const valid = draft === "" || isValidIsoDate(draft);
+
+  if (locale !== "en") {
+    return (
+      <input
+        type="date"
+        value={value ?? ""}
+        onChange={(event) => onCommit(event.target.value || undefined)}
+      />
+    );
+  }
 
   function commit() {
     if (valid) onCommit(draft || undefined);
@@ -66,8 +78,8 @@ function CatalogDateInput({
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") {
+          event.preventDefault();
           setDraft(value ?? "");
-          event.currentTarget.blur();
         }
       }}
     />
@@ -409,6 +421,7 @@ export function ModelCatalogExplorer({
                 <span>{messages.apiCatalog.releaseFrom}</span>
                 <CatalogDateInput
                   key={filters.releaseFrom ?? "release-from-empty"}
+                  locale={locale}
                   placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.releaseFrom ?? ""}
                   onCommit={(value) => update("releaseFrom", value)}
@@ -418,6 +431,7 @@ export function ModelCatalogExplorer({
                 <span>{messages.apiCatalog.releaseTo}</span>
                 <CatalogDateInput
                   key={filters.releaseTo ?? "release-to-empty"}
+                  locale={locale}
                   placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.releaseTo ?? ""}
                   onCommit={(value) => update("releaseTo", value)}
@@ -427,6 +441,7 @@ export function ModelCatalogExplorer({
                 <span>{messages.apiCatalog.updatedFrom}</span>
                 <CatalogDateInput
                   key={filters.updatedFrom ?? "updated-from-empty"}
+                  locale={locale}
                   placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.updatedFrom ?? ""}
                   onCommit={(value) => update("updatedFrom", value)}
@@ -436,6 +451,7 @@ export function ModelCatalogExplorer({
                 <span>{messages.apiCatalog.updatedTo}</span>
                 <CatalogDateInput
                   key={filters.updatedTo ?? "updated-to-empty"}
+                  locale={locale}
                   placeholder={messages.apiCatalog.datePlaceholder}
                   value={filters.updatedTo ?? ""}
                   onCommit={(value) => update("updatedTo", value)}

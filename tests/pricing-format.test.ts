@@ -87,6 +87,7 @@ describe("price formatting", () => {
         {
           planName: "gpt-5.6 · 缓存输入",
           modelName: "gpt-5.6",
+          priceTier: undefined,
           priceType: "cached_input",
         },
         "en",
@@ -94,10 +95,26 @@ describe("price formatting", () => {
     ).toBe("gpt-5.6 · Cached input");
     expect(
       formatOfferPlanName(
-        { planName: "个人专业版", modelName: undefined, priceType: undefined },
+        {
+          planName: "个人专业版",
+          modelName: undefined,
+          priceTier: undefined,
+          priceType: undefined,
+        },
         "en",
       ),
     ).toBe("个人专业版");
+    expect(
+      formatOfferPlanName(
+        {
+          planName: "Gemini 2.5 Pro · 输入 · 长上下文 · 档位 2",
+          modelName: "Gemini 2.5 Pro",
+          priceTier: "长上下文 · 档位 2",
+          priceType: "input",
+        },
+        "en",
+      ),
+    ).toBe("Gemini 2.5 Pro · Input · Long context · Variant 2");
     expect(
       formatOfferAnnotation({ note: "含 5 TB 存储" }, provider, "en"),
     ).toBe("Includes 5 TB storage");
@@ -106,6 +123,9 @@ describe("price formatting", () => {
     );
     expect(formatOfferUnit("1.3亿 Tokens / 月", "en")).toBe(
       "130M Tokens/month",
+    );
+    expect(formatOfferUnit("/百万 tokens（Token Plan 折算）", "en")).toBe(
+      "/million tokens (Token Plan equivalent)",
     );
   });
 

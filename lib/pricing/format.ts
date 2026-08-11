@@ -165,11 +165,31 @@ export function formatProviderDescription(
 }
 
 export function formatOfferPlanName(
-  offer: Pick<PriceOffer, "modelName" | "planName" | "priceType">,
+  offer: Pick<PriceOffer, "modelName" | "planName" | "priceTier" | "priceType">,
   locale: Locale = "zh-CN",
 ): string {
   if (locale === "en" && offer.modelName && offer.priceType) {
-    return `${offer.modelName} · ${englishPriceTypeLabels[offer.priceType]}`;
+    const tierTranslations: Record<string, string> = {
+      免费层: "Free tier",
+      非通用模型: "Specialized model",
+      标准实时: "Standard",
+      长上下文: "Long context",
+      存储费: "Storage",
+      标准档: "Standard tier",
+      高速档: "High-speed tier",
+    };
+    const tier = offer.priceTier
+      ?.split(" · ")
+      .map(
+        (part) =>
+          tierTranslations[part] ??
+          part.replace(/^档位\s*(\d+)$/, "Variant $1"),
+      )
+      .filter((part) => !hanCharacters.test(part))
+      .join(" · ");
+    return [offer.modelName, englishPriceTypeLabels[offer.priceType], tier]
+      .filter(Boolean)
+      .join(" · ");
   }
   return offer.planName;
 }
@@ -219,6 +239,7 @@ export function formatOfferUnit(
       (_, amount: string) => `${Number(amount) / 100}M`,
     )
     .replace(/百万/g, "million")
+    .replace(/（Token Plan 折算）/g, " (Token Plan equivalent)")
     .replace(/积分/g, "credits")
     .replace(/每模型/g, "per model")
     .replace(/次调用/g, "calls")

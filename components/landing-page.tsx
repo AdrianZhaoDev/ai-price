@@ -688,7 +688,11 @@ export async function LandingPage({
                                 : messages.landing.input}{" "}
                             {formatOfferDisplayPrice(offer, locale)}
                             {offer.unit
-                              ? ` ${formatOfferUnit(offer.unit, locale)}`
+                              ? ` ${formatOfferUnit(
+                                  offer.unit,
+                                  locale,
+                                  getMessages(locale).pricing.perOfficialUnit,
+                                )}`
                               : ""}
                           </small>
                         ))}
