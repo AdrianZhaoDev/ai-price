@@ -13,6 +13,9 @@ import { absoluteUrl } from "@/lib/seo";
 import { localizedPath, type Locale } from "@/lib/i18n";
 
 export const SITEMAP_PAGE_SIZE = 45_000;
+export const MODEL_PAGE_TEMPLATE_UPDATED_AT = new Date(
+  "2026-08-11T00:00:00.000Z",
+);
 
 const CORE_PAGE_UPDATED_AT = {
   "/": new Date("2026-08-11T00:00:00.000Z"),
@@ -25,12 +28,14 @@ const CORE_PAGE_UPDATED_AT = {
 const INDEXABLE_LOCALES: Locale[] = ["zh-CN", "en"];
 
 function modelLastModified(model: ModelCatalogSummary): Date {
-  if (model.detailChangedAt) return new Date(model.detailChangedAt);
-  const date =
-    model.updatedDate.length === 7
-      ? `${model.updatedDate}-01`
-      : model.updatedDate;
-  return new Date(`${date}T00:00:00.000Z`);
+  const dataModified = model.detailChangedAt
+    ? new Date(model.detailChangedAt)
+    : new Date(
+        `${model.updatedDate.length === 7 ? `${model.updatedDate}-01` : model.updatedDate}T00:00:00.000Z`,
+      );
+  return dataModified > MODEL_PAGE_TEMPLATE_UPDATED_AT
+    ? dataModified
+    : MODEL_PAGE_TEMPLATE_UPDATED_AT;
 }
 
 export function buildSitemap(
