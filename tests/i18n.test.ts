@@ -43,6 +43,13 @@ describe("locale resolution and localized paths", () => {
     expect(
       switchLocaleHref("/en/models/openai/gpt-5", "?provider=openai"),
     ).toBe("/models/openai/gpt-5?provider=openai");
+    expect(
+      switchLocaleHref(
+        "/api-pricing",
+        "?locale=zh-CN&provider=openai",
+        "#ranking",
+      ),
+    ).toBe("/en/api-pricing?locale=en&provider=openai#ranking");
     expect(modelDetailPath("openai/gpt-5", "en")).toBe(
       "/en/models/openai/gpt-5",
     );
@@ -66,6 +73,20 @@ describe("locale resolution and localized paths", () => {
       expect(response.headers.get("location")).toBeNull();
       expect(response.headers.get("x-middleware-next")).toBe("1");
     }
+  });
+
+  it("honors an explicit Chinese email link over browser preferences", () => {
+    const response = middleware(
+      new NextRequest(
+        "https://lowpriceradar.com/api-pricing?locale=zh-CN&provider=openai",
+        { headers: { "accept-language": "en-US" } },
+      ),
+    );
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("x-middleware-request-x-ai-price-locale")).toBe(
+      "zh-CN",
+    );
   });
 });
 

@@ -126,11 +126,12 @@ export async function sendSubscriptionCreatedEmail(
       getApplicationBaseUrl(),
     );
     unsubscribeUrl.searchParams.set("token", unsubscribeToken);
-    if (claim.locale === "en") unsubscribeUrl.searchParams.set("locale", "en");
+    unsubscribeUrl.searchParams.set("locale", claim.locale);
     const viewPath = modelScope
       ? localizedPath(claim.locale, "/api-pricing")
       : modeHref(provider?.mode ?? "global", claim.locale);
-    const viewUrl = new URL(viewPath, getApplicationBaseUrl()).toString();
+    const viewUrl = new URL(viewPath, getApplicationBaseUrl());
+    viewUrl.searchParams.set("locale", claim.locale);
     const ctaLabel = modelScope
       ? claim.locale === "en"
         ? "View the latest models"
@@ -162,7 +163,7 @@ export async function sendSubscriptionCreatedEmail(
       ...subscriptionCreatedEmail({
         locale: claim.locale,
         scopeLabel,
-        viewUrl,
+        viewUrl: viewUrl.toString(),
         ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
         ...(modelScope

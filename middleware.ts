@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCALE,
   ENGLISH_LOCALE,
   LOCALE_COOKIE,
+  isLocale,
   localeFromPathname,
   localizedPath,
   resolvePreferredLocale,
@@ -61,6 +62,18 @@ export function middleware(request: NextRequest) {
   const pathLocale = localeFromPathname(pathname);
   if (pathLocale === ENGLISH_LOCALE) {
     return withLocaleHeader(request, ENGLISH_LOCALE);
+  }
+
+  const explicitLocale = request.nextUrl.searchParams.get("locale");
+  if (isLocale(explicitLocale)) {
+    if (explicitLocale === ENGLISH_LOCALE) {
+      const url = request.nextUrl.clone();
+      url.pathname = localizedPath(ENGLISH_LOCALE, pathname);
+      const response = NextResponse.redirect(url);
+      response.headers.set("Vary", "Accept-Language, Cookie");
+      return response;
+    }
+    return withLocaleHeader(request, DEFAULT_LOCALE);
   }
 
   const preferredLocale = resolvePreferredLocale({

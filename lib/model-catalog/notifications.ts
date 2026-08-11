@@ -84,18 +84,24 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
           baseUrl,
         );
         unsubscribeUrl.searchParams.set("token", token);
-        if (subscriber.locale === "en")
-          unsubscribeUrl.searchParams.set("locale", "en");
+        unsubscribeUrl.searchParams.set("locale", subscriber.locale);
         const models = rows.map(({ event }) => {
           const snapshot = event.snapshot as AddedModelSnapshot;
+          const modelUrl = new URL(
+            modelDetailPath(event.modelId, subscriber.locale),
+            baseUrl,
+          );
+          modelUrl.searchParams.set("locale", subscriber.locale);
           return {
             ...snapshot,
-            url: new URL(
-              modelDetailPath(event.modelId, subscriber.locale),
-              baseUrl,
-            ).toString(),
+            url: modelUrl.toString(),
           };
         });
+        const viewUrl = new URL(
+          subscriber.locale === "en" ? "/en/api-pricing" : "/api-pricing",
+          baseUrl,
+        );
+        viewUrl.searchParams.set("locale", subscriber.locale);
         const result = await getEmailTransport().sendMail({
           from: process.env.SMTP_FROM,
           to: subscriber.email,
@@ -103,10 +109,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
             locale: subscriber.locale,
             models,
             catalogVersion: version,
-            viewUrl: new URL(
-              subscriber.locale === "en" ? "/en/api-pricing" : "/api-pricing",
-              baseUrl,
-            ).toString(),
+            viewUrl: viewUrl.toString(),
             unsubscribeUrl: unsubscribeUrl.toString(),
           }),
         });

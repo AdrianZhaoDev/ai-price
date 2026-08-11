@@ -86,5 +86,10 @@ export function switchLocaleHref(pathname: string, search = "", hash = "") {
   const current = localeFromPathname(pathname);
   const next: Locale =
     current === ENGLISH_LOCALE ? DEFAULT_LOCALE : ENGLISH_LOCALE;
-  return `${localizedPath(next, pathname)}${search}${hash}`;
+  const parameters = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  if (parameters.has("locale")) parameters.set("locale", next);
+  const nextSearch = parameters.size > 0 ? `?${parameters.toString()}` : "";
+  return `${localizedPath(next, pathname)}${nextSearch}${hash}`;
 }

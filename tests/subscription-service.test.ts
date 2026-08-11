@@ -109,7 +109,10 @@ describe("subscription service", () => {
     await sendSubscriptionCreatedEmail(result.notificationId!);
     expect(mocks.sendMail).toHaveBeenCalledOnce();
     expect(mocks.sendMail.mock.calls[0][0].html).toContain(
-      "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token",
+      "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token&amp;locale=zh-CN",
+    );
+    expect(mocks.sendMail.mock.calls[0][0].text).toContain(
+      "http://localhost:3000/?locale=zh-CN",
     );
     expect(mocks.settleEmailDelivery).toHaveBeenCalledWith(
       deliveryReservation,

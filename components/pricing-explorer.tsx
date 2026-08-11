@@ -18,6 +18,7 @@ import {
   formatFxDate,
   formatCny,
   formatOfferPrice,
+  formatRegionName,
   displayableOffers,
   lowestComparableOffer,
   lowestThreeRanks,
@@ -1013,7 +1014,7 @@ export function PricingExplorer({
                             <span className="region-code">
                               {offer.regionCode}
                             </span>
-                            <strong>{offer.regionName}</strong>
+                            <strong>{formatRegionName(offer, locale)}</strong>
                           </div>
                           <div
                             className="official-price global-original-price"
@@ -1033,7 +1034,7 @@ export function PricingExplorer({
                                     ? "positive"
                                     : "negative"
                                 }
-                                ariaLabel={`${offer.regionName ?? offer.planName}${offer.lastPriceChange.direction === "decrease" ? messages.pricing.priceDecrease : messages.pricing.priceIncrease}`}
+                                ariaLabel={`${formatRegionName(offer, locale, offer.planName)}${offer.lastPriceChange.direction === "decrease" ? messages.pricing.priceDecrease : messages.pricing.priceIncrease}`}
                                 details={priceChangeDetails(
                                   offer.lastPriceChange,
                                   locale,
@@ -1091,7 +1092,7 @@ export function PricingExplorer({
                               }
                               target="_blank"
                               rel="noreferrer"
-                              aria-label={`${messages.common.viewOfficialSource}: ${offer.regionName ?? (locale === "en" ? "this region" : "此地区")}`}
+                              aria-label={`${messages.common.viewOfficialSource}: ${formatRegionName(offer, locale, locale === "en" ? "this region" : "此地区")}`}
                             >
                               <ArrowUpRight size={14} />
                             </a>

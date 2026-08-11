@@ -30,6 +30,7 @@ import {
   API_RANKING_PROVIDER_SLUG,
 } from "@/lib/subscriptions/scopes";
 import type { Locale } from "@/lib/i18n";
+import { formatRegionName } from "@/lib/pricing/format";
 
 function applicationUrl(): string {
   return (
@@ -82,7 +83,8 @@ export async function notifyPriceChangeDigest(
     const viewUrl = new URL(
       modeHref(provider?.mode ?? "global", recipient.locale),
       appUrl,
-    ).toString();
+    );
+    viewUrl.searchParams.set("locale", recipient.locale);
     const ctaLabel =
       provider?.mode === "api"
         ? recipient.locale === "en"
@@ -113,21 +115,35 @@ export async function notifyPriceChangeDigest(
       );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
-      if (recipient.locale === "en")
-        unsubscribeUrl.searchParams.set("locale", "en");
+      unsubscribeUrl.searchParams.set("locale", recipient.locale);
       const message = priceChangeEmail({
         locale: recipient.locale,
         scopeLabel: digest.planName,
         changes: digest.changes.map((change) => ({
-          region: change.region,
+          region: formatRegionName(
+            {
+              regionCode: change.storefront ?? undefined,
+              regionName: change.region,
+            },
+            recipient.locale,
+          ),
           previousPrice: change.previousPrice,
           currentPrice: change.currentPrice,
           previousCny: change.previousCny,
           currentCny: change.currentCny,
           changePercent: change.changePercent,
         })),
-        topThree: digest.topThree,
-        viewUrl,
+        topThree: digest.topThree.map((price) => ({
+          ...price,
+          region: formatRegionName(
+            {
+              regionCode: price.storefront ?? undefined,
+              regionName: price.region,
+            },
+            recipient.locale,
+          ),
+        })),
+        viewUrl: viewUrl.toString(),
         ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
       });
@@ -305,7 +321,8 @@ export async function notifyApiRankingChanges(
     const viewUrl = new URL(
       modeHref("api", recipient.locale) + "#api-ranking",
       appUrl,
-    ).toString();
+    );
+    viewUrl.searchParams.set("locale", recipient.locale);
     const subject = rankingSubject(result, recipient.locale);
     const tables = rankingEmailTables(result, recipient.locale);
     const metricLabels = {
@@ -339,14 +356,13 @@ export async function notifyApiRankingChanges(
       );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
-      if (recipient.locale === "en")
-        unsubscribeUrl.searchParams.set("locale", "en");
+      unsubscribeUrl.searchParams.set("locale", recipient.locale);
       const message = apiRankingChangeEmail({
         locale: recipient.locale,
         subject,
         tables,
         removed,
-        viewUrl,
+        viewUrl: viewUrl.toString(),
         unsubscribeUrl: unsubscribeUrl.toString(),
       });
       const delivery = await getEmailTransport().sendMail({
