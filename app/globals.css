@@ -332,6 +332,37 @@ input:focus-visible {
   background: var(--surface-muted);
 }
 
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 44px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--tint) 42%, var(--separator));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--tint-soft) 72%, var(--surface-solid));
+  color: var(--tint);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.language-switcher:hover {
+  border-color: var(--tint);
+  background: var(--tint-soft);
+}
+
+.language-switcher:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 .main-content {
   width: min(calc(100% - 40px), var(--content-width));
   margin: 0 auto;

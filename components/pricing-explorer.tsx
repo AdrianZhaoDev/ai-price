@@ -7,8 +7,9 @@ import {
   type ApiRankingFocusRequest,
   type ApiRankingSelection,
 } from "@/components/api-price-ranking";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { trackTrafficEvent } from "@/lib/analytics/traffic";
+import { getMessages, type Locale } from "@/lib/i18n";
 import {
   compareCnyPrice,
   API_INITIAL_VISIBLE_COUNT,
@@ -17,6 +18,7 @@ import {
   formatFxDate,
   formatCny,
   formatOfferPrice,
+  formatRegionName,
   displayableOffers,
   lowestComparableOffer,
   lowestThreeRanks,
@@ -52,7 +54,6 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { flushSync } from "react-dom";
 import {
@@ -65,6 +66,7 @@ import {
 } from "react";
 
 type PricingExplorerProps = {
+  locale?: Locale;
   initialMode: PriceMode;
   modes: ModeDefinition[];
   providers: ProviderCatalogItem[];
@@ -112,18 +114,26 @@ const SubscriptionSheet = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div className="sheet-layer" role="presentation">
-        <div
-          className="subscription-sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-label="正在打开价格订阅"
-        >
-          <p role="status">正在打开价格订阅…</p>
+    loading: () => {
+      const locale: Locale =
+        typeof document !== "undefined" &&
+        document.documentElement.lang === "en"
+          ? "en"
+          : "zh-CN";
+      const messages = getMessages(locale).subscription;
+      return (
+        <div className="sheet-layer" role="presentation">
+          <div
+            className="subscription-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={messages.openingStatus}
+          >
+            <p role="status">{messages.opening}</p>
+          </div>
         </div>
-      </div>
-    ),
+      );
+    },
   },
 );
 
@@ -146,20 +156,25 @@ function defaultPlanId(provider: ProviderCatalogItem): string | null {
   return offers[0]?.planId ?? null;
 }
 
-function priceChangeDetails(change: PriceChangeSummary): string[] {
+function priceChangeDetails(
+  change: PriceChangeSummary,
+  locale: Locale,
+): string[] {
+  const messages = getMessages(locale);
   const cnyReference =
     change.previousCny !== undefined && change.currentCny !== undefined
-      ? `人民币参考 ${formatCny(change.previousCny)} → ${formatCny(change.currentCny)}`
-      : "人民币参考暂不可用";
+      ? `${messages.landing.cnyOrUnit} ${formatCny(change.previousCny, locale)} → ${formatCny(change.currentCny, locale)}`
+      : `${messages.landing.cnyOrUnit} ${messages.common.noData}`;
   return [
-    `原价格 ${change.previousDisplayPrice}`,
-    `现价格 ${change.currentDisplayPrice}`,
+    `${locale === "en" ? "Previous price" : "原价格"} ${change.previousDisplayPrice}`,
+    `${locale === "en" ? "Current price" : "现价格"} ${change.currentDisplayPrice}`,
     cnyReference,
-    `确认时间 ${new Date(change.changedAt).toLocaleString("zh-CN", { hour12: false })}`,
+    `${locale === "en" ? "Confirmed" : "确认时间"} ${new Date(change.changedAt).toLocaleString(locale === "en" ? "en-US" : "zh-CN", { hour12: false })}`,
   ];
 }
 
 export function PricingExplorer({
+  locale = "zh-CN",
   initialMode,
   modes,
   providers,
@@ -170,6 +185,7 @@ export function PricingExplorer({
   initialQuery,
   priceIndexLinks = [],
 }: PricingExplorerProps) {
+  const messages = getMessages(locale);
   const router = useRouter();
   const availableInitialProviders = sortProvidersByRank(
     providers.filter(
@@ -324,7 +340,7 @@ export function PricingExplorer({
   const lowestOffer = lowestComparableOffer(sortedOffers);
   const topThreeRanks = lowestThreeRanks(sortedOffers);
   const lastCheckedAt = selectedProvider.lastCheckedAt
-    ? new Intl.DateTimeFormat("zh-CN", {
+    ? new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", {
         month: "numeric",
         day: "numeric",
         hour: "2-digit",
@@ -332,7 +348,7 @@ export function PricingExplorer({
         hour12: false,
         timeZone: "Asia/Shanghai",
       }).format(new Date(selectedProvider.lastCheckedAt))
-    : "等待首次采集";
+    : messages.landing.initialCollection;
 
   const ensureProviderLoaded = useCallback(
     async function ensureProviderLoaded(provider: ProviderCatalogItem) {
@@ -380,7 +396,7 @@ export function PricingExplorer({
           setProviderLoadErrors((current) =>
             new Map(current).set(
               provider.id,
-              `${provider.label}完整报价暂时加载失败，请稍后重试。`,
+              messages.pricing.providerLoadError(provider.label),
             ),
           );
           return provider;
@@ -402,7 +418,7 @@ export function PricingExplorer({
         }
       }
     },
-    [activeMode, dataVersion, deferredIds],
+    [activeMode, dataVersion, deferredIds, messages.pricing],
   );
 
   async function selectProvider(provider: ProviderCatalogItem) {
@@ -428,7 +444,7 @@ export function PricingExplorer({
       const planId = defaultPlanId(loadedProvider);
       if (planId) query.set("plan", planId);
     }
-    router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
+    router.replace(`${modeHref(activeMode, locale)}?${query.toString()}`, {
       scroll: false,
     });
   }
@@ -452,7 +468,7 @@ export function PricingExplorer({
       provider: selectedProvider.id,
       plan: planId,
     });
-    router.replace(`${modeHref(activeMode)}?${query.toString()}`, {
+    router.replace(`${modeHref(activeMode, locale)}?${query.toString()}`, {
       scroll: false,
     });
   }
@@ -503,7 +519,7 @@ export function PricingExplorer({
       requestId: rankingRequestIdRef.current,
     });
     router.replace(
-      `${modeHref(activeMode)}?provider=${encodeURIComponent(provider.id)}&model=${encodeURIComponent(selection.modelSlug)}`,
+      `${modeHref(activeMode, locale)}?provider=${encodeURIComponent(provider.id)}&model=${encodeURIComponent(selection.modelSlug)}`,
       { scroll: false },
     );
   }
@@ -637,9 +653,9 @@ export function PricingExplorer({
   useEffect(() => {
     for (const mode of modes) {
       if (mode.id === activeMode) continue;
-      router.prefetch(modeHref(mode.id));
+      router.prefetch(modeHref(mode.id, locale));
     }
-  }, [activeMode, modes, router]);
+  }, [activeMode, locale, modes, router]);
 
   const selectedPlan = availablePlans.find(
     (plan) => plan.id === selectedPlanId,
@@ -661,57 +677,22 @@ export function PricingExplorer({
 
   return (
     <div className="app-shell" data-hydrated={hydrated}>
-      <a className="skip-link" href="#main-content">
-        跳至主要内容
-      </a>
-      <header
-        className="site-header"
+      <a
+        className="skip-link"
+        href="#main-content"
         aria-hidden={sheetOpen ? true : undefined}
+        tabIndex={sheetOpen ? -1 : undefined}
       >
-        <Link href="/" className="brand" aria-label="Low Price Radar 首页">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-            <span />
-          </span>
-          <span className="brand-copy">
-            <strong>Low Price Radar</strong>
-            <small>AI订阅全球比价</small>
-          </span>
-        </Link>
-
-        <nav className="desktop-nav" aria-label="价格模式">
-          {modes.map((mode) => (
-            <Link
-              key={mode.id}
-              href={modeHref(mode.id)}
-              prefetch
-              className="nav-item pressable"
-              data-mode={mode.id}
-              aria-current={activeMode === mode.id ? "page" : undefined}
-              aria-label={mode.shortLabel}
-            >
-              {mode.shortLabel}
-              {mode.id === "api" ? (
-                <span className="nav-label-compact" aria-hidden="true">
-                  API 榜单
-                </span>
-              ) : null}
-              {mode.id === "api" ? (
-                <span className="nav-hot-badge" aria-hidden="true">
-                  Hot
-                </span>
-              ) : null}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="header-actions">
-          <div className="sync-state" title="计划任务每 4 小时采集一次">
-            <span className="sync-dot" />每 4 小时
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+        {messages.common.skipToContent}
+      </a>
+      <SiteHeader
+        locale={locale}
+        activeMode={activeMode}
+        showSync
+        syncLabel={messages.common.syncEveryFourHours}
+        syncTitle={messages.common.syncTitle}
+        ariaHidden={sheetOpen}
+      />
 
       <main
         id="main-content"
@@ -719,11 +700,7 @@ export function PricingExplorer({
         aria-hidden={sheetOpen ? true : undefined}
       >
         <h1 className="sr-only" id="workspace-title">
-          {activeMode === "global"
-            ? "AI订阅全球价格对比"
-            : activeMode === "china-subscription"
-              ? "国内 AI 会员，直接看官方价"
-              : "模型调用成本，按官方单位列清楚"}
+          {messages.pricing.titles[activeMode]}
         </h1>
 
         {activeMode === "api" ? (
@@ -737,6 +714,7 @@ export function PricingExplorer({
               metric={rankingMetric}
               onMetricChange={setRankingMetric}
               focusRequest={rankingFocusRequest}
+              locale={locale}
               onSelectEntry={(selection) => void selectRankingEntry(selection)}
             />
           </div>
@@ -745,18 +723,20 @@ export function PricingExplorer({
         <section className="provider-section" aria-labelledby="provider-title">
           <div className="section-label-row">
             <h2 id="provider-title">
-              {activeMode === "api" ? "选择模型平台" : "选择产品"}
+              {activeMode === "api"
+                ? messages.pricing.providerSelection
+                : messages.pricing.productSelection}
             </h2>
             <div className="section-meta">
               <div className="freshness-block">
                 <Clock3 size={16} aria-hidden="true" />
                 <span>
-                  最近核验
+                  {messages.pricing.lastChecked}
                   <strong>{lastCheckedAt}</strong>
                 </span>
               </div>
               <span className="official-source-count">
-                {modeProviders.length} 个官方来源
+                {messages.pricing.officialSourceCount(modeProviders.length)}
               </span>
             </div>
           </div>
@@ -793,7 +773,11 @@ export function PricingExplorer({
                       providerId={provider.id}
                       color={provider.color}
                     />
-                    <span>{loading ? "加载中…" : provider.label}</span>
+                    <span>
+                      {loading
+                        ? messages.pricing.loadingProvider
+                        : provider.label}
+                    </span>
                   </span>
                 </button>
               );
@@ -848,7 +832,7 @@ export function PricingExplorer({
                       target="_blank"
                       rel="noreferrer"
                     >
-                      官方页面
+                      {messages.common.officialPage}
                       <ArrowUpRight size={16} />
                     </a>
                     <button
@@ -859,7 +843,7 @@ export function PricingExplorer({
                       }}
                     >
                       <Bell size={16} />
-                      关注价格
+                      {messages.pricing.followPrice}
                     </button>
                   </div>
                 </div>
@@ -867,8 +851,8 @@ export function PricingExplorer({
                 {activeMode === "global" && availablePlans.length > 1 ? (
                   <div
                     className="plan-strip"
-                    aria-label="选择套餐，按最低价格从低到高排列"
-                    title="各套餐按全球最低价排列：左便宜右贵"
+                    aria-label={messages.pricing.selectPlan}
+                    title={messages.pricing.planSortTitle}
                   >
                     {availablePlans.map((plan, index) => (
                       <button
@@ -879,11 +863,13 @@ export function PricingExplorer({
                         data-cheapest={index === 0}
                         data-plan-id={plan.id}
                         onClick={() => selectPlan(plan.id)}
-                        aria-label={`${plan.name}，全球最低价 ${formatCny(plan.minimumCny)}`}
+                        aria-label={`${plan.name}, ${messages.pricing.planMinimum(formatCny(plan.minimumCny, locale))}`}
                       >
                         <span className="plan-name">{plan.name}</span>
                         <span className="plan-minimum">
-                          最低 {formatCny(plan.minimumCny)}
+                          {messages.pricing.planMinimum(
+                            formatCny(plan.minimumCny, locale),
+                          )}
                         </span>
                       </button>
                     ))}
@@ -903,8 +889,8 @@ export function PricingExplorer({
                     </span>
                     <span>
                       {activeMode === "global"
-                        ? `${selectedPlan?.name ?? "套餐"} · ${visibleOffers.length} 个地区报价`
-                        : `${sortedOffers.length} 个价格项目`}
+                        ? `${selectedPlan?.name ?? (locale === "en" ? "Plan" : "套餐")} · ${visibleOffers.length} ${locale === "en" ? "regional quotes" : "个地区报价"}`
+                        : `${sortedOffers.length} ${locale === "en" ? "price items" : "个价格项目"}`}
                     </span>
                     <button
                       type="button"
@@ -912,56 +898,89 @@ export function PricingExplorer({
                       onClick={toggleSortDirection}
                       aria-label={
                         sortDirection === "desc"
-                          ? "当前高价优先，点击改为低价优先"
-                          : "当前低价优先，点击改为高价优先"
+                          ? messages.pricing.sortHighToLow
+                          : messages.pricing.sortLowToHigh
                       }
                     >
                       <ArrowDownUp size={13} />
-                      {sortDirection === "desc" ? "高价优先" : "低价优先"}
+                      {sortDirection === "desc"
+                        ? locale === "en"
+                          ? "High first"
+                          : "高价优先"
+                        : locale === "en"
+                          ? "Low first"
+                          : "低价优先"}
                     </button>
                   </div>
                   {lowestOffer?.convertedCny !== undefined ? (
                     <p>
-                      当前最低参考
+                      {messages.pricing.currentMinimum}
                       <strong className="lowest-price">
                         {activeMode === "api"
-                          ? formatApiCny(lowestOffer.convertedCny)
-                          : formatCny(lowestOffer.convertedCny)}
+                          ? formatApiCny(lowestOffer.convertedCny, locale)
+                          : formatCny(lowestOffer.convertedCny, locale)}
                       </strong>
                     </p>
                   ) : (
-                    <p>原始价格以官方页面为准</p>
+                    <p>{messages.pricing.originalPriceNote}</p>
                   )}
                 </div>
 
                 <div
                   className={`price-list ${activeMode === "global" ? "price-list-global" : ""}`}
                   role="table"
-                  aria-label="官方价格"
+                  aria-label={messages.pricing.priceTable}
                 >
                   <div className="price-list-header" role="row">
                     {activeMode === "global" ? (
                       <>
-                        <span role="columnheader">序号</span>
-                        <span role="columnheader">国家</span>
-                        <span role="columnheader">原始价格</span>
-                        <span role="columnheader">汇率</span>
-                        <span role="columnheader">人民币</span>
-                        <span role="columnheader">比价</span>
-                        <span role="columnheader" aria-label="官方链接" />
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.rank}
+                        </span>
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.country}
+                        </span>
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.original}
+                        </span>
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.fxRate}
+                        </span>
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.cny}
+                        </span>
+                        <span role="columnheader">
+                          {messages.pricing.globalColumns.comparison}
+                        </span>
+                        <span
+                          role="columnheader"
+                          aria-label={messages.pricing.globalColumns.source}
+                        />
                       </>
                     ) : (
                       <>
-                        <span role="columnheader">方案 / 模型</span>
                         <span role="columnheader">
-                          {activeMode === "api" ? "人民币价格" : "官方价格"}
+                          {messages.pricing.compactColumns.planOrModel}
                         </span>
                         <span role="columnheader">
-                          {activeMode === "api" ? "计费单位" : "人民币参考"}
+                          {activeMode === "api"
+                            ? messages.pricing.compactColumns.cnyOrUnit.split(
+                                " /",
+                              )[0]
+                            : messages.pricing.compactColumns.officialPrice}
+                        </span>
+                        <span role="columnheader">
+                          {activeMode === "api"
+                            ? locale === "en"
+                              ? "Billing unit"
+                              : "计费单位"
+                            : locale === "en"
+                              ? "CNY reference"
+                              : "人民币参考"}
                         </span>
                         {activeMode === "api" ? (
                           <span role="columnheader" className="sr-only">
-                            排行榜定位
+                            {messages.pricing.compactColumns.ranking}
                           </span>
                         ) : null}
                       </>
@@ -995,7 +1014,7 @@ export function PricingExplorer({
                             <span className="region-code">
                               {offer.regionCode}
                             </span>
-                            <strong>{offer.regionName}</strong>
+                            <strong>{formatRegionName(offer, locale)}</strong>
                           </div>
                           <div
                             className="official-price global-original-price"
@@ -1007,39 +1026,42 @@ export function PricingExplorer({
                               <ChangeBadge
                                 label={
                                   offer.lastPriceChange.direction === "decrease"
-                                    ? "降价"
-                                    : "涨价"
+                                    ? messages.pricing.priceDecrease
+                                    : messages.pricing.priceIncrease
                                 }
                                 tone={
                                   offer.lastPriceChange.direction === "decrease"
                                     ? "positive"
                                     : "negative"
                                 }
-                                ariaLabel={`${offer.regionName ?? offer.planName}${offer.lastPriceChange.direction === "decrease" ? "降价" : "涨价"}`}
+                                ariaLabel={`${formatRegionName(offer, locale, offer.planName)}${offer.lastPriceChange.direction === "decrease" ? messages.pricing.priceDecrease : messages.pricing.priceIncrease}`}
                                 details={priceChangeDetails(
                                   offer.lastPriceChange,
+                                  locale,
                                 )}
                               />
                             ) : null}
                             <small>{offer.planName}</small>
                             <span className="mobile-global-details">
-                              {formatCny(offer.convertedCny)}
+                              {formatCny(offer.convertedCny, locale)}
                               {comparison && !comparison.isMinimum
                                 ? ` · ↑ ${comparison.percentage.toFixed(1)}%`
                                 : comparison?.isMinimum
-                                  ? " · 最便宜"
+                                  ? ` · ${messages.pricing.cheapest}`
                                   : ""}
                             </span>
                           </div>
                           <span className="fx-rate" role="cell">
-                            {formatFxRate(offer)}
+                            {formatFxRate(offer, locale)}
                           </span>
                           <div
                             className="converted-price"
                             role="cell"
                             data-rank={rank}
                           >
-                            <strong>{formatCny(offer.convertedCny)}</strong>
+                            <strong>
+                              {formatCny(offer.convertedCny, locale)}
+                            </strong>
                           </div>
                           <div
                             className="price-comparison"
@@ -1047,14 +1069,15 @@ export function PricingExplorer({
                             data-minimum={comparison?.isMinimum}
                           >
                             {comparison?.isMinimum ? (
-                              <strong>最便宜</strong>
+                              <strong>{messages.pricing.cheapest}</strong>
                             ) : comparison ? (
                               <>
                                 <strong>
                                   ↑ {comparison.percentage.toFixed(1)}%
                                 </strong>
                                 <small>
-                                  贵{formatCny(comparison.difference)}
+                                  {locale === "en" ? "More " : "贵"}
+                                  {formatCny(comparison.difference, locale)}
                                 </small>
                               </>
                             ) : (
@@ -1069,7 +1092,7 @@ export function PricingExplorer({
                               }
                               target="_blank"
                               rel="noreferrer"
-                              aria-label={`查看${offer.regionName ?? "此地区"}官方价格`}
+                              aria-label={`${messages.common.viewOfficialSource}: ${formatRegionName(offer, locale, locale === "en" ? "this region" : "此地区")}`}
                             >
                               <ArrowUpRight size={14} />
                             </a>
@@ -1109,24 +1132,25 @@ export function PricingExplorer({
                           <strong>
                             {activeMode === "api" &&
                             offer.convertedCny !== undefined
-                              ? formatApiCny(offer.convertedCny)
-                              : formatOfferPrice(offer)}
+                              ? formatApiCny(offer.convertedCny, locale)
+                              : formatOfferPrice(offer, locale)}
                           </strong>
                           {offer.lastPriceChange ? (
                             <ChangeBadge
                               label={
                                 offer.lastPriceChange.direction === "decrease"
-                                  ? "降价"
-                                  : "涨价"
+                                  ? messages.pricing.priceDecrease
+                                  : messages.pricing.priceIncrease
                               }
                               tone={
                                 offer.lastPriceChange.direction === "decrease"
                                   ? "positive"
                                   : "negative"
                               }
-                              ariaLabel={`${offer.planName}${offer.lastPriceChange.direction === "decrease" ? "降价" : "涨价"}`}
+                              ariaLabel={`${offer.planName}${offer.lastPriceChange.direction === "decrease" ? messages.pricing.priceDecrease : messages.pricing.priceIncrease}`}
                               details={priceChangeDetails(
                                 offer.lastPriceChange,
+                                locale,
                               )}
                             />
                           ) : null}
@@ -1134,7 +1158,7 @@ export function PricingExplorer({
                             <small>
                               {activeMode === "api" &&
                               offer.currency.toUpperCase() !== "CNY"
-                                ? `${formatOfferPrice(offer)} · ${formatFxRate(offer)} · ${formatFxDate(offer)}`
+                                ? `${formatOfferPrice(offer, locale)} · ${formatFxRate(offer, locale)} · ${formatFxDate(offer, locale)}`
                                 : offer.currency}
                               {activeMode === "api" && offer.unit ? (
                                 <span className="mobile-api-unit">
@@ -1146,7 +1170,7 @@ export function PricingExplorer({
                               offer.convertedCny !== undefined ? (
                                 <span className="mobile-cny">
                                   {" "}
-                                  · {formatCny(offer.convertedCny)}
+                                  · {formatCny(offer.convertedCny, locale)}
                                 </span>
                               ) : null}
                             </small>
@@ -1158,9 +1182,13 @@ export function PricingExplorer({
                           data-rank={rank}
                         >
                           {activeMode === "api" ? (
-                            <span>{offer.unit ?? "按官方单位"}</span>
+                            <span>
+                              {offer.unit ?? messages.pricing.perOfficialUnit}
+                            </span>
                           ) : (
-                            <strong>{formatCny(offer.convertedCny)}</strong>
+                            <strong>
+                              {formatCny(offer.convertedCny, locale)}
+                            </strong>
                           )}
                         </div>
                       </>
@@ -1199,7 +1227,7 @@ export function PricingExplorer({
                             <button
                               type="button"
                               className="price-row-action"
-                              aria-label={`在排行榜中查看 ${offer.planName}`}
+                              aria-label={`${locale === "en" ? "View" : "在排行榜中查看"} ${offer.planName}`}
                               onClick={() => focusRankingForOffer(offer)}
                             />
                           </div>
@@ -1242,27 +1270,26 @@ export function PricingExplorer({
                   >
                     {expandedProviderIds.has(selectedProvider.id)
                       ? activeMode === "global"
-                        ? "收起地区列表"
-                        : "收起价格项目"
+                        ? messages.pricing.collapseRegions
+                        : messages.pricing.collapseItems
                       : activeMode === "global"
-                        ? `查看全部 ${sortedOffers.length} 个地区`
-                        : `查看全部 ${sortedOffers.length} 个价格项目`}
+                        ? messages.pricing.viewAllRegions(sortedOffers.length)
+                        : messages.pricing.viewAllItems(sortedOffers.length)}
                     <span>
                       {expandedProviderIds.has(selectedProvider.id)
                         ? activeMode === "global"
-                          ? `已显示全部 ${sortedOffers.length} 个地区`
-                          : `已显示全部 ${sortedOffers.length} 个价格项目`
-                        : `当前显示 ${visibleOffers.length} 个`}
+                          ? messages.pricing.shownAllRegions(
+                              sortedOffers.length,
+                            )
+                          : messages.pricing.shownAllItems(sortedOffers.length)
+                        : messages.pricing.shownCount(visibleOffers.length)}
                     </span>
                   </button>
                 ) : null}
 
                 <div className="method-note">
                   <Info size={16} aria-hidden="true" />
-                  <p>
-                    价格仅作参考；原币金额来自官方来源，人民币为汇率换算结果。
-                    失效数据不会覆盖最后一次有效记录。
-                  </p>
+                  <p>{messages.pricing.referenceNote}</p>
                 </div>
               </motion.div>
             </AnimatePresence>
@@ -1278,6 +1305,7 @@ export function PricingExplorer({
                 metric={rankingMetric}
                 onMetricChange={setRankingMetric}
                 focusRequest={rankingFocusRequest}
+                locale={locale}
                 onSelectEntry={(selection) =>
                   void selectRankingEntry(selection)
                 }
@@ -1290,15 +1318,17 @@ export function PricingExplorer({
             <div className="price-index-heading">
               <p className="eyebrow">
                 <span className="eyebrow-line" />
-                可收录价格页面
+                {messages.pricing.priceIndexTitle}
               </p>
               <h2 id="price-index-title">
-                {activeMode === "global" ? "按产品继续比较" : "按品牌查看价格"}
+                {activeMode === "global"
+                  ? messages.pricing.compareProducts
+                  : messages.pricing.compareBrands}
               </h2>
               <p>
                 {activeMode === "global"
-                  ? "进入产品页查看套餐范围，再按具体套餐比较不同地区。"
-                  : "每个品牌页汇总可追溯的官方套餐、模型和计费单位。"}
+                  ? messages.pricing.compareProductsDescription
+                  : messages.pricing.compareBrandsDescription}
               </p>
             </div>
             <div className="price-index-links">
@@ -1332,7 +1362,9 @@ export function PricingExplorer({
                     <span>
                       <strong>{link.label}</strong>
                       <small>
-                        {pending ? "正在打开价格页面…" : link.description}
+                        {pending
+                          ? messages.pricing.openPricingPage
+                          : link.description}
                       </small>
                     </span>
                     {pending ? (
@@ -1352,28 +1384,13 @@ export function PricingExplorer({
         ) : null}
       </main>
 
-      <footer
-        className="site-footer"
-        aria-hidden={sheetOpen ? true : undefined}
-      >
-        <div>
-          <strong>Low Price Radar</strong>
-          <p>AI订阅全球比价 · 看清官方价格，再决定是否订阅。</p>
-        </div>
-        <div className="footer-links">
-          <Link href="/methodology">采集方法</Link>
-          <Link href="/privacy">隐私</Link>
-          <a
-            href={
-              hydrated
-                ? `mailto:${contactEmail}`
-                : "/methodology#data-corrections"
-            }
-          >
-            数据纠错
-          </a>
-        </div>
-      </footer>
+      <SiteFooter
+        locale={locale}
+        description={messages.pricing.footerDescription}
+        includeCorrection
+        contactEmail={hydrated ? contactEmail : undefined}
+        ariaHidden={sheetOpen}
+      />
 
       {sheetLoaded ? (
         <SubscriptionSheet
@@ -1382,6 +1399,7 @@ export function PricingExplorer({
           providerId={selectedProvider.id}
           mode={activeMode}
           subscriptionType={subscriptionType}
+          locale={locale}
           planId={
             activeMode === "global" ? (selectedPlanId ?? undefined) : undefined
           }

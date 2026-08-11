@@ -133,4 +133,96 @@ describe("email templates", () => {
     expect(digest.text).toContain("lab/model-next");
     expect(digest.text).not.toContain("涨价");
   });
+
+  it("renders English subscription and alert emails with localized links", () => {
+    const subscription = subscriptionCreatedEmail({
+      locale: "en",
+      scopeLabel: "ChatGPT Plus",
+      viewUrl: "https://example.com/en",
+      ctaLabel: "View prices",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(subscription.html).toContain('<html lang="en">');
+    expect(subscription.html).toContain("Unsubscribe");
+    expect(subscription.subject).toContain("Subscribed");
+
+    const priceChange = priceChangeEmail({
+      locale: "en",
+      scopeLabel: "ChatGPT Plus",
+      changes: [
+        {
+          region: "US",
+          previousPrice: "$20",
+          currentPrice: "$18",
+          previousCny: 140,
+          currentCny: 126,
+          changePercent: -10,
+        },
+      ],
+      topThree: [
+        {
+          rank: 1,
+          region: "US",
+          displayPrice: "$18",
+          convertedCny: 126,
+          sourceUrl: "https://example.com/source",
+        },
+      ],
+      viewUrl: "https://example.com/en",
+      ctaLabel: "Compare regions",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(priceChange.subject).toContain("now cheaper");
+    expect(priceChange.html).toContain("View official source");
+    expect(priceChange.text).toContain("Current three lowest prices");
+
+    const ranking = apiRankingChangeEmail({
+      locale: "en",
+      subject: "Model A is now cheaper!",
+      tables: [
+        {
+          metric: "input",
+          label: "Input",
+          rows: [
+            {
+              rank: 1,
+              providerName: "Provider",
+              modelName: "Model A",
+              displayPrice: "$1",
+              priceCny: 7,
+              previousRank: null,
+              previousDisplayPrice: null,
+              rankDelta: null,
+              priceDirection: "increase",
+              isNew: true,
+            },
+          ],
+        },
+      ],
+      removed: [
+        {
+          metricLabel: "Output",
+          providerName: "Provider",
+          modelName: "Model B",
+          previousRank: 4,
+          previousDisplayPrice: "$2",
+        },
+      ],
+      viewUrl: "https://example.com/en/api-pricing",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(ranking.html).toContain("API price ranking update");
+    expect(ranking.html).toContain("Removed from ranking");
+    expect(ranking.text).toContain("View full ranking");
+
+    const digest = modelCatalogDigestEmail({
+      locale: "en",
+      models: [],
+      catalogVersion: "version",
+      viewUrl: "https://example.com/en/api-pricing",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(digest.subject).toContain("new models");
+    expect(digest.html).toContain('<html lang="en">');
+  });
 });

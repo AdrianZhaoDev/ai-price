@@ -1,4 +1,7 @@
+import type { Locale } from "@/lib/i18n";
+
 type SubscriptionCreatedTemplateInput = {
+  locale?: Locale;
   scopeLabel: string;
   viewUrl: string;
   ctaLabel: string;
@@ -9,6 +12,7 @@ type SubscriptionCreatedTemplateInput = {
 };
 
 type PriceChangeTemplateInput = {
+  locale?: Locale;
   scopeLabel: string;
   changes: Array<{
     region: string;
@@ -48,6 +52,7 @@ export type ApiRankingEmailTable = {
 };
 
 type ApiRankingChangeTemplateInput = {
+  locale?: Locale;
   subject: string;
   tables: ApiRankingEmailTable[];
   removed?: Array<{
@@ -70,6 +75,7 @@ type AdminAlertTemplateInput = {
 };
 
 type ModelCatalogDigestTemplateInput = {
+  locale?: Locale;
   models: Array<{
     name: string;
     labName: string;
@@ -81,16 +87,16 @@ type ModelCatalogDigestTemplateInput = {
   unsubscribeUrl: string;
 };
 
-function shell(content: string): string {
+function shell(content: string, locale: Locale = "zh-CN"): string {
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${locale}">
   <body style="margin:0;background:#f6f5f2;color:#1d1d1f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:40px 20px;">
       <div style="font-size:15px;font-weight:700;margin-bottom:22px;">Low Price Radar</div>
       <div style="background:#fff;border:1px solid rgba(60,60,67,.14);border-radius:22px;padding:28px;">
         ${content}
       </div>
-      <p style="margin:18px 4px 0;color:#6e6e73;font-size:11px;line-height:1.6;">价格仅供参考，实际价格以官方页面为准。</p>
+      <p style="margin:18px 4px 0;color:#6e6e73;font-size:11px;line-height:1.6;">${locale === "en" ? "Prices are for reference only; the official page remains authoritative." : "价格仅供参考，实际价格以官方页面为准。"}</p>
     </div>
   </body>
 </html>`;
@@ -124,12 +130,15 @@ function safeHttpUrl(value: string): string {
 }
 
 export function subscriptionCreatedEmail({
+  locale = "zh-CN",
   scopeLabel,
   viewUrl,
   ctaLabel,
   unsubscribeUrl,
-  eyebrow = "价格关注已生效",
-  description = "订阅已经成功。之后仅在价格或套餐发生变化时通知你，无需再点击确认。",
+  eyebrow = locale === "en" ? "Price alerts are active" : "价格关注已生效",
+  description = locale === "en"
+    ? "Your subscription is active. We will notify you only when the price or plan changes; no further confirmation is needed."
+    : "订阅已经成功。之后仅在价格或套餐发生变化时通知你，无需再点击确认。",
   subject,
 }: SubscriptionCreatedTemplateInput) {
   const safeScopeLabel = escapeHtml(scopeLabel);
@@ -138,22 +147,33 @@ export function subscriptionCreatedEmail({
   const safeCtaLabel = escapeHtml(ctaLabel);
   const safeUnsubscribeUrl = safeHttpUrl(unsubscribeUrl);
   const safeUnsubscribeTextUrl = safeHttpTextUrl(unsubscribeUrl);
-  const html = shell(`
+  const html = shell(
+    `
     <p style="margin:0;color:#0066cc;font-size:12px;font-weight:700;">${escapeHtml(eyebrow)}</p>
-    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">已关注 ${safeScopeLabel}</h1>
+    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${locale === "en" ? "Following" : "已关注"} ${safeScopeLabel}</h1>
     <p style="margin:0;color:#5f5f65;font-size:14px;line-height:1.7;">${escapeHtml(description)}</p>
     <p style="margin:24px 0 0;"><a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${safeCtaLabel}</a></p>
-    <p style="margin:22px 0 0;color:#85858c;font-size:11px;line-height:1.6;">不再需要这项通知？<a href="${safeUnsubscribeUrl}" style="color:#0066cc;">取消订阅</a></p>
-  `);
+    <p style="margin:22px 0 0;color:#85858c;font-size:11px;line-height:1.6;">${locale === "en" ? "No longer need this alert?" : "不再需要这项通知？"} <a href="${safeUnsubscribeUrl}" style="color:#0066cc;">${locale === "en" ? "Unsubscribe" : "取消订阅"}</a></p>
+  `,
+    locale,
+  );
 
   return {
-    subject: subject ?? `已订阅成功｜看看 ${scopeLabel} 的当前价格`,
+    subject:
+      subject ??
+      (locale === "en"
+        ? `Subscribed | View the current ${scopeLabel} price`
+        : `已订阅成功｜看看 ${scopeLabel} 的当前价格`),
     html,
-    text: `您已成功关注 ${scopeLabel}。${description}\n\n${ctaLabel}：${safeViewTextUrl}\n取消订阅：${safeUnsubscribeTextUrl}`,
+    text:
+      locale === "en"
+        ? `You are now following ${scopeLabel}. ${description}\n\n${ctaLabel}: ${safeViewTextUrl}\nUnsubscribe: ${safeUnsubscribeTextUrl}`
+        : `您已成功关注 ${scopeLabel}。${description}\n\n${ctaLabel}：${safeViewTextUrl}\n取消订阅：${safeUnsubscribeTextUrl}`,
   };
 }
 
 export function priceChangeEmail({
+  locale = "zh-CN",
   scopeLabel,
   changes,
   topThree,
@@ -203,21 +223,30 @@ export function priceChangeEmail({
       (a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0),
     )[0];
   const subject = primaryDecrease
-    ? `${scopeLabel} 更便宜了！`
+    ? locale === "en"
+      ? `${scopeLabel} is now cheaper!`
+      : `${scopeLabel} 更便宜了！`
     : primaryIncrease
-      ? `${scopeLabel} 涨价了！`
-      : `${scopeLabel} 价格有变化`;
-  const html = shell(`
-    <p style="margin:0;color:#13a75b;font-size:12px;font-weight:700;">最低人民币价格发生变化</p>
+      ? locale === "en"
+        ? `${scopeLabel} price increased!`
+        : `${scopeLabel} 涨价了！`
+      : locale === "en"
+        ? `${scopeLabel} price changed`
+        : `${scopeLabel} 价格有变化`;
+  const html = shell(
+    `
+    <p style="margin:0;color:#13a75b;font-size:12px;font-weight:700;">${locale === "en" ? "The lowest CNY reference changed" : "最低人民币价格发生变化"}</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${safeScopeLabel}</h1>
-    <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">以下变动影响了当前或上一轮人民币最低三档。</p>
+    <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">${locale === "en" ? "These changes affected the current or previous three lowest CNY references." : "以下变动影响了当前或上一轮人民币最低三档。"}</p>
     <table style="width:100%;border-collapse:collapse;border-bottom:1px solid #e5e5e7;">${changeRows}</table>
-    <p style="margin:22px 0 6px;color:#85858c;font-size:12px;font-weight:700;">当前最低三档</p>
+    <p style="margin:22px 0 6px;color:#85858c;font-size:12px;font-weight:700;">${locale === "en" ? "Current three lowest prices" : "当前最低三档"}</p>
     <table style="width:100%;border-collapse:collapse;margin-bottom:22px;">${topRows}</table>
     <a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${safeCtaLabel}</a>
-    ${topThree[0]?.sourceUrl ? `<p style="margin:14px 0 0;font-size:11px;"><a href="${safeHttpUrl(topThree[0].sourceUrl)}" style="color:#5f5f65;">查看官方来源</a></p>` : ""}
-    <p style="margin:22px 0 0;color:#85858c;font-size:11px;"><a href="${safeUnsubscribeUrl}" style="color:#0066cc;">退订此价格通知</a></p>
-  `);
+    ${topThree[0]?.sourceUrl ? `<p style="margin:14px 0 0;font-size:11px;"><a href="${safeHttpUrl(topThree[0].sourceUrl)}" style="color:#5f5f65;">${locale === "en" ? "View official source" : "查看官方来源"}</a></p>` : ""}
+    <p style="margin:22px 0 0;color:#85858c;font-size:11px;"><a href="${safeUnsubscribeUrl}" style="color:#0066cc;">${locale === "en" ? "Unsubscribe from this price alert" : "退订此价格通知"}</a></p>
+  `,
+    locale,
+  );
   const changeText = changes
     .map(
       (change) =>
@@ -234,11 +263,15 @@ export function priceChangeEmail({
   return {
     subject,
     html,
-    text: `${scopeLabel}\n\n价格变动：\n${changeText}\n\n当前最低三档：\n${rankText}\n\n${ctaLabel}：${safeViewTextUrl}\n官方来源：${topThree[0]?.sourceUrl ? safeHttpTextUrl(topThree[0].sourceUrl) : ""}\n退订：${safeUnsubscribeTextUrl}`,
+    text:
+      locale === "en"
+        ? `${scopeLabel}\n\nPrice changes:\n${changeText}\n\nCurrent three lowest prices:\n${rankText}\n\n${ctaLabel}: ${safeViewTextUrl}\nOfficial source: ${topThree[0]?.sourceUrl ? safeHttpTextUrl(topThree[0].sourceUrl) : ""}\nUnsubscribe: ${safeUnsubscribeTextUrl}`
+        : `${scopeLabel}\n\n价格变动：\n${changeText}\n\n当前最低三档：\n${rankText}\n\n${ctaLabel}：${safeViewTextUrl}\n官方来源：${topThree[0]?.sourceUrl ? safeHttpTextUrl(topThree[0].sourceUrl) : ""}\n退订：${safeUnsubscribeTextUrl}`,
   };
 }
 
 export function apiRankingChangeEmail({
+  locale = "zh-CN",
   subject,
   tables,
   removed = [],
@@ -254,7 +287,9 @@ export function apiRankingChangeEmail({
       const rows = table.rows
         .map((row) => {
           const rankBadge = row.isNew
-            ? "新"
+            ? locale === "en"
+              ? "New"
+              : "新"
             : row.rankDelta && row.rankDelta > 0
               ? `↑${row.rankDelta}`
               : row.rankDelta && row.rankDelta < 0
@@ -262,9 +297,13 @@ export function apiRankingChangeEmail({
                 : "";
           const priceBadge =
             row.priceDirection === "decrease"
-              ? "降价"
+              ? locale === "en"
+                ? "Lower"
+                : "降价"
               : row.priceDirection === "increase"
-                ? "涨价"
+                ? locale === "en"
+                  ? "Higher"
+                  : "涨价"
                 : "";
           return `<tr>
             <td style="padding:9px 0;width:36px;color:#0066cc;font-size:12px;font-weight:800;">#${row.rank}</td>
@@ -284,14 +323,22 @@ export function apiRankingChangeEmail({
         `${table.label}\n${table.rows
           .map((row) => {
             const movement = row.isNew
-              ? "新上榜"
+              ? locale === "en"
+                ? "New entry"
+                : "新上榜"
               : row.rankDelta
-                ? `${row.rankDelta > 0 ? "上升" : "下降"}${Math.abs(row.rankDelta)}名`
+                ? locale === "en"
+                  ? `${row.rankDelta > 0 ? "Up" : "Down"} ${Math.abs(row.rankDelta)}`
+                  : `${row.rankDelta > 0 ? "上升" : "下降"}${Math.abs(row.rankDelta)}名`
                 : "";
             const priceChange = row.priceDirection
               ? row.priceDirection === "decrease"
-                ? "降价"
-                : "涨价"
+                ? locale === "en"
+                  ? "Lower price"
+                  : "降价"
+                : locale === "en"
+                  ? "Higher price"
+                  : "涨价"
               : "";
             return `#${row.rank} ${row.providerName} · ${row.modelName} ¥${row.priceCny.toFixed(2)} ${[movement, priceChange].filter(Boolean).join(" / ")}`;
           })
@@ -299,40 +346,47 @@ export function apiRankingChangeEmail({
     )
     .join("\n\n");
   const removedHtml = removed.length
-    ? `<p style="margin:22px 0 5px;color:#85858c;font-size:12px;font-weight:800;">移出榜单</p>
+    ? `<p style="margin:22px 0 5px;color:#85858c;font-size:12px;font-weight:800;">${locale === "en" ? "Removed from ranking" : "移出榜单"}</p>
       <ul style="margin:0;padding:12px 12px 12px 28px;border-top:1px solid #ececef;color:#5f5f65;font-size:12px;line-height:1.7;">${removed
         .map(
           (row) =>
-            `<li>${escapeHtml(row.metricLabel)} · <strong>${escapeHtml(row.modelName)}</strong>（${escapeHtml(row.providerName)}）${row.previousRank === null ? "" : `，原第 ${row.previousRank} 名`}${row.previousDisplayPrice ? `，原价 ${escapeHtml(row.previousDisplayPrice)}` : ""}</li>`,
+            `<li>${escapeHtml(row.metricLabel)} · <strong>${escapeHtml(row.modelName)}</strong> (${escapeHtml(row.providerName)})${row.previousRank === null ? "" : locale === "en" ? `, previously #${row.previousRank}` : `，原第 ${row.previousRank} 名`}${row.previousDisplayPrice ? (locale === "en" ? `, previous price ${escapeHtml(row.previousDisplayPrice)}` : `，原价 ${escapeHtml(row.previousDisplayPrice)}`) : ""}</li>`,
         )
         .join("")}</ul>`
     : "";
   const removedText = removed.length
-    ? `\n\n移出榜单\n${removed
+    ? `\n\n${locale === "en" ? "Removed from ranking" : "移出榜单"}\n${removed
         .map(
           (row) =>
-            `${row.metricLabel} · ${row.providerName} · ${row.modelName}${row.previousRank === null ? "" : `（原第 ${row.previousRank} 名）`}${row.previousDisplayPrice ? ` ${row.previousDisplayPrice}` : ""}`,
+            `${row.metricLabel} · ${row.providerName} · ${row.modelName}${row.previousRank === null ? "" : locale === "en" ? ` (previously #${row.previousRank})` : `（原第 ${row.previousRank} 名）`}${row.previousDisplayPrice ? ` ${row.previousDisplayPrice}` : ""}`,
         )
         .join("\n")}`
     : "";
-  const html = shell(`
-    <p style="margin:0;color:#0f9f5f;font-size:12px;font-weight:800;">API 价格排行榜更新</p>
+  const html = shell(
+    `
+    <p style="margin:0;color:#0f9f5f;font-size:12px;font-weight:800;">${locale === "en" ? "API price ranking update" : "API 价格排行榜更新"}</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${escapeHtml(subject)}</h1>
-    <p style="margin:0;color:#5f5f65;font-size:13px;line-height:1.6;">三个榜单的当前前三与值得关注的变化都在这里。</p>
+    <p style="margin:0;color:#5f5f65;font-size:13px;line-height:1.6;">${locale === "en" ? "Here are the current top three entries and notable changes across all three rankings." : "三个榜单的当前前三与值得关注的变化都在这里。"}</p>
     ${tableHtml}
     ${removedHtml}
-    <p style="margin:24px 0 0;"><a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看完整榜单</a></p>
-    <p style="margin:22px 0 0;color:#85858c;font-size:11px;"><a href="${safeUnsubscribeUrl}" style="color:#0066cc;">退订排行榜通知</a></p>
-  `);
+    <p style="margin:24px 0 0;"><a href="${safeViewUrl}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${locale === "en" ? "View full ranking" : "查看完整榜单"}</a></p>
+    <p style="margin:22px 0 0;color:#85858c;font-size:11px;"><a href="${safeUnsubscribeUrl}" style="color:#0066cc;">${locale === "en" ? "Unsubscribe from ranking alerts" : "退订排行榜通知"}</a></p>
+  `,
+    locale,
+  );
 
   return {
     subject,
     html,
-    text: `${subject}\n\n${textTables}${removedText}\n\n查看完整榜单：${safeViewTextUrl}\n退订：${safeUnsubscribeTextUrl}`,
+    text:
+      locale === "en"
+        ? `${subject}\n\n${textTables}${removedText}\n\nView full ranking: ${safeViewTextUrl}\nUnsubscribe: ${safeUnsubscribeTextUrl}`
+        : `${subject}\n\n${textTables}${removedText}\n\n查看完整榜单：${safeViewTextUrl}\n退订：${safeUnsubscribeTextUrl}`,
   };
 }
 
 export function modelCatalogDigestEmail({
+  locale = "zh-CN",
   models,
   catalogVersion,
   viewUrl,
@@ -345,19 +399,28 @@ export function modelCatalogDigestEmail({
       </tr>`,
     )
     .join("");
-  const html = shell(`
-    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">API 价格排行榜更新</p>
-    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">发现 ${models.length} 个新模型</h1>
-    <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">以下 canonical model 首次出现在最新目录中。</p>
+  const html = shell(
+    `
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">${locale === "en" ? "API price ranking update" : "API 价格排行榜更新"}</p>
+    <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${locale === "en" ? `${models.length} new model${models.length === 1 ? "" : "s"} found` : `发现 ${models.length} 个新模型`}</h1>
+    <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">${locale === "en" ? "These canonical models appeared in the latest catalog for the first time." : "以下 canonical model 首次出现在最新目录中。"}</p>
     <table style="width:100%;border-collapse:collapse;">${rows}</table>
-    <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">查看 API 价格排行榜</a></p>
-    <p style="margin:18px 0 0;color:#85858c;font-size:10px;">目录版本 ${escapeHtml(catalogVersion.slice(0, 12))}</p>
-    <p style="margin:12px 0 0;color:#85858c;font-size:11px;"><a href="${safeHttpUrl(unsubscribeUrl)}" style="color:#0066cc;">退订新模型通知</a></p>
-  `);
+    <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${locale === "en" ? "View API price ranking" : "查看 API 价格排行榜"}</a></p>
+    <p style="margin:18px 0 0;color:#85858c;font-size:10px;">${locale === "en" ? "Catalog version" : "目录版本"} ${escapeHtml(catalogVersion.slice(0, 12))}</p>
+    <p style="margin:12px 0 0;color:#85858c;font-size:11px;"><a href="${safeHttpUrl(unsubscribeUrl)}" style="color:#0066cc;">${locale === "en" ? "Unsubscribe from new model alerts" : "退订新模型通知"}</a></p>
+  `,
+    locale,
+  );
   return {
-    subject: `API 价格排行榜新增 ${models.length} 个模型`,
+    subject:
+      locale === "en"
+        ? `${models.length} new model${models.length === 1 ? "" : "s"} in the API price ranking`
+        : `API 价格排行榜新增 ${models.length} 个模型`,
     html,
-    text: `API 价格排行榜新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n排行榜：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
+    text:
+      locale === "en"
+        ? `${models.length} new model${models.length === 1 ? "" : "s"} in the API price ranking\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\nRanking: ${safeHttpTextUrl(viewUrl)}\nVersion: ${catalogVersion}\nUnsubscribe: ${safeHttpTextUrl(unsubscribeUrl)}`
+        : `API 价格排行榜新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n排行榜：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
   };
 }
 

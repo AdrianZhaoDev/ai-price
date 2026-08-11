@@ -29,6 +29,8 @@ import {
   API_RANKING_PLAN_SLUG,
   API_RANKING_PROVIDER_SLUG,
 } from "@/lib/subscriptions/scopes";
+import type { Locale } from "@/lib/i18n";
+import { formatRegionName } from "@/lib/pricing/format";
 
 function applicationUrl(): string {
   return (
@@ -44,11 +46,11 @@ function applicationUrl(): string {
 }
 
 export function groupEmailRecipients<
-  T extends { email: string; subscriptionId: string },
+  T extends { email: string; subscriptionId: string; locale: Locale },
 >(recipients: T[]): Array<T & { subscriptionIds: string[] }> {
   const grouped = new Map<string, T & { subscriptionIds: string[] }>();
   for (const recipient of recipients) {
-    const normalized = recipient.email.trim().toLowerCase();
+    const normalized = `${recipient.email.trim().toLowerCase()}:${recipient.locale}`;
     const existing = grouped.get(normalized);
     if (existing) {
       if (!existing.subscriptionIds.includes(recipient.subscriptionId)) {
@@ -74,21 +76,28 @@ export async function notifyPriceChangeDigest(
   const provider = providerCatalog.find(
     (candidate) => candidate.id === digest.providerSlug,
   );
-  const viewUrl = new URL(
-    modeHref(provider?.mode ?? "global"),
-    appUrl,
-  ).toString();
-  const ctaLabel =
-    provider?.mode === "api"
-      ? "查看当前模型排第几？"
-      : provider?.mode === "china-subscription"
-        ? "看看还有更便宜的订阅吗？"
-        : "查看还有更便宜的地区吗？";
   let sent = 0;
   let failed = 0;
 
   for (const recipient of recipients) {
-    const dedupeKey = `price-change:${digest.runId}:${digest.providerSlug}:${digest.planSlug}:${hashEmail(recipient.email)}`;
+    const viewUrl = new URL(
+      modeHref(provider?.mode ?? "global", recipient.locale),
+      appUrl,
+    );
+    viewUrl.searchParams.set("locale", recipient.locale);
+    const ctaLabel =
+      provider?.mode === "api"
+        ? recipient.locale === "en"
+          ? "See the model's current rank"
+          : "查看当前模型排第几？"
+        : provider?.mode === "china-subscription"
+          ? recipient.locale === "en"
+            ? "Compare lower-priced subscriptions"
+            : "看看还有更便宜的订阅吗？"
+          : recipient.locale === "en"
+            ? "Compare lower-priced regions"
+            : "查看还有更便宜的地区吗？";
+    const dedupeKey = `price-change:${digest.runId}:${digest.providerSlug}:${digest.planSlug}:${hashEmail(recipient.email)}${recipient.locale === "en" ? ":en" : ""}`;
     const deliveryId = await reserveEmailDelivery({
       type: "price_change",
       recipient: recipient.email,
@@ -106,18 +115,35 @@ export async function notifyPriceChangeDigest(
       );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
+      unsubscribeUrl.searchParams.set("locale", recipient.locale);
       const message = priceChangeEmail({
+        locale: recipient.locale,
         scopeLabel: digest.planName,
         changes: digest.changes.map((change) => ({
-          region: change.region,
+          region: formatRegionName(
+            {
+              regionCode: change.storefront ?? undefined,
+              regionName: change.region,
+            },
+            recipient.locale,
+          ),
           previousPrice: change.previousPrice,
           currentPrice: change.currentPrice,
           previousCny: change.previousCny,
           currentCny: change.currentCny,
           changePercent: change.changePercent,
         })),
-        topThree: digest.topThree,
-        viewUrl,
+        topThree: digest.topThree.map((price) => ({
+          ...price,
+          region: formatRegionName(
+            {
+              regionCode: price.storefront ?? undefined,
+              regionName: price.region,
+            },
+            recipient.locale,
+          ),
+        })),
+        viewUrl: viewUrl.toString(),
         ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
       });
@@ -149,7 +175,10 @@ export async function notifyPriceChangeDigest(
   return sent;
 }
 
-function rankingSubject(result: ApiRankingHistoryResult): string {
+function rankingSubject(
+  result: ApiRankingHistoryResult,
+  locale: Locale,
+): string {
   const withPrice = result.changes.filter(
     (change) =>
       change.currentPriceCny !== null &&
@@ -163,7 +192,10 @@ function rankingSubject(result: ApiRankingHistoryResult): string {
         (b.previousPriceCny! - b.currentPriceCny!) / b.previousPriceCny! -
         (a.previousPriceCny! - a.currentPriceCny!) / a.previousPriceCny!,
     );
-  if (decreases[0]) return `${decreases[0].modelName} 更便宜了！`;
+  if (decreases[0])
+    return locale === "en"
+      ? `${decreases[0].modelName} is now cheaper!`
+      : `${decreases[0].modelName} 更便宜了！`;
   const increases = withPrice
     .filter((change) => change.currentPriceCny! > change.previousPriceCny!)
     .sort(
@@ -171,11 +203,17 @@ function rankingSubject(result: ApiRankingHistoryResult): string {
         (b.currentPriceCny! - b.previousPriceCny!) / b.previousPriceCny! -
         (a.currentPriceCny! - a.previousPriceCny!) / a.previousPriceCny!,
     );
-  if (increases[0]) return `${increases[0].modelName} 涨价了！`;
+  if (increases[0])
+    return locale === "en"
+      ? `${increases[0].modelName} price increased!`
+      : `${increases[0].modelName} 涨价了！`;
   const newcomer = result.changes.find(
     (change) => change.previousRank === null && change.currentRank !== null,
   );
-  if (newcomer) return `${newcomer.modelName} 新上榜了！`;
+  if (newcomer)
+    return locale === "en"
+      ? `${newcomer.modelName} entered the ranking!`
+      : `${newcomer.modelName} 新上榜了！`;
   const climber = result.changes
     .filter(
       (change) =>
@@ -188,17 +226,22 @@ function rankingSubject(result: ApiRankingHistoryResult): string {
         b.previousRank! - b.currentRank! - (a.previousRank! - a.currentRank!),
     )[0];
   return climber
-    ? `${climber.modelName} 排名上升了！`
-    : "API 价格排行榜有新变化";
+    ? locale === "en"
+      ? `${climber.modelName} moved up the ranking!`
+      : `${climber.modelName} 排名上升了！`
+    : locale === "en"
+      ? "The API price ranking has changed"
+      : "API 价格排行榜有新变化";
 }
 
 function rankingEmailTables(
   result: ApiRankingHistoryResult,
+  locale: Locale,
 ): ApiRankingEmailTable[] {
   const labels = {
-    cached_input: "缓存输入",
-    input: "非缓存输入",
-    output: "输出",
+    cached_input: locale === "en" ? "Cached input" : "缓存输入",
+    input: locale === "en" ? "Input" : "非缓存输入",
+    output: locale === "en" ? "Output" : "输出",
   } as const;
   const changeByIdentity = new Map(
     result.changes.map((change) => [
@@ -271,28 +314,32 @@ export async function notifyApiRankingChanges(
     ),
   );
   const appUrl = applicationUrl();
-  const viewUrl = new URL("/api-pricing#api-ranking", appUrl).toString();
-  const subject = rankingSubject(result);
-  const tables = rankingEmailTables(result);
-  const metricLabels = {
-    cached_input: "缓存输入",
-    input: "非缓存输入",
-    output: "输出",
-  } as const;
-  const removed = result.changes
-    .filter((change) => change.currentRank === null)
-    .map((change) => ({
-      metricLabel: metricLabels[change.metric],
-      providerName: change.providerName,
-      modelName: change.modelName,
-      previousRank: change.previousRank,
-      previousDisplayPrice: change.previousDisplayPrice,
-    }));
   let sent = 0;
   let failed = 0;
 
   for (const recipient of recipients) {
-    const dedupeKey = `api-ranking:${runId}:${hashEmail(recipient.email)}`;
+    const viewUrl = new URL(
+      modeHref("api", recipient.locale) + "#api-ranking",
+      appUrl,
+    );
+    viewUrl.searchParams.set("locale", recipient.locale);
+    const subject = rankingSubject(result, recipient.locale);
+    const tables = rankingEmailTables(result, recipient.locale);
+    const metricLabels = {
+      cached_input: recipient.locale === "en" ? "Cached input" : "缓存输入",
+      input: recipient.locale === "en" ? "Input" : "非缓存输入",
+      output: recipient.locale === "en" ? "Output" : "输出",
+    } as const;
+    const removed = result.changes
+      .filter((change) => change.currentRank === null)
+      .map((change) => ({
+        metricLabel: metricLabels[change.metric],
+        providerName: change.providerName,
+        modelName: change.modelName,
+        previousRank: change.previousRank,
+        previousDisplayPrice: change.previousDisplayPrice,
+      }));
+    const dedupeKey = `api-ranking:${runId}:${hashEmail(recipient.email)}${recipient.locale === "en" ? ":en" : ""}`;
     const deliveryId = await reserveEmailDelivery({
       type: "api_ranking_change",
       recipient: recipient.email,
@@ -309,11 +356,13 @@ export async function notifyApiRankingChanges(
       );
       const unsubscribeUrl = new URL("/api/subscriptions/unsubscribe", appUrl);
       unsubscribeUrl.searchParams.set("token", rawToken);
+      unsubscribeUrl.searchParams.set("locale", recipient.locale);
       const message = apiRankingChangeEmail({
+        locale: recipient.locale,
         subject,
         tables,
         removed,
-        viewUrl,
+        viewUrl: viewUrl.toString(),
         unsubscribeUrl: unsubscribeUrl.toString(),
       });
       const delivery = await getEmailTransport().sendMail({

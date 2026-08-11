@@ -4,7 +4,7 @@ import { Bell, ChevronDown, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { modes } from "@/lib/data/catalog";
+import { getMessages, type Locale } from "@/lib/i18n";
 import {
   DEFAULT_MODEL_CATALOG_FILTERS,
   filterAndSortModelCatalog,
@@ -15,8 +15,7 @@ import type {
   ModelCatalogFilters,
   ModelCatalogSummary,
 } from "@/lib/model-catalog/types";
-import { modeHref } from "@/lib/seo";
-import { ThemeToggle } from "./theme-toggle";
+import { SiteFooter, SiteHeader } from "./site-header";
 import { SubscriptionSheet } from "./subscription-sheet";
 
 type SortKey = NonNullable<ModelCatalogFilters["sort"]>;
@@ -37,12 +36,15 @@ function formatPrice(value?: number) {
 }
 
 export function ModelCatalogExplorer({
+  locale = "zh-CN",
   models,
   initialFilters,
 }: {
+  locale?: Locale;
   models: ModelCatalogSummary[];
   initialFilters: ModelCatalogFilters;
 }) {
+  const messages = getMessages(locale);
   const router = useRouter();
   const [filters, setFilters] = useState(initialFilters);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -111,7 +113,8 @@ export function ModelCatalogExplorer({
         : "desc";
     if (next.direction && next.direction !== defaultDirection)
       params.set("direction", next.direction);
-    return `/api-pricing${params.size ? `?${params}` : ""}`;
+    const prefix = locale === "en" ? "/en/api-pricing" : "/api-pricing";
+    return `${prefix}${params.size ? `?${params}` : ""}`;
   }
 
   function updateQuery(value: string | undefined) {
@@ -163,60 +166,37 @@ export function ModelCatalogExplorer({
 
   return (
     <div className="app-shell model-catalog-shell" data-hydrated="true">
-      <a className="skip-link" href="#main-content">
-        跳至主要内容
+      <a
+        className="skip-link"
+        href="#main-content"
+        aria-hidden={sheetOpen ? true : undefined}
+        tabIndex={sheetOpen ? -1 : undefined}
+      >
+        {messages.common.skipToContent}
       </a>
-      <header className="site-header">
-        <Link href="/" className="brand" aria-label="Low Price Radar 首页">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-            <span />
-          </span>
-          <span className="brand-copy">
-            <strong>Low Price Radar</strong>
-            <small>AI订阅全球比价</small>
-          </span>
-        </Link>
-        <nav className="desktop-nav" aria-label="价格模式">
-          {modes.map((mode) => (
-            <Link
-              key={mode.id}
-              href={modeHref(mode.id)}
-              className="nav-item pressable"
-              data-mode={mode.id}
-              aria-current={mode.id === "api" ? "page" : undefined}
-              aria-label={mode.shortLabel}
-            >
-              {mode.id === "api" ? "API 模型" : mode.shortLabel}
-              {mode.id === "api" ? (
-                <span className="nav-label-compact" aria-hidden="true">
-                  API 榜单
-                </span>
-              ) : null}
-              {mode.id === "api" ? (
-                <span className="nav-hot-badge" aria-hidden="true">
-                  Hot
-                </span>
-              ) : null}
-            </Link>
-          ))}
-        </nav>
-        <div className="header-actions">
-          <div className="sync-state" title="模型目录每 4 小时同步一次">
-            <span className="sync-dot" />每 4 小时
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
-      <main id="main-content" className="main-content model-catalog-main">
+      <SiteHeader
+        locale={locale}
+        activeMode="api"
+        showSync
+        syncLabel={messages.common.syncEveryFourHours}
+        syncTitle={messages.common.catalogSyncTitle}
+        ariaHidden={sheetOpen}
+      />
+      <main
+        id="main-content"
+        className="main-content model-catalog-main"
+        aria-hidden={sheetOpen ? true : undefined}
+      >
         <section
           className="model-catalog-heading"
           aria-labelledby="model-catalog-title"
         >
           <div>
             <p className="eyebrow">MODELS.DEV CATALOG</p>
-            <h1 id="model-catalog-title">API 价格排行榜</h1>
-            <p>比较模型规格与所有有效 provider 中的最低输入、输出价格。</p>
+            <h1 id="model-catalog-title">
+              {locale === "en" ? "API price ranking" : "API 价格排行榜"}
+            </h1>
+            <p>{messages.apiCatalog.description}</p>
           </div>
           <button
             type="button"
@@ -224,21 +204,24 @@ export function ModelCatalogExplorer({
             onClick={() => setSheetOpen(true)}
           >
             <Bell size={16} />
-            订阅新模型
+            {messages.apiCatalog.subscribeNewModel}
           </button>
         </section>
-        <section className="model-filter-bar" aria-label="模型筛选">
+        <section
+          className="model-filter-bar"
+          aria-label={messages.apiCatalog.filterLabel}
+        >
           <label className="model-search">
-            <span>Model</span>
+            <span>{messages.apiCatalog.searchLabel}</span>
             <input
               type="search"
               value={filters.query ?? ""}
               onChange={(event) => updateQuery(event.target.value || undefined)}
-              placeholder="搜索名称或 ID"
+              placeholder={messages.apiCatalog.searchPlaceholder}
             />
           </label>
           <label>
-            <span>Lab</span>
+            <span>{messages.apiCatalog.labs}</span>
             <select
               value={filters.labs?.[0] ?? ""}
               onChange={(event) =>
@@ -248,7 +231,7 @@ export function ModelCatalogExplorer({
                 )
               }
             >
-              <option value="">全部 Labs</option>
+              <option value="">{messages.apiCatalog.allLabs}</option>
               {labs.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -257,7 +240,7 @@ export function ModelCatalogExplorer({
             </select>
           </label>
           <label>
-            <span>Provider</span>
+            <span>{messages.apiCatalog.providers}</span>
             <select
               value={filters.providers?.[0] ?? ""}
               onChange={(event) =>
@@ -267,7 +250,7 @@ export function ModelCatalogExplorer({
                 )
               }
             >
-              <option value="">全部 Providers</option>
+              <option value="">{messages.apiCatalog.allProviders}</option>
               {providers.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -283,7 +266,7 @@ export function ModelCatalogExplorer({
                 update("hideZeroPrice", event.target.checked)
               }
             />
-            <span>不显示 0 价格</span>
+            <span>{messages.apiCatalog.hideZeroPrices}</span>
           </label>
           <button
             type="button"
@@ -292,12 +275,12 @@ export function ModelCatalogExplorer({
             onClick={() => setMoreOpen((open) => !open)}
           >
             <ChevronDown size={16} />
-            更多筛选{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+            {messages.apiCatalog.moreFilters(activeFilterCount)}
           </button>
           {moreOpen ? (
             <div className="model-filter-more">
               <label>
-                <span>Context 最小值</span>
+                <span>{messages.apiCatalog.contextMinimum}</span>
                 <input
                   type="number"
                   min="0"
@@ -311,7 +294,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Output 最小值</span>
+                <span>{messages.apiCatalog.outputMinimum}</span>
                 <input
                   type="number"
                   min="0"
@@ -322,7 +305,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Input modality</span>
+                <span>{messages.apiCatalog.inputModality}</span>
                 <select
                   value={filters.inputModalities?.[0] ?? ""}
                   onChange={(event) =>
@@ -332,14 +315,14 @@ export function ModelCatalogExplorer({
                     )
                   }
                 >
-                  <option value="">全部模态</option>
+                  <option value="">{messages.apiCatalog.allModalities}</option>
                   {modalities.map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>输入最高价</span>
+                <span>{messages.apiCatalog.inputMaximumPrice}</span>
                 <input
                   type="number"
                   min="0"
@@ -354,7 +337,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>输出最高价</span>
+                <span>{messages.apiCatalog.outputMaximumPrice}</span>
                 <input
                   type="number"
                   min="0"
@@ -369,7 +352,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Release 起</span>
+                <span>{messages.apiCatalog.releaseFrom}</span>
                 <input
                   type="date"
                   value={filters.releaseFrom ?? ""}
@@ -379,7 +362,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Release 止</span>
+                <span>{messages.apiCatalog.releaseTo}</span>
                 <input
                   type="date"
                   value={filters.releaseTo ?? ""}
@@ -389,7 +372,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Updated 起</span>
+                <span>{messages.apiCatalog.updatedFrom}</span>
                 <input
                   type="date"
                   value={filters.updatedFrom ?? ""}
@@ -399,7 +382,7 @@ export function ModelCatalogExplorer({
                 />
               </label>
               <label>
-                <span>Updated 止</span>
+                <span>{messages.apiCatalog.updatedTo}</span>
                 <input
                   type="date"
                   value={filters.updatedTo ?? ""}
@@ -413,7 +396,7 @@ export function ModelCatalogExplorer({
         </section>
         <div className="model-results">
           <span>
-            {visible.length} / {models.length} 个模型
+            {messages.apiCatalog.resultCount(visible.length, models.length)}
           </span>
           {activeFilterCount > 0 ? (
             <button
@@ -422,39 +405,41 @@ export function ModelCatalogExplorer({
               onClick={() => commit(DEFAULT_MODEL_CATALOG_FILTERS)}
             >
               <RotateCcw size={14} />
-              清除筛选
+              {messages.apiCatalog.clearFilters}
             </button>
           ) : null}
           <span className="model-source-note">
-            价格：USD / 百万 tokens · 来源 models.dev
+            {messages.apiCatalog.sourceNote}
           </span>
         </div>
         <div
           className="model-table-scroll"
           tabIndex={0}
-          aria-label="API 模型排行榜，可横向滚动"
+          aria-label={messages.apiCatalog.scrollLabel}
         >
           <table className="model-catalog-table">
             <caption className="sr-only">
-              API 价格排行榜：模型规格、最低输入与输出价格
+              {messages.apiCatalog.title}: {messages.apiCatalog.columns.context}
+              , {messages.apiCatalog.columns.input} &{" "}
+              {messages.apiCatalog.columns.output}
             </caption>
             <thead>
               <tr>
                 {(
                   [
-                    ["model", "Model"],
-                    ["lab", "Lab"],
-                    ["context", "Context"],
-                    ["output", "Output"],
-                    ["input", "Input"],
+                    ["model", messages.apiCatalog.columns.model],
+                    ["lab", messages.apiCatalog.columns.lab],
+                    ["context", messages.apiCatalog.columns.context],
+                    ["output", messages.apiCatalog.columns.output],
+                    ["input", messages.apiCatalog.columns.input],
                     [
                       filters.sort === "price_output"
                         ? "price_output"
                         : "price_input",
-                      "Price",
+                      messages.apiCatalog.columns.price,
                     ],
-                    ["release", "Release"],
-                    ["updated", "Updated"],
+                    ["release", messages.apiCatalog.columns.release],
+                    ["updated", messages.apiCatalog.columns.updated],
                   ] as Array<[SortKey, string]>
                 ).map(([key, label]) => (
                   <th
@@ -471,7 +456,7 @@ export function ModelCatalogExplorer({
                     <button
                       type="button"
                       onClick={() => sortBy(key)}
-                      aria-label={`按 ${label} 排序`}
+                      aria-label={messages.apiCatalog.sortBy(label)}
                     >
                       {label}
                       <span aria-hidden="true">
@@ -482,7 +467,7 @@ export function ModelCatalogExplorer({
                           : ""}
                       </span>
                     </button>
-                    {label === "Price" ? (
+                    {key === "price_input" || key === "price_output" ? (
                       <button
                         type="button"
                         className="price-sort-toggle"
@@ -494,7 +479,9 @@ export function ModelCatalogExplorer({
                           )
                         }
                       >
-                        {filters.sort === "price_output" ? "按输出" : "按输入"}
+                        {filters.sort === "price_output"
+                          ? messages.apiCatalog.sortByOutput
+                          : messages.apiCatalog.sortByInput}
                       </button>
                     ) : null}
                   </th>
@@ -506,14 +493,16 @@ export function ModelCatalogExplorer({
                 <tr key={model.id}>
                   <th scope="row">
                     <Link
-                      href={modelDetailPath(model.id)}
+                      href={modelDetailPath(model.id, locale)}
                       target="_blank"
                       rel="noopener"
-                      title="在新页签打开模型详情"
+                      title={messages.apiCatalog.openDetailsNewTab}
                     >
                       <strong>{model.name}</strong>
                       <small>{model.id}</small>
-                      <span className="sr-only">（在新页签打开详情）</span>
+                      <span className="sr-only">
+                        {messages.apiCatalog.detailsNewTabSr}
+                      </span>
                     </Link>
                   </th>
                   <td>{model.labName}</td>
@@ -542,35 +531,25 @@ export function ModelCatalogExplorer({
           </table>
           {visible.length === 0 ? (
             <div className="model-empty">
-              <strong>没有符合条件的模型</strong>
-              <p>尝试放宽价格、日期或规格筛选。</p>
+              <strong>{messages.apiCatalog.noModels}</strong>
+              <p>{messages.apiCatalog.widenFilters}</p>
             </div>
           ) : null}
         </div>
       </main>
-      <footer className="site-footer">
-        <div>
-          <strong>Low Price Radar</strong>
-          <p>API 模型规格与社区聚合价格排行榜。</p>
-        </div>
-        <div className="footer-links">
-          <Link href="/methodology">采集方法</Link>
-          <Link href="/privacy">隐私</Link>
-          <a
-            href="https://github.com/anomalyco/models.dev"
-            target="_blank"
-            rel="noreferrer"
-          >
-            models.dev 来源
-          </a>
-        </div>
-      </footer>
+      <SiteFooter
+        locale={locale}
+        description={messages.apiCatalog.footerDescription}
+        includeModelSource
+        ariaHidden={sheetOpen}
+      />
       <SubscriptionSheet
         open={sheetOpen}
-        scopeLabel="API 新模型"
+        scopeLabel={messages.apiCatalog.newModelScope}
         providerId="api-model-new"
         mode="api"
         subscriptionType="api_model_new"
+        locale={locale}
         onClose={() => setSheetOpen(false)}
       />
     </div>

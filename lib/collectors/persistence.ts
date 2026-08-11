@@ -44,6 +44,7 @@ export type PriceChange = {
   planSlug: string;
   planName: string;
   region: string;
+  storefront: string | null;
   previousPrice: string;
   currentPrice: string;
   previousCny: number | null;
@@ -387,6 +388,7 @@ export async function recordSuccessfulCollection(input: {
           planSlug: plan.slug,
           planName: offer.rawPlanName,
           region: offer.region ?? offer.storefront ?? "官方价格",
+          storefront: offer.storefront,
           previousPrice: oldObservation.displayPrice,
           currentPrice: offer.displayPrice,
           previousCny: oldObservation.convertedCny,
@@ -465,6 +467,7 @@ export async function recordSuccessfulCollection(input: {
         planSlug: plan.slug,
         planName: offer.rawPlanName,
         region: offer.region ?? offer.storefront ?? "官方价格",
+        storefront: offer.storefront,
         previousPrice: previous.displayPrice,
         currentPrice: offer.displayPrice,
         previousCny: previous.convertedCny,

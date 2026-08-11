@@ -1,0 +1,1 @@
+ALTER TABLE "subscriptions" ADD COLUMN "locale" text DEFAULT 'zh-CN' NOT NULL;

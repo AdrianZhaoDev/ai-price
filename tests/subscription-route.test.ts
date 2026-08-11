@@ -32,7 +32,7 @@ vi.mock("@/lib/subscriptions/service", () => ({
 
 import { POST } from "@/app/api/subscriptions/route";
 
-function subscriptionRequest() {
+function subscriptionRequest(locale?: "zh-CN" | "en") {
   return new NextRequest("http://localhost:3100/api/subscriptions", {
     method: "POST",
     headers: {
@@ -43,6 +43,7 @@ function subscriptionRequest() {
       email: "reader@example.com",
       providerId: "chatgpt",
       planId: null,
+      ...(locale ? { locale } : {}),
     }),
   });
 }
@@ -58,6 +59,7 @@ function rankingRequest(rankingFallback = false) {
       subscriptionType: "api_ranking",
       email: "reader@example.com",
       rankingFallback,
+      locale: "en",
     }),
   });
 }
@@ -96,6 +98,19 @@ describe("subscription route", () => {
 
     await mocks.afterCallback!();
     expect(mocks.sendSubscriptionCreatedEmail).toHaveBeenCalledOnce();
+  });
+
+  it("returns localized success text when the client requests English", async () => {
+    const response = await POST(subscriptionRequest("en"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "subscribed",
+      message: "You are subscribed!",
+    });
+    expect(mocks.requestPriceSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "en" }),
+    );
   });
 
   it("does not disclose a duplicate subscription", async () => {
@@ -183,6 +198,7 @@ describe("subscription route", () => {
     );
     expect(mocks.requestApiModelNewSubscription).toHaveBeenCalledWith(
       "reader@example.com",
+      "en",
     );
     expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
   });

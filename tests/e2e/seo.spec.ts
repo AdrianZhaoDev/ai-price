@@ -423,7 +423,7 @@ test("repeated navigation components perform real browser navigation", async ({
   expect(ctaTarget).toBeTruthy();
   await ctaLink.click();
   await expect(page).toHaveURL(new RegExp(ctaTarget!.replace("?", "\\?")));
-  await expect(page.getByLabel("Provider")).toHaveValue("deepseek");
+  await expect(page.getByLabel("提供商")).toHaveValue("deepseek");
 
   await page.goto("/methodology");
   await page.locator(".document-back").click();

@@ -2,10 +2,11 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useSyncExternalStore } from "react";
+import { DEFAULT_LOCALE, getMessages, type Locale } from "@/lib/i18n";
 
 type ThemeName = "atelier" | "midnight";
 
-export function ThemeToggle() {
+export function ThemeToggle({ locale = DEFAULT_LOCALE }: { locale?: Locale }) {
   const theme = useSyncExternalStore<ThemeName>(
     (onStoreChange) => {
       window.addEventListener("storage", onStoreChange);
@@ -29,7 +30,11 @@ export function ThemeToggle() {
     window.dispatchEvent(new Event("ai-price-theme-change"));
   }
 
-  const nextThemeLabel = theme === "atelier" ? "切换深色主题" : "切换浅色主题";
+  const messages = getMessages(locale);
+  const nextThemeLabel =
+    theme === "atelier"
+      ? messages.common.themeDark
+      : messages.common.themeLight;
 
   return (
     <button

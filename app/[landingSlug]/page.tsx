@@ -27,7 +27,9 @@ export async function generateMetadata({
 }) {
   const { landingSlug } = await params;
   const data = await loadLandingRoute(landingSlug);
-  return data ? metadataForLandingPage(data.page, data.quality.indexable) : {};
+  return data
+    ? metadataForLandingPage(data.page, data.quality.indexable, "zh-CN")
+    : {};
 }
 
 export default async function SeoLandingRoute({
@@ -39,5 +41,5 @@ export default async function SeoLandingRoute({
   const data = await loadLandingRoute(landingSlug);
   if (!data) notFound();
 
-  return <LandingPage data={data} />;
+  return <LandingPage data={data} locale="zh-CN" />;
 }

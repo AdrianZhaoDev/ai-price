@@ -60,6 +60,7 @@ describe("subscription service", () => {
       providerSlug: "chatgpt",
       planSlug: "chatgpt-go-monthly",
       attempt: 1,
+      locale: "zh-CN",
     });
     mocks.createUnsubscribeToken.mockResolvedValue("unsubscribe-token");
     mocks.listPendingSubscriptionEmailIds.mockResolvedValue([]);
@@ -100,6 +101,7 @@ describe("subscription service", () => {
       email: "reader@example.com",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-go-monthly",
+      locale: "zh-CN",
     });
     expect(result).toEqual({ notificationId: "subscription-id" });
     expect(mocks.sendMail).not.toHaveBeenCalled();
@@ -107,7 +109,10 @@ describe("subscription service", () => {
     await sendSubscriptionCreatedEmail(result.notificationId!);
     expect(mocks.sendMail).toHaveBeenCalledOnce();
     expect(mocks.sendMail.mock.calls[0][0].html).toContain(
-      "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token",
+      "http://localhost:3000/api/subscriptions/unsubscribe?token=unsubscribe-token&amp;locale=zh-CN",
+    );
+    expect(mocks.sendMail.mock.calls[0][0].text).toContain(
+      "http://localhost:3000/?locale=zh-CN",
     );
     expect(mocks.settleEmailDelivery).toHaveBeenCalledWith(
       deliveryReservation,
@@ -141,6 +146,28 @@ describe("subscription service", () => {
       }),
     ).resolves.toEqual({ notificationId: undefined });
     expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("uses the persisted English locale for confirmation links and copy", async () => {
+    const staticProvider = providerCatalog.find(
+      (provider) => provider.id === "chatgpt",
+    );
+    mocks.loadProviderCatalog.mockResolvedValue([staticProvider]);
+    mocks.claimSubscriptionCreatedEmail.mockResolvedValueOnce({
+      subscriptionId: "subscription-id",
+      email: "reader@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-go-monthly",
+      attempt: 1,
+      locale: "en",
+    });
+
+    await sendSubscriptionCreatedEmail("subscription-id");
+
+    const message = mocks.sendMail.mock.calls[0][0];
+    expect(message.html).toContain('<html lang="en">');
+    expect(message.text).toContain("http://localhost:3000/en");
+    expect(message.text).toContain("locale=en");
   });
 
   it("still rejects an unknown provider before writing or sending", async () => {

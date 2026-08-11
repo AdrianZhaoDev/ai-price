@@ -8,6 +8,7 @@ import {
   formatFxRate,
   formatOfferPrice,
   formatPeriod,
+  formatRegionName,
   isComparableOffer,
   lowestComparableOffer,
   lowestThreeRanks,
@@ -49,6 +50,15 @@ describe("price formatting", () => {
     expect(formatApiCny(Number.NaN)).toBe("—");
   });
 
+  it("localizes region names from stable region codes", () => {
+    expect(
+      formatRegionName({ regionCode: "US", regionName: "美国" }, "en"),
+    ).toBe("United States");
+    expect(
+      formatRegionName({ regionCode: "US", regionName: "美国" }, "zh-CN"),
+    ).toBe("美国");
+  });
+
   it("formats persisted or derived exchange rates and price comparisons", () => {
     expect(formatFxRate({ ...offer, fxRate: 7.166 })).toBe("1 USD ≈ ¥7.166");
     expect(
@@ -76,6 +86,15 @@ describe("price formatting", () => {
         displayPrice: "¥49/月",
       }),
     ).toBe("¥49/月");
+    expect(
+      formatOfferPrice(
+        { ...offer, currency: "CNY", displayPrice: "¥49/月" },
+        "en",
+      ),
+    ).toBe("¥49/month");
+    expect(formatOfferPrice({ ...offer, displayPrice: "$19.99/month" })).toBe(
+      "$19.99/月",
+    );
     expect(
       formatOfferPrice({
         ...offer,

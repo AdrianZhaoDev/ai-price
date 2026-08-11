@@ -15,6 +15,7 @@ export default async function HomePage({
   return (
     <PricingPage
       mode="global"
+      locale="zh-CN"
       query={{
         providerId:
           typeof params.provider === "string" ? params.provider : undefined,

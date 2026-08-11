@@ -714,6 +714,7 @@ export const subscriptions = pgTable(
       .notNull(),
     providerSlug: text("provider_slug").notNull(),
     planSlug: text("plan_slug"),
+    locale: text("locale").default("zh-CN").notNull(),
     status: subscriptionStatusEnum("status").default("active").notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),

@@ -23,11 +23,13 @@ import {
   isApiModelNewScope,
 } from "./scopes";
 import { z } from "zod";
+import { localizedPath, type Locale } from "@/lib/i18n";
 
 type RequestSubscriptionInput = {
   email: string;
   providerId: string;
   planId: string | null;
+  locale?: Locale;
 };
 
 export type RequestSubscriptionResult = {
@@ -62,6 +64,7 @@ export async function requestPriceSubscription(
     email,
     providerSlug: input.providerId,
     planSlug: input.planId,
+    locale: input.locale ?? "zh-CN",
   });
 
   return {
@@ -73,12 +76,14 @@ export async function requestPriceSubscription(
 
 export async function requestApiModelNewSubscription(
   emailInput: string,
+  locale: Locale = "zh-CN",
 ): Promise<RequestSubscriptionResult> {
   const email = z.email("请输入有效邮箱。").max(254).parse(emailInput);
   const subscription = await createActiveSubscription({
     email,
     providerSlug: API_MODEL_NEW_PROVIDER_SLUG,
     planSlug: API_MODEL_NEW_PLAN_SLUG,
+    locale,
   });
   return {
     notificationId: subscription.emailNotificationPending
@@ -108,7 +113,9 @@ export async function sendSubscriptionCreatedEmail(
       (offer) => offer.planId === claim.planSlug,
     );
     const scopeLabel = modelScope
-      ? "API 新模型通知"
+      ? claim.locale === "en"
+        ? "API new model alerts"
+        : "API 新模型通知"
       : provider && selectedPlan
         ? `${provider.name} · ${selectedPlan.planName}`
         : (provider?.name ?? claim.providerSlug);
@@ -119,17 +126,27 @@ export async function sendSubscriptionCreatedEmail(
       getApplicationBaseUrl(),
     );
     unsubscribeUrl.searchParams.set("token", unsubscribeToken);
+    unsubscribeUrl.searchParams.set("locale", claim.locale);
     const viewPath = modelScope
-      ? "/api-pricing"
-      : modeHref(provider?.mode ?? "global");
-    const viewUrl = new URL(viewPath, getApplicationBaseUrl()).toString();
+      ? localizedPath(claim.locale, "/api-pricing")
+      : modeHref(provider?.mode ?? "global", claim.locale);
+    const viewUrl = new URL(viewPath, getApplicationBaseUrl());
+    viewUrl.searchParams.set("locale", claim.locale);
     const ctaLabel = modelScope
-      ? "查看最新模型"
+      ? claim.locale === "en"
+        ? "View the latest models"
+        : "查看最新模型"
       : provider?.mode === "china-subscription"
-        ? "看看还有更便宜的订阅吗？"
+        ? claim.locale === "en"
+          ? "Compare lower-priced subscriptions"
+          : "看看还有更便宜的订阅吗？"
         : provider?.mode === "api"
-          ? "查看当前模型价格"
-          : "查看当前最低价格";
+          ? claim.locale === "en"
+            ? "View current model prices"
+            : "查看当前模型价格"
+          : claim.locale === "en"
+            ? "View the current lowest price"
+            : "查看当前最低价格";
 
     deliveryId = await reserveEmailDelivery({
       type: "subscription_created",
@@ -144,16 +161,25 @@ export async function sendSubscriptionCreatedEmail(
       from: process.env.SMTP_FROM ?? "AI Price Atlas <dev@localhost>",
       to: claim.email,
       ...subscriptionCreatedEmail({
+        locale: claim.locale,
         scopeLabel,
-        viewUrl,
+        viewUrl: viewUrl.toString(),
         ctaLabel,
         unsubscribeUrl: unsubscribeUrl.toString(),
         ...(modelScope
           ? {
-              eyebrow: "新模型通知已生效",
+              eyebrow:
+                claim.locale === "en"
+                  ? "New model alerts are active"
+                  : "新模型通知已生效",
               description:
-                "目录出现新的 canonical model 时，我们会发送汇总；普通价格、Provider 或更新时间变化不会打扰你。",
-              subject: "已订阅 API 新模型通知",
+                claim.locale === "en"
+                  ? "We will send a digest when a new canonical model appears. Ordinary price, provider, or update-time changes will not trigger an email."
+                  : "目录出现新的 canonical model 时，我们会发送汇总；普通价格、Provider 或更新时间变化不会打扰你。",
+              subject:
+                claim.locale === "en"
+                  ? "API new model alerts subscribed"
+                  : "已订阅 API 新模型通知",
             }
           : {}),
       }),

@@ -67,7 +67,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
     for (const subscriber of subscribers.filter(
       (candidate) => candidate.activeSince <= eventCreatedAt,
     )) {
-      const dedupeKey = `model-catalog:${importId}:${hashEmail(subscriber.email)}`;
+      const dedupeKey = `model-catalog:${importId}:${hashEmail(subscriber.email)}${subscriber.locale === "en" ? ":en" : ""}`;
       const reservation = await reserveEmailDelivery({
         type: "model_catalog_added",
         recipient: subscriber.email,
@@ -84,20 +84,32 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
           baseUrl,
         );
         unsubscribeUrl.searchParams.set("token", token);
+        unsubscribeUrl.searchParams.set("locale", subscriber.locale);
         const models = rows.map(({ event }) => {
           const snapshot = event.snapshot as AddedModelSnapshot;
+          const modelUrl = new URL(
+            modelDetailPath(event.modelId, subscriber.locale),
+            baseUrl,
+          );
+          modelUrl.searchParams.set("locale", subscriber.locale);
           return {
             ...snapshot,
-            url: new URL(modelDetailPath(event.modelId), baseUrl).toString(),
+            url: modelUrl.toString(),
           };
         });
+        const viewUrl = new URL(
+          subscriber.locale === "en" ? "/en/api-pricing" : "/api-pricing",
+          baseUrl,
+        );
+        viewUrl.searchParams.set("locale", subscriber.locale);
         const result = await getEmailTransport().sendMail({
           from: process.env.SMTP_FROM,
           to: subscriber.email,
           ...modelCatalogDigestEmail({
+            locale: subscriber.locale,
             models,
             catalogVersion: version,
-            viewUrl: new URL("/api-pricing", baseUrl).toString(),
+            viewUrl: viewUrl.toString(),
             unsubscribeUrl: unsubscribeUrl.toString(),
           }),
         });

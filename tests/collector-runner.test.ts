@@ -207,6 +207,7 @@ describe("collector runner", () => {
         planSlug: "chatgpt-plus-monthly",
         planName: "ChatGPT Plus",
         region: "美国",
+        storefront: "US",
         previousPrice: "$19.99",
         currentPrice: "$39.99",
         previousCny: 140,

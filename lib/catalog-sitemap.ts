@@ -9,6 +9,7 @@ import { loadCachedModelCatalogSummaries } from "@/lib/model-catalog/cache";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type { ModelCatalogSummary } from "@/lib/model-catalog/types";
 import { absoluteUrl } from "@/lib/seo";
+import { localizedPath, type Locale } from "@/lib/i18n";
 
 export const SITEMAP_PAGE_SIZE = 45_000;
 
@@ -19,6 +20,8 @@ const CORE_PAGE_UPDATED_AT = {
   "/methodology": new Date("2026-07-31T00:00:00.000Z"),
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
 } as const;
+
+const INDEXABLE_LOCALES: Locale[] = ["zh-CN", "en"];
 
 function modelLastModified(model: ModelCatalogSummary): Date {
   if (model.detailChangedAt) return new Date(model.detailChangedAt);
@@ -34,28 +37,32 @@ export function buildSitemap(
   now = new Date(),
   models: ModelCatalogSummary[] = [],
 ): MetadataRoute.Sitemap {
-  const corePages: MetadataRoute.Sitemap = Object.entries(
-    CORE_PAGE_UPDATED_AT,
-  ).map(([path, lastModified]) => ({
-    url: absoluteUrl(path),
-    lastModified,
-  }));
+  const corePages: MetadataRoute.Sitemap = INDEXABLE_LOCALES.flatMap((locale) =>
+    Object.entries(CORE_PAGE_UPDATED_AT).map(([path, lastModified]) => ({
+      url: absoluteUrl(localizedPath(locale, path)),
+      lastModified,
+    })),
+  );
   const indexablePages = landingPages
     .map((page) => buildLandingPageData(page, snapshot, now))
     .filter((data) => data.quality.indexable);
 
   return [
     ...corePages,
-    ...indexablePages.map(({ page, quality }) => ({
-      url: absoluteUrl(landingPagePath(page)),
-      lastModified: new Date(quality.pageModifiedAt),
-    })),
-    ...models
-      .filter((model) => model.active)
-      .map((model) => ({
-        url: absoluteUrl(modelDetailPath(model.id)),
-        lastModified: modelLastModified(model),
+    ...INDEXABLE_LOCALES.flatMap((locale) =>
+      indexablePages.map(({ page, quality }) => ({
+        url: absoluteUrl(landingPagePath(page, locale)),
+        lastModified: new Date(quality.pageModifiedAt),
       })),
+    ),
+    ...INDEXABLE_LOCALES.flatMap((locale) =>
+      models
+        .filter((model) => model.active)
+        .map((model) => ({
+          url: absoluteUrl(modelDetailPath(model.id, locale)),
+          lastModified: modelLastModified(model),
+        })),
+    ),
   ];
 }
 

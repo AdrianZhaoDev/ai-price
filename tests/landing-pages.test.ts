@@ -484,16 +484,24 @@ describe("SEO landing page registry", () => {
       snapshot([chatgpt, trae]),
       new Date("2026-07-31T10:00:00.000Z"),
     );
-    const landingEntries = entries.slice(5);
+    const landingEntries = entries.slice(10);
 
     expect(landingEntries.map((entry) => entry.url)).toEqual([
       absoluteUrl("/chatgpt-price"),
       absoluteUrl("/chatgpt-plus-price"),
       absoluteUrl("/trae-price"),
+      absoluteUrl("/en/chatgpt-price"),
+      absoluteUrl("/en/chatgpt-plus-price"),
+      absoluteUrl("/en/trae-price"),
     ]);
     expect(
       landingEntries.find((entry) => entry.url === absoluteUrl("/trae-price"))
         ?.lastModified,
+    ).toEqual(new Date("2026-08-01T08:00:00.000Z"));
+    expect(
+      landingEntries.find(
+        (entry) => entry.url === absoluteUrl("/en/trae-price"),
+      )?.lastModified,
     ).toEqual(new Date("2026-08-01T08:00:00.000Z"));
     expect(entries.some((entry) => entry.url.includes("?"))).toBe(false);
     expect(entries.every((entry) => entry.changeFrequency === undefined)).toBe(

@@ -64,14 +64,19 @@ export async function POST(request: Request) {
   if (parsed.data.catalogChanged || parsed.data.changedModelIds.length > 0) {
     revalidateTag(MODEL_CATALOG_CACHE_TAG, { expire: 0 });
     revalidatePath("/api-pricing");
+    revalidatePath("/en/api-pricing");
   }
   revalidatePath("/");
+  revalidatePath("/en");
   revalidatePath("/china-ai-subscriptions");
+  revalidatePath("/en/china-ai-subscriptions");
   revalidatePath("/[landingSlug]", "page");
+  revalidatePath("/en/[landingSlug]", "page");
   revalidatePath("/sitemap.xml");
   for (const modelId of parsed.data.changedModelIds) {
     revalidateTag(modelCacheTag(modelId), { expire: 0 });
     revalidatePath(modelDetailPath(modelId));
+    revalidatePath(modelDetailPath(modelId, "en"));
   }
 
   await Promise.all([warmPricingPageData(), loadLandingCatalogSnapshot()]);

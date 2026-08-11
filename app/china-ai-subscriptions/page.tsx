@@ -15,6 +15,7 @@ export default async function ChinaAiSubscriptionsPage({
   return (
     <PricingPage
       mode="china-subscription"
+      locale="zh-CN"
       query={{
         providerId:
           typeof params.provider === "string" ? params.provider : undefined,
