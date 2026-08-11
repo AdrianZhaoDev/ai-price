@@ -59,6 +59,7 @@ function rankingRequest(rankingFallback = false) {
       subscriptionType: "api_ranking",
       email: "reader@example.com",
       rankingFallback,
+      locale: "en",
     }),
   });
 }
@@ -107,6 +108,9 @@ describe("subscription route", () => {
       status: "subscribed",
       message: "You are subscribed!",
     });
+    expect(mocks.requestPriceSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "en" }),
+    );
   });
 
   it("does not disclose a duplicate subscription", async () => {
@@ -194,6 +198,7 @@ describe("subscription route", () => {
     );
     expect(mocks.requestApiModelNewSubscription).toHaveBeenCalledWith(
       "reader@example.com",
+      "en",
     );
     expect(mocks.requestPriceSubscription).not.toHaveBeenCalled();
   });

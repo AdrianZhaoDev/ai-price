@@ -77,6 +77,15 @@ describe("price formatting", () => {
       }),
     ).toBe("¥49/月");
     expect(
+      formatOfferPrice(
+        { ...offer, currency: "CNY", displayPrice: "¥49/月" },
+        "en",
+      ),
+    ).toBe("¥49/month");
+    expect(formatOfferPrice({ ...offer, displayPrice: "$19.99/month" })).toBe(
+      "$19.99/月",
+    );
+    expect(
       formatOfferPrice({
         ...offer,
         amountMinor: null,

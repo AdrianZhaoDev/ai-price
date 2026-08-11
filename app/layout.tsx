@@ -23,7 +23,6 @@ export const metadata: Metadata = {
   category: "technology",
   creator: SITE_NAME,
   publisher: SITE_NAME,
-  manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
@@ -103,6 +102,16 @@ export default async function RootLayout({
       data-theme="atelier"
       suppressHydrationWarning
     >
+      <head>
+        <link
+          rel="manifest"
+          href={
+            locale === "en"
+              ? "/en/manifest.webmanifest"
+              : "/manifest.webmanifest"
+          }
+        />
+      </head>
       <body>
         <StructuredData data={structuredData} />
         {children}

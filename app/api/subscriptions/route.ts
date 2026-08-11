@@ -156,11 +156,12 @@ export async function POST(request: NextRequest) {
     fallbackAttemptId = rateLimit.fallbackAttemptId;
 
     const result = modelRequest
-      ? await requestApiModelNewSubscription(data.email)
+      ? await requestApiModelNewSubscription(data.email, data.locale)
       : await requestPriceSubscription({
           email: data.email,
           providerId: data.providerId,
           planId: data.planId ?? null,
+          locale: data.locale,
         });
 
     const notificationId = result.notificationId;

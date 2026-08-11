@@ -1,4 +1,4 @@
-import manifest from "@/app/manifest";
+import { chineseManifest } from "@/lib/site-manifests";
 import robots from "@/app/robots";
 import {
   buildSitemap,
@@ -158,7 +158,7 @@ describe("SEO routes", () => {
   });
 
   it("exposes an installable site manifest", () => {
-    const result = manifest();
+    const result = chineseManifest;
 
     expect(result.start_url).toBe("/");
     expect(result.name).toContain("Low Price Radar");
@@ -186,6 +186,10 @@ describe("SEO routes", () => {
         }),
         expect.objectContaining({
           source: "/subscription/:path*",
+          headers: privateRouteHeaders,
+        }),
+        expect.objectContaining({
+          source: "/en/subscription/:path*",
           headers: privateRouteHeaders,
         }),
       ]),

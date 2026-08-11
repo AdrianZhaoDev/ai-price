@@ -24,6 +24,7 @@ describe("memory subscription repository", () => {
       email: " User@Example.com ",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-plus-monthly",
+      locale: "en",
     });
     expect(created.alreadySubscribed).toBe(false);
     expect(created.emailNotificationPending).toBe(true);
@@ -37,6 +38,7 @@ describe("memory subscription repository", () => {
       providerSlug: "chatgpt",
       planSlug: "chatgpt-plus-monthly",
       attempt: 1,
+      locale: "en",
     });
     expect(claim).not.toBeNull();
     await settleSubscriptionCreatedEmail(created.subscriptionId, {
@@ -45,17 +47,28 @@ describe("memory subscription repository", () => {
     });
     expect(
       await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
-    ).toHaveLength(1);
+    ).toEqual([expect.objectContaining({ locale: "en" })]);
     const duplicate = await createActiveSubscription({
       email: "user@example.com",
       providerSlug: "chatgpt",
       planSlug: "chatgpt-plus-monthly",
+      locale: "en",
     });
     expect(duplicate.alreadySubscribed).toBe(true);
     expect(duplicate.emailNotificationPending).toBe(false);
     expect(
       await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
     ).toHaveLength(1);
+
+    await createActiveSubscription({
+      email: "user@example.com",
+      providerSlug: "chatgpt",
+      planSlug: "chatgpt-plus-monthly",
+      locale: "zh-CN",
+    });
+    expect(
+      await listActivePriceSubscribers("chatgpt", "chatgpt-plus-monthly"),
+    ).toEqual([expect.objectContaining({ locale: "zh-CN" })]);
 
     const token = await createUnsubscribeToken(created.subscriptionId);
     expect(await unsubscribe(token)).toBe(true);

@@ -12,11 +12,13 @@ import {
   normalizeEmail,
 } from "@/lib/security/tokens";
 import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import type { Locale } from "@/lib/i18n";
 
 type ActiveSubscriptionInput = {
   email: string;
   providerSlug: string;
   planSlug: string | null;
+  locale?: Locale;
 };
 
 type ActiveSubscriptionResult = {
@@ -38,6 +40,7 @@ type MemorySubscription = {
   email: string;
   providerSlug: string;
   planSlug: string;
+  locale: Locale;
   status: "pending" | "active" | "unsubscribed";
   successEmailPending: boolean;
   successEmailAttempts: number;
@@ -88,6 +91,7 @@ async function createMemorySubscription(
   const existing = memorySubscriptions.get(key);
   const subscriptionId = existing?.id ?? crypto.randomUUID();
   const alreadySubscribed = existing?.status === "active";
+  const locale = input.locale ?? "zh-CN";
   const emailNotificationPending = alreadySubscribed
     ? (existing.successEmailPending ?? false)
     : true;
@@ -97,6 +101,7 @@ async function createMemorySubscription(
     email: normalizeEmail(input.email),
     providerSlug: input.providerSlug,
     planSlug,
+    locale,
     status: "active",
     successEmailPending: emailNotificationPending,
     successEmailAttempts: alreadySubscribed
@@ -168,6 +173,12 @@ export async function createActiveSubscription(
 
     const alreadySubscribed = subscription?.status === "active";
     if (alreadySubscribed) {
+      if (subscription.locale !== (input.locale ?? "zh-CN")) {
+        await tx
+          .update(subscriptions)
+          .set({ locale: input.locale ?? "zh-CN", updatedAt: now })
+          .where(eq(subscriptions.id, subscription.id));
+      }
       return {
         alreadySubscribed: true,
         emailNotificationPending: subscription.successEmailPending,
@@ -180,6 +191,7 @@ export async function createActiveSubscription(
         .update(subscriptions)
         .set({
           status: "active",
+          locale: input.locale ?? "zh-CN",
           confirmedAt: now,
           unsubscribedAt: null,
           successEmailPending: true,
@@ -199,6 +211,7 @@ export async function createActiveSubscription(
           providerSlug: input.providerSlug,
           planSlug,
           status: "active",
+          locale: input.locale ?? "zh-CN",
           confirmedAt: now,
           successEmailPending: true,
           successEmailAttempts: 0,
@@ -223,6 +236,7 @@ export type SubscriptionEmailClaim = {
   providerSlug: string;
   planSlug: string;
   attempt: number;
+  locale: Locale;
 };
 
 function canClaimSuccessEmail(
@@ -259,6 +273,7 @@ export async function claimSubscriptionCreatedEmail(
       providerSlug: subscription.providerSlug,
       planSlug: subscription.planSlug,
       attempt: subscription.successEmailAttempts,
+      locale: subscription.locale,
     };
   }
 
@@ -290,6 +305,7 @@ export async function claimSubscriptionCreatedEmail(
       providerSlug: subscriptions.providerSlug,
       planSlug: subscriptions.planSlug,
       attempt: subscriptions.successEmailAttempts,
+      locale: sql<Locale>`case when ${subscriptions.locale} = 'en' then 'en' else 'zh-CN' end`,
       subscriberId: subscriptions.subscriberId,
     });
   if (!claimed) return null;
@@ -307,6 +323,7 @@ export async function claimSubscriptionCreatedEmail(
     providerSlug: claimed.providerSlug,
     planSlug: claimed.planSlug ?? "*",
     attempt: claimed.attempt,
+    locale: claimed.locale === "en" ? "en" : "zh-CN",
   };
 }
 
@@ -554,6 +571,7 @@ export type ActivePriceSubscriber = {
   subscriptionId: string;
   email: string;
   activeSince: Date;
+  locale: Locale;
 };
 
 export async function listActivePriceSubscribers(
@@ -572,6 +590,7 @@ export async function listActivePriceSubscribers(
         subscriptionId: subscription.id,
         email: subscription.email,
         activeSince: new Date(subscription.activeSince),
+        locale: subscription.locale,
       }));
   }
 
@@ -580,6 +599,7 @@ export async function listActivePriceSubscribers(
       subscriptionId: subscriptions.id,
       email: subscribers.emailNormalized,
       activeSince: sql<Date>`coalesce(${subscriptions.confirmedAt}, ${subscriptions.createdAt})`,
+      locale: sql<Locale>`case when ${subscriptions.locale} = 'en' then 'en' else 'zh-CN' end`,
     })
     .from(subscriptions)
     .innerJoin(subscribers, eq(subscriptions.subscriberId, subscribers.id))

@@ -432,7 +432,7 @@ const zh: LocaleMessages = {
         title: "访问数据与 Cookie",
         paragraphs: [
           "网站可以使用 Cloudflare 的安全、流量统计和真实用户性能数据来了解可用性、来源趋势及 Core Web Vitals。统计用于改进页面速度和发现异常访问，不用于建立广告画像。",
-          "浏览器的主题偏好可以保存在本地存储中。是否设置安全或分析 Cookie 取决于基础设施服务的实际功能；我们不会使用第三方广告 Cookie。",
+          "语言偏好通过 ai-price-locale Cookie 保存一年，浏览器的主题偏好可以保存在本地存储中。是否设置安全或分析 Cookie 取决于基础设施服务的实际功能；我们不会使用第三方广告 Cookie。",
           "性能监测的汇总范围包括 Page Views、LCP、INP、CLS、browser type、operating system 和 country or region。这些指标用于判断页面是否可用、加载是否变慢和哪些设备需要优化，不与邮箱订阅记录合并，也不用于识别个人或建立用户画像。",
         ],
       },
@@ -921,7 +921,7 @@ const en: LocaleMessages = {
         title: "Access data and cookies",
         paragraphs: [
           "The website may use Cloudflare security, traffic analytics, and real-user performance data to understand availability, referral trends, and Core Web Vitals. This helps improve speed and spot abnormal traffic; it is not used to build advertising profiles.",
-          "The browser's theme preference can be saved in local storage. Security or analytics cookies depend on the actual infrastructure features; we do not use third-party advertising cookies.",
+          "Language preference is stored in the ai-price-locale cookie for one year. The browser's theme preference can be saved in local storage. Security or analytics cookies depend on the actual infrastructure features; we do not use third-party advertising cookies.",
           "Aggregated performance fields may include Page Views, LCP, INP, CLS, browser type, operating system, and country or region. They help identify availability, slow loads, and devices needing optimization. They are not joined with email subscriptions or used to identify people or build profiles.",
         ],
       },

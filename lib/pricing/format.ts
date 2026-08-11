@@ -66,10 +66,19 @@ export function formatOfferPrice(
   }
 
   const period = formatPeriod(offer.billingPeriod, locale);
-  if (!period || offer.displayPrice.trim().endsWith(period)) {
+  if (!period) {
     return offer.displayPrice;
   }
-  return `${offer.displayPrice}${period}`;
+  const sourcePeriods = Object.values(periodLabels).flatMap((labels) =>
+    Object.values(labels).filter(Boolean),
+  );
+  const existingPeriod = sourcePeriods.find((candidate) =>
+    offer.displayPrice.trim().endsWith(candidate),
+  );
+  const amount = existingPeriod
+    ? offer.displayPrice.trim().slice(0, -existingPeriod.length)
+    : offer.displayPrice;
+  return `${amount}${period}`;
 }
 
 const zeroDecimalCurrencies = new Set(["CLP", "IDR", "JPY", "KRW", "VND"]);

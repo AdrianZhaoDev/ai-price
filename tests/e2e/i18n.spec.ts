@@ -84,6 +84,7 @@ test("exposes the language switcher on every public page family", async ({
 
 test("publishes English canonical, alternates, and structured language metadata", async ({
   page,
+  request,
 }) => {
   await page.goto("/en/api-pricing");
 
@@ -104,6 +105,16 @@ test("publishes English canonical, alternates, and structured language metadata"
     true,
   );
   expect(jsonLd.some((value) => value.includes("官方来源"))).toBe(false);
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+    "href",
+    "/en/manifest.webmanifest",
+  );
+  const manifestResponse = await request.get("/en/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBe(true);
+  await expect(manifestResponse.json()).resolves.toMatchObject({
+    lang: "en",
+    start_url: "/en",
+  });
 });
 
 test("keeps public assets, document anchors, and privacy copy localized", async ({
@@ -132,6 +143,9 @@ test("keeps public assets, document anchors, and privacy copy localized", async 
   await expect(page.locator("footer")).not.toContainText(
     "community-aggregated prices",
   );
+  await expect(
+    page.getByText(/ai-price-locale cookie for one year/i),
+  ).toBeVisible();
 });
 
 test("hides the model catalog background while the subscription dialog is open", async ({

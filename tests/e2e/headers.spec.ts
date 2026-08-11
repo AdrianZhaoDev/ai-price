@@ -34,6 +34,16 @@ test("serves security headers and does not cache private routes", async ({
   expect(apiPricingResponse.ok()).toBe(true);
   expect(apiPricingResponse.headers()["x-robots-tag"]).toBeUndefined();
 
+  const englishSubscriptionResponse = await request.get(
+    "/en/subscription/result?status=confirmed",
+  );
+  expect(englishSubscriptionResponse.headers()["cache-control"]).toMatch(
+    /(?:no-store|no-cache)/,
+  );
+  expect(englishSubscriptionResponse.headers()["x-robots-tag"]).toContain(
+    "noindex",
+  );
+
   const pricingDataResponse = await request.get("/pricing-data/chatgpt?v=e2e");
   expect(pricingDataResponse.ok()).toBe(true);
   expect(pricingDataResponse.headers()["cache-control"]).toContain(

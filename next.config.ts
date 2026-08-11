@@ -42,6 +42,10 @@ const nextConfig: NextConfig = {
         source: "/subscription/:path*",
         headers: privateRouteHeaders,
       },
+      {
+        source: "/en/subscription/:path*",
+        headers: privateRouteHeaders,
+      },
     ];
   },
   experimental: {

@@ -4,16 +4,20 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
+  const resultPath =
+    request.nextUrl.searchParams.get("locale") === "en"
+      ? "/en/subscription/result"
+      : "/subscription/result";
   if (!token) {
     return NextResponse.redirect(
-      createSubscriptionUrl("/subscription/result?status=invalid", request.url),
+      createSubscriptionUrl(`${resultPath}?status=invalid`, request.url),
     );
   }
 
   const removed = await unsubscribe(token);
   return NextResponse.redirect(
     createSubscriptionUrl(
-      `/subscription/result?status=${removed ? "unsubscribed" : "invalid"}`,
+      `${resultPath}?status=${removed ? "unsubscribed" : "invalid"}`,
       request.url,
     ),
   );
