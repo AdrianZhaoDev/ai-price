@@ -3,6 +3,7 @@ import { ModelProviderTable } from "@/components/model-provider-table";
 import { StructuredData } from "@/components/structured-data";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { getMessages, type Locale } from "@/lib/i18n";
+import { modelSeoTitle } from "@/lib/model-catalog/seo";
 import type { ModelDetail } from "@/lib/model-catalog/types";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { absoluteUrl, modeHref } from "@/lib/seo";
@@ -36,10 +37,7 @@ export function ModelDetailPage({
   const detailMessages = messages.modelDetail;
   const pageUrl = absoluteUrl(modelDetailPath(model.id, locale));
   const catalogUrl = absoluteUrl(modeHref("api", locale));
-  const modelTitle =
-    locale === "en"
-      ? `${model.name} API prices and model specifications`
-      : `${model.name} API 价格与模型规格`;
+  const modelTitle = modelSeoTitle(model, locale);
   const structuredData = [
     {
       "@context": "https://schema.org",

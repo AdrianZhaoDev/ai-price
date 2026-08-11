@@ -121,6 +121,7 @@ export function modeHref(
 }
 
 export function absoluteUrl(path = "/"): string {
+  if (path === "/") return SITE_ORIGIN;
   return new URL(path, SITE_ORIGIN).toString();
 }
 
@@ -137,7 +138,7 @@ export function metadataForMode(
     description: seo.description,
     keywords: seo.keywords,
     alternates: {
-      canonical: seo.path,
+      canonical: seo.path === "/" ? SITE_ORIGIN : seo.path,
       languages: alternateLanguagePaths(seo.path),
     },
     openGraph: {

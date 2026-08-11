@@ -4,24 +4,41 @@ import type { ModelDetail } from "@/lib/model-catalog/types";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { absoluteUrl, SITE_NAME } from "@/lib/seo";
 
-export function metadataForModel(
-  model: ModelDetail,
+type ModelSeoIdentity = Pick<ModelDetail, "id" | "name">;
+type ModelSeoSummary = Pick<ModelDetail, "id" | "name" | "description">;
+
+export function modelSeoTitle(
+  model: ModelSeoIdentity,
   locale: Locale = "zh-CN",
-): Metadata {
-  const path = modelDetailPath(model.id, locale);
-  const title =
-    locale === "en"
-      ? `${model.name} API prices and model specifications`
-      : `${model.name} API 价格与模型规格`;
-  const description = [
+): string {
+  return locale === "en"
+    ? `${model.name} (${model.id}) API prices and model specifications`
+    : `${model.name}（${model.id}）API 价格与模型规格`;
+}
+
+export function modelSeoDescription(
+  model: ModelSeoSummary,
+  locale: Locale = "zh-CN",
+): string {
+  return [
+    locale === "en" ? `Model ID: ${model.id}.` : `模型 ID：${model.id}。`,
     model.description,
     locale === "en"
-      ? `See ${model.name} context, output limit, modalities, capabilities, and API prices by provider.`
+      ? `Compare ${model.name} context, output limits, modalities, capabilities, and API prices by provider.`
       : `查看 ${model.name} 的上下文、最大输出、输入输出模态、能力与各提供商 API 价格。`,
   ]
     .filter(Boolean)
     .join(" ")
     .slice(0, 180);
+}
+
+export function metadataForModel(
+  model: ModelDetail,
+  locale: Locale = "zh-CN",
+): Metadata {
+  const path = modelDetailPath(model.id, locale);
+  const title = modelSeoTitle(model, locale);
+  const description = modelSeoDescription(model, locale);
   const imageUrl = absoluteUrl("/og.png");
 
   return {
@@ -29,6 +46,7 @@ export function metadataForModel(
     description,
     keywords: [
       model.name,
+      model.id,
       locale === "en" ? `${model.name} API price` : `${model.name} API 价格`,
       locale === "en" ? `${model.labName} model` : `${model.labName} 模型`,
       locale === "en" ? "AI model API prices" : "AI 模型 API 价格",
