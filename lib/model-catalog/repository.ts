@@ -209,7 +209,12 @@ export async function loadModelDetail(
             eq(modelProviderOfferings.canonicalModelId, modelId),
             eq(modelProviderOfferings.active, true),
           )
-        : eq(modelProviderOfferings.canonicalModelId, modelId),
+        : row.model.lastImportId
+          ? and(
+              eq(modelProviderOfferings.canonicalModelId, modelId),
+              eq(modelProviderOfferings.lastImportId, row.model.lastImportId),
+            )
+          : eq(modelProviderOfferings.canonicalModelId, modelId),
     );
   const providerNamesById = new Map(
     offerings.map(({ provider }) => [provider.id, provider.name]),

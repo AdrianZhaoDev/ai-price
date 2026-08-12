@@ -856,7 +856,7 @@ const en: LocaleMessages = {
       {
         title: "The API catalog's source boundary",
         paragraphs: [
-          "The API ranking and model details are imported from a fixed Git commit of models.dev every four hours. Input and output prices use USD per million tokens. alpha and deprecated offerings are excluded from the lowest-price calculation, while 0 remains a valid price. The site distinguishes models.dev from its local overlay and never presents community prices as prices officially collected here.",
+          "The API ranking and model details are imported from a fixed Git commit of models.dev every four hours. Input and output prices use USD per million tokens. alpha, deprecated, and zero-price offerings are excluded from ranking minima; zero prices remain visible in provider details. The site distinguishes models.dev from its local overlay and never presents community prices as prices officially collected here.",
           "models.dev is licensed under MIT. Copyright remains with the original authors; the data is provided as-is without warranty. View the license statement.",
         ],
       },
