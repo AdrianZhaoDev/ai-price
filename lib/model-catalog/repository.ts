@@ -219,17 +219,38 @@ export async function loadModelDetail(
   const providerNamesById = new Map(
     offerings.map(({ provider }) => [provider.id, provider.name]),
   );
+  const eligibleOfferings = offerings.filter(
+    ({ offering }) =>
+      offering.status !== "alpha" && offering.status !== "deprecated",
+  );
   const { minInput, minOutput, hasZeroInput, hasZeroOutput } =
-    summarizeNonZeroPrices(offerings.map(({ offering }) => offering));
+    summarizeNonZeroPrices(eligibleOfferings.map(({ offering }) => offering));
+  const reconstructedProviderIds = new Set(
+    eligibleOfferings.map(({ offering }) => offering.providerId),
+  );
+  const archivedSnapshotIsComplete =
+    row.model.active ||
+    reconstructedProviderIds.size >= row.model.providerCount;
+  const minInputPrice = archivedSnapshotIsComplete
+    ? minInput?.inputPrice
+    : row.model.minInputPrice !== null && row.model.minInputPrice > 0
+      ? row.model.minInputPrice
+      : undefined;
+  const minInputProviderId = archivedSnapshotIsComplete
+    ? minInput?.providerId
+    : (row.model.minInputProviderId ?? undefined);
+  const minOutputPrice = archivedSnapshotIsComplete
+    ? minOutput?.outputPrice
+    : row.model.minOutputPrice !== null && row.model.minOutputPrice > 0
+      ? row.model.minOutputPrice
+      : undefined;
+  const minOutputProviderId = archivedSnapshotIsComplete
+    ? minOutput?.providerId
+    : (row.model.minOutputProviderId ?? undefined);
   const providerIds = [
     ...new Set(
-      offerings
-        .filter(
-          ({ offering }) =>
-            offering.active &&
-            offering.status !== "alpha" &&
-            offering.status !== "deprecated",
-        )
+      eligibleOfferings
+        .filter(({ offering }) => !row.model.active || offering.active)
         .map(({ offering }) => offering.providerId),
     ),
   ].sort();
@@ -243,16 +264,16 @@ export async function loadModelDetail(
     context: row.model.contextTokens ?? undefined,
     output: row.model.outputTokens ?? undefined,
     inputModalities: row.model.inputModalities,
-    minInputPrice: minInput?.inputPrice ?? undefined,
-    minInputProviderId: minInput?.providerId,
-    minInputProviderName: minInput
-      ? providerNamesById.get(minInput.providerId)
+    minInputPrice,
+    minInputProviderId,
+    minInputProviderName: minInputProviderId
+      ? providerNamesById.get(minInputProviderId)
       : undefined,
     hasZeroInputPrice: hasZeroInput,
-    minOutputPrice: minOutput?.outputPrice ?? undefined,
-    minOutputProviderId: minOutput?.providerId,
-    minOutputProviderName: minOutput
-      ? providerNamesById.get(minOutput.providerId)
+    minOutputPrice,
+    minOutputProviderId,
+    minOutputProviderName: minOutputProviderId
+      ? providerNamesById.get(minOutputProviderId)
       : undefined,
     hasZeroOutputPrice: hasZeroOutput,
     releaseDate: row.model.releaseDate,

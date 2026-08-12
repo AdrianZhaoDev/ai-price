@@ -58,6 +58,18 @@ describe("model catalog discovery", () => {
     ).toBe(false);
     expect(
       isIndexableModelSummary(
+        summary("lab/free", {
+          context: undefined,
+          output: undefined,
+          description: undefined,
+          minInputPrice: undefined,
+          minOutputPrice: undefined,
+          hasZeroInputPrice: true,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isIndexableModelSummary(
         summary("lab/empty", {
           context: undefined,
           output: undefined,
