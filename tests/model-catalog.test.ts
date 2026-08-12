@@ -45,7 +45,7 @@ describe("models.dev catalog normalization", () => {
     ).not.toThrow();
   });
 
-  it("links explicit, exact, and provider-scoped models and calculates independent minimum prices", () => {
+  it("links models and calculates independent non-zero minimum prices", () => {
     const files = new Map<string, string>([
       ["models/lab/atlas.toml", baseModel],
       [
@@ -89,8 +89,8 @@ describe("models.dev catalog normalization", () => {
     )!;
 
     expect(atlas.providers).toHaveLength(2);
-    expect(atlas.summary.minInputPrice).toBe(0);
-    expect(atlas.summary.minInputProviderName).toBe("Provider One");
+    expect(atlas.summary.minInputPrice).toBe(2);
+    expect(atlas.summary.minInputProviderName).toBe("Cheap Output");
     expect(atlas.summary.minOutputPrice).toBe(3);
     expect(atlas.summary.minOutputProviderName).toBe("Cheap Output");
     expect(scoped.providers).toHaveLength(1);
@@ -100,7 +100,7 @@ describe("models.dev catalog normalization", () => {
         catalog.models.map((model) => model.summary),
         parseModelCatalogFilters({}),
       ).map((model) => model.id),
-    ).toEqual(["provider/scoped"]);
+    ).toEqual(["lab/atlas", "provider/scoped"]);
     expect(
       filterAndSortModelCatalog(
         catalog.models.map((model) => model.summary),
@@ -117,6 +117,35 @@ describe("models.dev catalog normalization", () => {
         }),
       ).map((model) => model.id),
     ).toEqual(["provider/scoped", "lab/atlas"]);
+    expect(
+      atlas.providers.find((item) => item.providerId === "provider"),
+    ).toMatchObject({
+      inputPrice: 0,
+    });
+  });
+
+  it("keeps all-zero provider prices in details but omits them from ranking minima", () => {
+    const catalog = normalizeCatalogFiles(
+      new Map<string, string>([
+        ["models/lab/atlas.toml", baseModel],
+        ["providers/free/provider.toml", 'name = "Free Provider"'],
+        [
+          "providers/free/models/atlas.toml",
+          'base_model = "lab/atlas"\ncost = { input = 0, output = 0 }',
+        ],
+      ]),
+      "a".repeat(40),
+      "2026-08-10T00:00:00.000Z",
+    );
+    const atlas = catalog.models[0]!;
+
+    expect(atlas.summary.minInputPrice).toBeUndefined();
+    expect(atlas.summary.minInputProviderName).toBeUndefined();
+    expect(atlas.summary.minOutputPrice).toBeUndefined();
+    expect(atlas.summary.minOutputProviderName).toBeUndefined();
+    expect(atlas.providers).toEqual([
+      expect.objectContaining({ inputPrice: 0, outputPrice: 0 }),
+    ]);
   });
 
   it("sorts provider rows by the four numeric columns with missing values last", () => {

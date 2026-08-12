@@ -47,7 +47,7 @@ export const modeSeoByLocale: Record<Locale, Record<PriceMode, ModeSeo>> = {
       path: "/api-pricing",
       title: "AI 模型 API 价格与规格排行榜",
       description:
-        "查看 AI 模型 API 价格排行榜，比较 models.dev 收录模型的实验室、上下文、最大输出、输入模态、最低输入与输出价格、提供商来源、发布日期和更新时间。",
+        "查看 AI 模型 API 价格排行榜，比较 models.dev 收录模型的实验室、上下文、最大输出、输入模态、最低非零输入与输出价格、提供商来源、发布日期和更新时间。",
       keywords: [
         "AI API 价格",
         "大模型 API 价格",
@@ -90,7 +90,7 @@ export const modeSeoByLocale: Record<Locale, Record<PriceMode, ModeSeo>> = {
       path: "/en/api-pricing",
       title: "AI Model API Prices and Specifications | Low Price Radar",
       description:
-        "Browse the models.dev catalog and compare Lab, Context, maximum output, input modalities, lowest input and output prices, release dates, and update times.",
+        "Browse the models.dev catalog and compare Lab, Context, maximum output, input modalities, lowest non-zero input and output prices, release dates, and update times.",
       keywords: [
         "AI API prices",
         "LLM API price comparison",

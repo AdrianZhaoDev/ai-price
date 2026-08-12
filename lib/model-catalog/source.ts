@@ -508,10 +508,10 @@ export function normalizeCatalogFiles(
       (item) => item.status !== "alpha" && item.status !== "deprecated",
     );
     const minInput = activeOfferings
-      .filter((item) => item.inputPrice !== undefined)
+      .filter((item) => item.inputPrice !== undefined && item.inputPrice > 0)
       .sort((a, b) => a.inputPrice! - b.inputPrice!)[0];
     const minOutput = activeOfferings
-      .filter((item) => item.outputPrice !== undefined)
+      .filter((item) => item.outputPrice !== undefined && item.outputPrice > 0)
       .sort((a, b) => a.outputPrice! - b.outputPrice!)[0];
     const providerFacets = [
       ...new Map(

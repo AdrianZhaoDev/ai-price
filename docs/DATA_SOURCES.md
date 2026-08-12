@@ -17,8 +17,9 @@
   当前 commit SHA，再下载该固定提交的 TOML 快照。
 - canonical model、lab、provider 和 provider offering 独立入库；完整执行
   `base_model`、相同 ID、provider-scoped ID、继承、覆盖和 `base_model_omit` 规则。
-- 输入/输出价格单位固定为 USD / 百万 tokens。`alpha`、`deprecated` 不参与最低价；
-  详情仍保留状态与全部价格层级。`0` 是有效报价，缺失值不是零。
+- 输入/输出价格单位固定为 USD / 百万 tokens。排行榜最低价只在有效 Provider 的
+  非零报价中分别计算，`alpha`、`deprecated` 和零价不参与最低价；详情仍保留状态、
+  零价与全部价格层级。若仅有零价或缺失报价，排行榜显示 `—`。
 - `lib/data/model-catalog-overlay.json` 可增加本站 provider/model/offering。冲突必须显式
   `override: true` 并填写原因，offering 还必须提供 canonical ID、来源 URL 与更新时间。
 - 导入按内容哈希做差异比较，单事务发布。数量坍缩或 schema 失败时保留上一有效快照；

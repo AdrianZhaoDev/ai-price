@@ -85,8 +85,8 @@ export function modelSnapshotSummary(
   const updated = (model.detailChangedAt ?? model.updatedDate).slice(0, 10);
 
   return locale === "en"
-    ? `${model.labName}'s ${model.name} (${model.id})${model.family ? ` belongs to the ${model.family} family` : ""}. This snapshot compares ${model.providerIds.length} active providers${context ? `, a ${context}-token context window` : ""}${inputPrice ? `, input prices from $${inputPrice}` : ""}${outputPrice ? `, and output prices from $${outputPrice}` : ""} per million tokens. Last catalog change: ${updated}.`
-    : `${model.labName} 的 ${model.name}（${model.id}）${model.family ? `属于 ${model.family} 系列，` : ""}当前汇总 ${model.providerIds.length} 个有效提供商${context ? `、${context} tokens 上下文` : ""}${inputPrice ? `、每百万 tokens 最低输入价 $${inputPrice}` : ""}${outputPrice ? `、最低输出价 $${outputPrice}` : ""}。最近目录变更：${updated}。`;
+    ? `${model.labName}'s ${model.name} (${model.id})${model.family ? ` belongs to the ${model.family} family` : ""}. This snapshot compares ${model.providerIds.length} active providers${context ? `, a ${context}-token context window` : ""}${inputPrice ? `, non-zero input prices from $${inputPrice}` : ""}${outputPrice ? `, and non-zero output prices from $${outputPrice}` : ""} per million tokens. Last catalog change: ${updated}.`
+    : `${model.labName} 的 ${model.name}（${model.id}）${model.family ? `属于 ${model.family} 系列，` : ""}当前汇总 ${model.providerIds.length} 个有效提供商${context ? `、${context} tokens 上下文` : ""}${inputPrice ? `、每百万 tokens 最低非零输入价 $${inputPrice}` : ""}${outputPrice ? `、最低非零输出价 $${outputPrice}` : ""}。最近目录变更：${updated}。`;
 }
 
 export function metadataForModel(
