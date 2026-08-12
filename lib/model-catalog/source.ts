@@ -12,6 +12,7 @@ import { parse as parseToml } from "smol-toml";
 import { extract } from "tar-stream";
 import { z } from "zod";
 import { fetchBinaryPage, fetchPage } from "@/lib/collectors/http-client";
+import { summarizeNonZeroPrices } from "@/lib/model-catalog/prices";
 
 const MODELS_DEV_REPOSITORY = "anomalyco/models.dev";
 const MODELS_DEV_BRANCH = "dev";
@@ -507,12 +508,8 @@ export function normalizeCatalogFiles(
     const activeOfferings = allOfferings.filter(
       (item) => item.status !== "alpha" && item.status !== "deprecated",
     );
-    const minInput = activeOfferings
-      .filter((item) => item.inputPrice !== undefined)
-      .sort((a, b) => a.inputPrice! - b.inputPrice!)[0];
-    const minOutput = activeOfferings
-      .filter((item) => item.outputPrice !== undefined)
-      .sort((a, b) => a.outputPrice! - b.outputPrice!)[0];
+    const { minInput, minOutput, hasZeroInput, hasZeroOutput } =
+      summarizeNonZeroPrices(activeOfferings);
     const providerFacets = [
       ...new Map(
         activeOfferings.map((offering) => [
@@ -534,9 +531,11 @@ export function normalizeCatalogFiles(
       minInputPrice: minInput?.inputPrice,
       minInputProviderId: minInput?.providerId,
       minInputProviderName: minInput?.providerName,
+      hasZeroInputPrice: hasZeroInput,
       minOutputPrice: minOutput?.outputPrice,
       minOutputProviderId: minOutput?.providerId,
       minOutputProviderName: minOutput?.providerName,
+      hasZeroOutputPrice: hasZeroOutput,
       releaseDate: record.data.release_date,
       updatedDate: record.data.last_updated,
       providerCount: providerFacets.length,

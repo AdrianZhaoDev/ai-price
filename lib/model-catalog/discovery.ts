@@ -15,7 +15,9 @@ export function isIndexableModelSummary(model: ModelCatalogSummary): boolean {
     model.context !== undefined ||
     model.output !== undefined ||
     model.minInputPrice !== undefined ||
-    model.minOutputPrice !== undefined,
+    model.minOutputPrice !== undefined ||
+    model.hasZeroInputPrice ||
+    model.hasZeroOutputPrice,
   );
 
   return (

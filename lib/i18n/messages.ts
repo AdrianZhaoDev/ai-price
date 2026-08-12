@@ -185,7 +185,7 @@ const zh: LocaleMessages = {
   apiCatalog: {
     eyebrow: "MODELS.DEV CATALOG",
     title: "API 模型目录",
-    description: "比较模型规格与所有有效 provider 中的最低输入、输出价格。",
+    description: "比较模型规格与所有有效 provider 中的最低非零输入、输出价格。",
     subscribeNewModel: "订阅新模型",
     filterLabel: "模型筛选",
     searchLabel: "模型",
@@ -354,7 +354,7 @@ const zh: LocaleMessages = {
       {
         title: "API 模型目录的来源边界",
         paragraphs: [
-          "API 模型榜单和模型详情每 4 小时从 models.dev 的固定 Git commit 导入。输入、输出价格统一为 USD / 百万 tokens；alpha 与 deprecated offering 不参与最低价，0 仍是有效价格。页面会区分 models.dev 与本站 local overlay，且不会把社区聚合价描述为本站官方采集价。",
+          "API 模型榜单和模型详情每 4 小时从 models.dev 的固定 Git commit 导入。输入、输出价格统一为 USD / 百万 tokens；排行榜最低价只取有效 offering 中的非零报价，alpha、deprecated 与零价不参与最低价，详情仍保留零价。页面会区分 models.dev 与本站 local overlay，且不会把社区聚合价描述为本站官方采集价。",
           "models.dev 采用 MIT License。版权归原作者所有，数据按“原样”提供且不作担保；查看许可声明。",
         ],
       },
@@ -381,7 +381,7 @@ const zh: LocaleMessages = {
       {
         title: "先标准化，再比较",
         paragraphs: [
-          "订阅价格保留官方币种、计费周期和地区，同时换算人民币参考价。API 模型目录分别计算所有有效 provider 中最低的输入价与输出价，并同时保存 provider、规格、状态、价格层级和来源；缺失价格显示为“—”，不会按 0 处理。",
+          "订阅价格保留官方币种、计费周期和地区，同时换算人民币参考价。API 模型目录分别计算所有有效 provider 中最低的非零输入价与输出价，并同时保存 provider、规格、状态、价格层级和来源；零价保留在详情中，仅有零价或缺失报价时排行榜显示“—”。",
           "Batch、Flex、Priority、长上下文、免费层和非 Token 项目可以保留在明细中，但不参与排行。汇率带有独立观察时间；没有实时或历史汇率时，不发布对应外币来源。",
         ],
       },
@@ -676,7 +676,7 @@ const en: LocaleMessages = {
     eyebrow: "MODELS.DEV CATALOG",
     title: "API model catalog",
     description:
-      "Compare model specifications with the lowest input and output prices among valid providers.",
+      "Compare model specifications with the lowest non-zero input and output prices among valid providers.",
     subscribeNewModel: "Subscribe to new models",
     filterLabel: "Model filters",
     searchLabel: "Model",
@@ -856,7 +856,7 @@ const en: LocaleMessages = {
       {
         title: "The API catalog's source boundary",
         paragraphs: [
-          "The API ranking and model details are imported from a fixed Git commit of models.dev every four hours. Input and output prices use USD per million tokens. alpha and deprecated offerings are excluded from the lowest-price calculation, while 0 remains a valid price. The site distinguishes models.dev from its local overlay and never presents community prices as prices officially collected here.",
+          "The API ranking and model details are imported from a fixed Git commit of models.dev every four hours. Input and output prices use USD per million tokens. alpha, deprecated, and zero-price offerings are excluded from ranking minima; zero prices remain visible in provider details. The site distinguishes models.dev from its local overlay and never presents community prices as prices officially collected here.",
           "models.dev is licensed under MIT. Copyright remains with the original authors; the data is provided as-is without warranty. View the license statement.",
         ],
       },
@@ -883,7 +883,7 @@ const en: LocaleMessages = {
       {
         title: "Normalize before comparing",
         paragraphs: [
-          "Subscription prices retain the official currency, billing period, and region while also showing a CNY reference. The API catalog calculates the lowest valid input and output price among providers and stores the provider, specification, status, price tier, and source. Missing prices display as “—” and are never treated as zero.",
+          "Subscription prices retain the official currency, billing period, and region while also showing a CNY reference. The API catalog calculates the lowest non-zero valid input and output price among providers and stores the provider, specification, status, price tier, and source. Zero-price offerings remain visible in model details, while missing ranking prices display as “—”.",
           "Batch, Flex, Priority, long-context, free-tier, and non-token items may remain in details but do not enter the ranking. FX rates have their own observation time; foreign-currency sources without a current or historical rate are not published.",
         ],
       },

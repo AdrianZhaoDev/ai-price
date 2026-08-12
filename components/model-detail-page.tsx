@@ -97,16 +97,16 @@ export function ModelDetailPage({
           "@type": "PropertyValue",
           name:
             locale === "en"
-              ? "Minimum input price (USD per million tokens)"
-              : "最低输入价格（USD / 百万 tokens）",
+              ? "Minimum non-zero input price (USD per million tokens)"
+              : "最低非零输入价格（USD / 百万 tokens）",
           value: model.minInputPrice,
         },
         {
           "@type": "PropertyValue",
           name:
             locale === "en"
-              ? "Minimum output price (USD per million tokens)"
-              : "最低输出价格（USD / 百万 tokens）",
+              ? "Minimum non-zero output price (USD per million tokens)"
+              : "最低非零输出价格（USD / 百万 tokens）",
           value: model.minOutputPrice,
         },
       ].filter((measurement) => measurement.value !== undefined),
