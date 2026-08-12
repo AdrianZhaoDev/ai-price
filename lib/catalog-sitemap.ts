@@ -9,6 +9,10 @@ import { loadCachedModelCatalogSummaries } from "@/lib/model-catalog/cache";
 import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type { ModelCatalogSummary } from "@/lib/model-catalog/types";
+import {
+  MODEL_RELEASE_WATCH_PATH,
+  MODEL_RELEASE_WATCH_UPDATED_AT,
+} from "@/lib/model-release-watch";
 import { absoluteUrl } from "@/lib/seo";
 import { localizedPath, type Locale } from "@/lib/i18n";
 
@@ -23,6 +27,7 @@ const CORE_PAGE_UPDATED_AT = {
   "/api-pricing": new Date("2026-08-11T00:00:00.000Z"),
   "/methodology": new Date("2026-07-31T00:00:00.000Z"),
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
+  [MODEL_RELEASE_WATCH_PATH]: new Date(MODEL_RELEASE_WATCH_UPDATED_AT),
 } as const;
 
 const INDEXABLE_LOCALES: Locale[] = ["zh-CN", "en"];

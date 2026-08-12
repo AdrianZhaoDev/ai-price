@@ -244,6 +244,19 @@ export function ModelCatalogExplorer({
               {locale === "en" ? "API price ranking" : "API 价格排行榜"}
             </h1>
             <p>{messages.apiCatalog.description}</p>
+            <Link
+              className="model-release-watch-link"
+              href={
+                locale === "en"
+                  ? "/en/ai-model-release-watch"
+                  : "/ai-model-release-watch"
+              }
+              prefetch={false}
+            >
+              {locale === "en"
+                ? "Latest DeepSeek V4 Pro-0813 and Grok 4.6 release watch →"
+                : "查看 DeepSeek V4 Pro-0813 与 Grok 4.6 最新发布追踪 →"}
+            </Link>
           </div>
           <button
             type="button"

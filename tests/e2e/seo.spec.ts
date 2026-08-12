@@ -58,6 +58,7 @@ const landingPaths = [
 const crawlablePaths = [
   ...publicPages.map((entry) => entry.path),
   ...landingPaths,
+  "/ai-model-release-watch",
   "/methodology",
   "/privacy",
 ] as const;
@@ -119,6 +120,59 @@ test("publishes distinct indexable pricing pages and structured data", async ({
       ).toHaveAttribute("href", /.+-price|china-ai-subscriptions|api-pricing/);
     }
   }
+});
+
+test("publishes the bilingual hot model release watch page", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "SEO output is device-independent.");
+
+  const response = await page.goto("/ai-model-release-watch");
+  expect(response?.ok()).toBe(true);
+  await expect(page).toHaveTitle(
+    /DeepSeek V4 Pro-0813 与 Grok 4\.6 API 价格对比/,
+  );
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+    "content",
+    /.{70,}/,
+  );
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "https://lowpriceradar.com/ai-model-release-watch",
+  );
+  await expect(
+    page.getByRole("heading", { name: /DeepSeek V4 Pro-0813/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "DeepSeek-V4-Pro-0813",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Grok 4.6").first()).toBeVisible();
+
+  const structuredData = (
+    await page.locator('script[type="application/ld+json"]').allTextContents()
+  ).flatMap((value) => {
+    const parsed = JSON.parse(value) as
+      Record<string, unknown> | Record<string, unknown>[];
+    return Array.isArray(parsed) ? parsed : [parsed];
+  });
+  expect(structuredData).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ "@type": "Article" }),
+      expect.objectContaining({ "@type": "BreadcrumbList" }),
+    ]),
+  );
+
+  await page.goto("/api-pricing");
+  await expect(page.locator(".model-release-watch-link")).toHaveAttribute(
+    "href",
+    "/ai-model-release-watch",
+  );
+  await page.locator(".model-release-watch-link").click();
+  await expect(page).toHaveURL(/\/ai-model-release-watch$/);
 });
 
 test("publishes complete metadata on trust and policy pages", async ({

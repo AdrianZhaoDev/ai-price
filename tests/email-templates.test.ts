@@ -134,6 +134,38 @@ describe("email templates", () => {
     expect(digest.text).not.toContain("涨价");
   });
 
+  it("turns DeepSeek V4 Pro and Grok 4.6 additions into a hot-release digest", () => {
+    const digest = modelCatalogDigestEmail({
+      models: [
+        {
+          id: "deepseek/deepseek-v4-pro",
+          name: "DeepSeek V4 Pro",
+          labName: "DeepSeek",
+          releaseDate: "2026-08-13",
+          url: "https://example.com/models/deepseek-v4-pro",
+        },
+        {
+          id: "xai/grok-4.6",
+          name: "Grok 4.6",
+          labName: "xAI",
+          releaseDate: "2026-08-12",
+          url: "https://example.com/models/grok-4.6",
+        },
+      ],
+      catalogVersion: "b".repeat(40),
+      viewUrl: "https://example.com/api-pricing",
+      releaseWatchUrl: "https://example.com/ai-model-release-watch",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+
+    expect(digest.subject).toContain("热点模型更新");
+    expect(digest.subject).toContain("Grok 4.6");
+    expect(digest.html).toContain("热点模型发布追踪");
+    expect(digest.html).toContain("查看发布追踪");
+    expect(digest.text).toContain("DeepSeek-V4-Pro-0813");
+    expect(digest.text).toContain("https://x.ai/news/grok-4-6");
+  });
+
   it("renders English subscription and alert emails with localized links", () => {
     const subscription = subscriptionCreatedEmail({
       locale: "en",

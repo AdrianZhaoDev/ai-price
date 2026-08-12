@@ -484,7 +484,7 @@ describe("SEO landing page registry", () => {
       snapshot([chatgpt, trae]),
       new Date("2026-07-31T10:00:00.000Z"),
     );
-    const landingEntries = entries.slice(10);
+    const landingEntries = entries.slice(12);
 
     expect(landingEntries.map((entry) => entry.url)).toEqual([
       absoluteUrl("/chatgpt-price"),
