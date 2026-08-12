@@ -21,9 +21,11 @@ export type ModelCatalogSummary = {
   minInputPrice?: number;
   minInputProviderId?: string;
   minInputProviderName?: string;
+  hasZeroInputPrice?: boolean;
   minOutputPrice?: number;
   minOutputProviderId?: string;
   minOutputProviderName?: string;
+  hasZeroOutputPrice?: boolean;
   releaseDate: string;
   updatedDate: string;
   providerCount: number;

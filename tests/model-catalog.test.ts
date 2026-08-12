@@ -91,8 +91,10 @@ describe("models.dev catalog normalization", () => {
     expect(atlas.providers).toHaveLength(2);
     expect(atlas.summary.minInputPrice).toBe(2);
     expect(atlas.summary.minInputProviderName).toBe("Cheap Output");
+    expect(atlas.summary.hasZeroInputPrice).toBe(true);
     expect(atlas.summary.minOutputPrice).toBe(3);
     expect(atlas.summary.minOutputProviderName).toBe("Cheap Output");
+    expect(atlas.summary.hasZeroOutputPrice).toBe(false);
     expect(scoped.providers).toHaveLength(1);
     expect(catalog.unlinkedProviderModels).toBe(0);
     expect(
@@ -141,11 +143,22 @@ describe("models.dev catalog normalization", () => {
 
     expect(atlas.summary.minInputPrice).toBeUndefined();
     expect(atlas.summary.minInputProviderName).toBeUndefined();
+    expect(atlas.summary.hasZeroInputPrice).toBe(true);
     expect(atlas.summary.minOutputPrice).toBeUndefined();
     expect(atlas.summary.minOutputProviderName).toBeUndefined();
+    expect(atlas.summary.hasZeroOutputPrice).toBe(true);
     expect(atlas.providers).toEqual([
       expect.objectContaining({ inputPrice: 0, outputPrice: 0 }),
     ]);
+    expect(
+      filterAndSortModelCatalog([atlas.summary], parseModelCatalogFilters({})),
+    ).toEqual([]);
+    expect(
+      filterAndSortModelCatalog(
+        [atlas.summary],
+        parseModelCatalogFilters({ hideZero: "0" }),
+      ).map((model) => model.id),
+    ).toEqual(["lab/atlas"]);
   });
 
   it("sorts provider rows by the four numeric columns with missing values last", () => {

@@ -59,7 +59,10 @@ export function filterAndSortModelCatalog(
         return false;
       if (
         filters.hideZeroPrice !== false &&
-        (model.minInputPrice === 0 || model.minOutputPrice === 0)
+        (model.minInputPrice === 0 ||
+          model.minOutputPrice === 0 ||
+          (model.minInputPrice === undefined && model.hasZeroInputPrice) ||
+          (model.minOutputPrice === undefined && model.hasZeroOutputPrice))
       )
         return false;
       if (filters.labs?.length && !filters.labs.includes(model.labId))

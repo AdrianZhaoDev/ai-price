@@ -11,6 +11,7 @@ import {
   modelProviderOfferings,
 } from "@/lib/db/schema";
 import { fallbackModelCatalog } from "@/lib/model-catalog/fallback";
+import { summarizeNonZeroPrices } from "@/lib/model-catalog/prices";
 import type {
   ModelCatalogOrigin,
   ModelCatalogSummary,
@@ -35,9 +36,11 @@ function fallbackSummaries(activeOnly = true): ModelCatalogSummary[] {
       minInputPrice: model.minInputPrice,
       minInputProviderId: model.minInputProviderId,
       minInputProviderName: model.minInputProviderName,
+      hasZeroInputPrice: model.hasZeroInputPrice,
       minOutputPrice: model.minOutputPrice,
       minOutputProviderId: model.minOutputProviderId,
       minOutputProviderName: model.minOutputProviderName,
+      hasZeroOutputPrice: model.hasZeroOutputPrice,
       releaseDate: model.releaseDate,
       updatedDate: model.updatedDate,
       providerCount: model.providerCount,
@@ -88,6 +91,8 @@ export async function loadModelCatalogSummaries(
       .select({
         modelId: modelProviderOfferings.canonicalModelId,
         providerId: modelProviderOfferings.providerId,
+        inputPrice: modelProviderOfferings.inputPrice,
+        outputPrice: modelProviderOfferings.outputPrice,
       })
       .from(modelProviderOfferings)
       .where(
@@ -104,13 +109,33 @@ export async function loadModelCatalogSummaries(
     providerRows.map((provider) => [provider.id, provider.name]),
   );
   const providersByModel = new Map<string, Set<string>>();
+  const offeringsByModel = new Map<string, (typeof offeringRows)[number][]>();
   for (const offering of offeringRows) {
     const values = providersByModel.get(offering.modelId) ?? new Set<string>();
     values.add(offering.providerId);
     providersByModel.set(offering.modelId, values);
+    const modelOfferings = offeringsByModel.get(offering.modelId) ?? [];
+    modelOfferings.push(offering);
+    offeringsByModel.set(offering.modelId, modelOfferings);
   }
   return rows.map(({ model, lab }) => {
     const providerIds = [...(providersByModel.get(model.id) ?? [])].sort();
+    const modelOfferings = offeringsByModel.get(model.id);
+    const prices = modelOfferings
+      ? summarizeNonZeroPrices(modelOfferings)
+      : undefined;
+    const minInputPrice = prices
+      ? prices.minInput?.inputPrice
+      : (model.minInputPrice ?? undefined);
+    const minInputProviderId = prices
+      ? prices.minInput?.providerId
+      : (model.minInputProviderId ?? undefined);
+    const minOutputPrice = prices
+      ? prices.minOutput?.outputPrice
+      : (model.minOutputPrice ?? undefined);
+    const minOutputProviderId = prices
+      ? prices.minOutput?.providerId
+      : (model.minOutputProviderId ?? undefined);
     return {
       id: model.id,
       name: model.name,
@@ -121,16 +146,18 @@ export async function loadModelCatalogSummaries(
       context: model.contextTokens ?? undefined,
       output: model.outputTokens ?? undefined,
       inputModalities: model.inputModalities,
-      minInputPrice: model.minInputPrice ?? undefined,
-      minInputProviderId: model.minInputProviderId ?? undefined,
-      minInputProviderName: model.minInputProviderId
-        ? providerNames.get(model.minInputProviderId)
+      minInputPrice,
+      minInputProviderId,
+      minInputProviderName: minInputProviderId
+        ? providerNames.get(minInputProviderId)
         : undefined,
-      minOutputPrice: model.minOutputPrice ?? undefined,
-      minOutputProviderId: model.minOutputProviderId ?? undefined,
-      minOutputProviderName: model.minOutputProviderId
-        ? providerNames.get(model.minOutputProviderId)
+      hasZeroInputPrice: prices?.hasZeroInput ?? false,
+      minOutputPrice,
+      minOutputProviderId,
+      minOutputProviderName: minOutputProviderId
+        ? providerNames.get(minOutputProviderId)
         : undefined,
+      hasZeroOutputPrice: prices?.hasZeroOutput ?? false,
       releaseDate: model.releaseDate,
       updatedDate: model.updatedDate,
       providerCount: model.providerCount,
@@ -187,6 +214,8 @@ export async function loadModelDetail(
   const providerNamesById = new Map(
     offerings.map(({ provider }) => [provider.id, provider.name]),
   );
+  const { minInput, minOutput, hasZeroInput, hasZeroOutput } =
+    summarizeNonZeroPrices(offerings.map(({ offering }) => offering));
   const providerIds = [
     ...new Set(
       offerings
@@ -209,16 +238,18 @@ export async function loadModelDetail(
     context: row.model.contextTokens ?? undefined,
     output: row.model.outputTokens ?? undefined,
     inputModalities: row.model.inputModalities,
-    minInputPrice: row.model.minInputPrice ?? undefined,
-    minInputProviderId: row.model.minInputProviderId ?? undefined,
-    minInputProviderName: row.model.minInputProviderId
-      ? providerNamesById.get(row.model.minInputProviderId)
+    minInputPrice: minInput?.inputPrice ?? undefined,
+    minInputProviderId: minInput?.providerId,
+    minInputProviderName: minInput
+      ? providerNamesById.get(minInput.providerId)
       : undefined,
-    minOutputPrice: row.model.minOutputPrice ?? undefined,
-    minOutputProviderId: row.model.minOutputProviderId ?? undefined,
-    minOutputProviderName: row.model.minOutputProviderId
-      ? providerNamesById.get(row.model.minOutputProviderId)
+    hasZeroInputPrice: hasZeroInput,
+    minOutputPrice: minOutput?.outputPrice ?? undefined,
+    minOutputProviderId: minOutput?.providerId,
+    minOutputProviderName: minOutput
+      ? providerNamesById.get(minOutput.providerId)
       : undefined,
+    hasZeroOutputPrice: hasZeroOutput,
     releaseDate: row.model.releaseDate,
     updatedDate: row.model.updatedDate,
     providerCount: row.model.providerCount,
