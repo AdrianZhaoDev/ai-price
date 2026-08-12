@@ -95,6 +95,7 @@ export const grokFixture: GlobalApiFixture = {
   normal: `### Text API Pricing
 | Model | Context | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
 | --- | --- | --- | --- | --- |
+| grok-4.6 | 500k | $2.00 | $0.50 | $6.00 |
 | grok-4.5 (< 200k prompt tokens) | 500k | $2.00 | $0.30 | $6.00 |
 | grok-4.5 (≥ 200k prompt tokens) | 500k | $4.00 | $0.60 | $12.00 |`,
   missingField: `| Model | Input / 1M tokens |
@@ -102,8 +103,8 @@ export const grokFixture: GlobalApiFixture = {
 | grok-4.5 | $2.00 |`,
   modelChanges: `| Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
 | --- | --- | --- | --- |
-| grok-4.5 | $2.00 | $0.30 | $6.00 |
-| grok-4.3 | $1.00 | $0.20 | $2.00 |`,
+| grok-4.6 | $2.00 | $0.50 | $6.00 |
+| grok-4.5 | $2.00 | $0.30 | $6.00 |`,
   invalidCurrencyUnit: `| Model | Input / request | Cached input / request | Output / request |
 | --- | --- | --- | --- |
 | grok-4.5 | €2.00 | €0.30 | €6.00 |

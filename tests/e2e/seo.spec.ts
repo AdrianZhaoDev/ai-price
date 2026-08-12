@@ -151,6 +151,7 @@ test("publishes the bilingual hot model release watch page", async ({
     }),
   ).toBeVisible();
   await expect(page.getByText("Grok 4.6").first()).toBeVisible();
+  await expect(page.locator('a[href="/api-pricing?q=grok-4.6"]')).toBeVisible();
 
   const structuredData = (
     await page.locator('script[type="application/ld+json"]').allTextContents()

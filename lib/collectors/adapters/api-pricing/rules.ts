@@ -815,6 +815,7 @@ const globalApiModelNames: Record<string, Array<[RegExp, string]>> = {
     [/^Gemini 3\.1 Flash-Lite$/i, "Gemini 3.1 Flash-Lite"],
   ],
   "grok-api": [
+    [/^grok-4\.6$/i, "grok-4.6"],
     [/^grok-4\.5$/i, "grok-4.5"],
     [/^grok-4\.3$/i, "grok-4.3"],
     [/^grok-4\.20-0309-reasoning$/i, "grok-4.20-0309-reasoning"],
@@ -1027,7 +1028,7 @@ export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseGrokApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "grok-api",
-    parserVersion: "grok-api-v3",
+    parserVersion: "grok-api-v4",
   });
 }
 

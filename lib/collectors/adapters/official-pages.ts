@@ -1226,7 +1226,7 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "openai-api-pricing-official": 6,
   "claude-api-pricing-official": 6,
   "gemini-api-pricing-official": 6,
-  "grok-api-pricing-official": 6,
+  "grok-api-pricing-official": 9,
 };
 
 const globalApiAdapterIds = new Set([
@@ -1723,7 +1723,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "grok-api-pricing-official",
     "grok-api",
     "https://docs.x.ai/developers/pricing",
-    "grok-api-v3",
+    "grok-api-v4",
     parseGrokApi,
     "https://docs.x.ai/developers/pricing.md",
     ["USD"],

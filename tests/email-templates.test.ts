@@ -151,6 +151,13 @@ describe("email templates", () => {
           releaseDate: "2026-08-12",
           url: "https://example.com/models/grok-4.6",
         },
+        {
+          id: "deepseek/deepseek-v4-prototype",
+          name: "DeepSeek V4 Prototype",
+          labName: "DeepSeek",
+          releaseDate: "2026-08-14",
+          url: "https://example.com/models/deepseek-v4-prototype",
+        },
       ],
       catalogVersion: "b".repeat(40),
       viewUrl: "https://example.com/api-pricing",
@@ -158,8 +165,7 @@ describe("email templates", () => {
       unsubscribeUrl: "https://example.com/unsubscribe",
     });
 
-    expect(digest.subject).toContain("热点模型更新");
-    expect(digest.subject).toContain("Grok 4.6");
+    expect(digest.subject).toBe("热点模型更新：DeepSeek-V4-Pro-0813、Grok 4.6");
     expect(digest.html).toContain("热点模型发布追踪");
     expect(digest.html).toContain("查看发布追踪");
     expect(digest.text).toContain("DeepSeek-V4-Pro-0813");

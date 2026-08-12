@@ -11,6 +11,7 @@ export type HotModelRelease = {
   key: "deepseek-v4-pro-0813" | "grok-4-6";
   name: string;
   modelId: string;
+  aliases: readonly string[];
   labName: string;
   status: LocalizedText;
   summary: LocalizedText;
@@ -28,6 +29,7 @@ export const hotModelReleases: readonly HotModelRelease[] = [
     key: "deepseek-v4-pro-0813",
     name: "DeepSeek-V4-Pro-0813",
     modelId: "deepseek-v4-pro",
+    aliases: ["deepseek-v4-pro", "deepseek-v4-pro-0813"],
     labName: "DeepSeek",
     status: {
       "zh-CN":
@@ -67,6 +69,7 @@ export const hotModelReleases: readonly HotModelRelease[] = [
     key: "grok-4-6",
     name: "Grok 4.6",
     modelId: "grok-4.6",
+    aliases: ["grok-4.6"],
     labName: "xAI / SpaceXAI",
     status: {
       "zh-CN":
@@ -100,7 +103,7 @@ export const hotModelReleases: readonly HotModelRelease[] = [
         url: "https://docs.x.ai/developers/models/grok-4.6",
       },
     ],
-    internalPath: "/grok-price",
+    internalPath: "/api-pricing?q=grok-4.6",
   },
 ];
 
@@ -214,22 +217,26 @@ export function hotModelReleaseFor(input: {
   name?: string;
   labName?: string;
 }): HotModelRelease | undefined {
-  const normalized =
-    `${input.id ?? ""} ${input.name ?? ""} ${input.labName ?? ""}`
-      .toLowerCase()
-      .replace(/[._-]+/g, " ");
+  const identities = [input.id, input.name]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeModelIdentity);
 
-  if (
-    normalized.includes("deepseek") &&
-    normalized.includes("v4") &&
-    normalized.includes("pro")
-  ) {
-    return hotModelReleases[0];
-  }
+  return hotModelReleases.find((release) =>
+    release.aliases.some((alias) => {
+      const normalizedAlias = normalizeModelIdentity(alias);
+      return identities.some(
+        (identity) =>
+          identity === normalizedAlias ||
+          identity.endsWith(` ${normalizedAlias}`),
+      );
+    }),
+  );
+}
 
-  if (normalized.includes("grok 4 6") || normalized.includes("grok46")) {
-    return hotModelReleases[1];
-  }
-
-  return undefined;
+function normalizeModelIdentity(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[._\/-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
