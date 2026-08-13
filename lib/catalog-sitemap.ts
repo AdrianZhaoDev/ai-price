@@ -19,6 +19,7 @@ import { unstable_cache } from "next/cache";
 
 export const SITEMAP_PAGE_SIZE = 45_000;
 export const SITEMAP_CACHE_TAG = "catalog-sitemap";
+export const SITEMAP_CACHE_REVALIDATE_SECONDS = 60 * 60;
 export const MODEL_PAGE_TEMPLATE_UPDATED_AT = new Date(
   "2026-08-11T00:00:00.000Z",
 );
@@ -86,7 +87,10 @@ const loadCachedSitemapEntries = unstable_cache(
     return buildSitemap(snapshot, new Date(), models);
   },
   ["catalog-sitemap-entries-v1"],
-  { tags: [SITEMAP_CACHE_TAG], revalidate: false },
+  {
+    tags: [SITEMAP_CACHE_TAG],
+    revalidate: SITEMAP_CACHE_REVALIDATE_SECONDS,
+  },
 );
 
 export async function loadSitemapEntries(): Promise<MetadataRoute.Sitemap> {

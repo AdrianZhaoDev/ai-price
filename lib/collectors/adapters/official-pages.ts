@@ -871,7 +871,23 @@ export function parseHuaweiTokenPlan(
     });
 }
 
-const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v6";
+const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v7";
+const GLM_CODING_PLAN_MINIMUM_OFFERS = 9;
+
+export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
+  const paths: string[] = [];
+  for (const match of runtimeBody.matchAll(
+    /(?:"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)"|"?(ClaudeCode)"?):"([a-f0-9]+)"/g,
+  )) {
+    const path = `${match[1] ?? match[2]}.${match[3]}.js`;
+    if (!paths.includes(path)) paths.push(path);
+  }
+  return paths.sort((left, right) => {
+    const leftIsPriceChunk = left.startsWith("ClaudeCode.");
+    const rightIsPriceChunk = right.startsWith("ClaudeCode.");
+    return Number(rightIsPriceChunk) - Number(leftIsPriceChunk);
+  });
+}
 
 export function parseGlmCodingPlan(
   raw: RawCollectionResult,
@@ -1368,29 +1384,27 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         observedAt: context.observedAt,
         signal: context.signal,
       });
-      const chunk = runtime.body.match(
-        /"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)":"([a-f0-9]+)"/,
-      );
-      if (!chunk) {
+      const chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      if (chunkPaths.length === 0) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
-      const chunkUrl = new URL(
-        `${chunk[1]}.${chunk[2]}.js`,
-        runtimeUrl,
-      ).toString();
-      const raw = await fetchPage(chunkUrl, {
-        observedAt: context.observedAt,
-        signal: context.signal,
-        timeoutMs: 35_000,
-      });
-      if (
-        parseGlmCodingPlan({ ...raw, sourceUrl: this.sourceUrl }).length === 0
-      ) {
-        throw new Error(
-          "GLM Coding Plan price chunk did not contain plan prices.",
-        );
+      for (const chunkPath of chunkPaths) {
+        const chunkUrl = new URL(chunkPath, runtimeUrl).toString();
+        const raw = await fetchPage(chunkUrl, {
+          observedAt: context.observedAt,
+          signal: context.signal,
+          timeoutMs: 35_000,
+        });
+        if (
+          parseGlmCodingPlan({ ...raw, sourceUrl: this.sourceUrl }).length >=
+          GLM_CODING_PLAN_MINIMUM_OFFERS
+        ) {
+          return { ...raw, sourceUrl: this.sourceUrl };
+        }
       }
-      return { ...raw, sourceUrl: this.sourceUrl };
+      throw new Error(
+        "GLM Coding Plan price chunks did not contain all billing periods.",
+      );
     } catch (primaryError) {
       const renderedFallbackUrl =
         "https://r.jina.ai/https://bigmodel.cn/claude-code";
@@ -1422,7 +1436,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, 3);
+    return officialPageHealthCheck(offers, GLM_CODING_PLAN_MINIMUM_OFFERS);
   }
 }
 

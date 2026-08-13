@@ -11,6 +11,7 @@ import {
   parseGlmCodingPlan,
   parseGlmPricing,
   parseGlmResourcePackages,
+  glmCodingPlanPriceChunkPaths,
   parseHuaweiMaaSPricing,
   parseHuaweiTokenPlan,
   parseHunyuanPricing,
@@ -341,8 +342,26 @@ describe("official table adapters", () => {
       "year",
     ]);
     expect(
-      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v6"),
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v7"),
     ).toBe(true);
+  });
+
+  it("prioritizes the GLM chunk that contains all billing periods", () => {
+    expect(
+      glmCodingPlanPriceChunkPaths(
+        [
+          '"ClaudeCode~SpecialArea~subscribe-overview":"064a6780"',
+          'ClaudeCode:"34d633db"',
+          '"ClaudeCode~SpecialArea~subscribe-overview":"055aad4d"',
+          '"ClaudeCode":"44c4b0c4"',
+        ].join(","),
+      ),
+    ).toEqual([
+      "ClaudeCode.34d633db.js",
+      "ClaudeCode.44c4b0c4.js",
+      "ClaudeCode~SpecialArea~subscribe-overview.064a6780.js",
+      "ClaudeCode~SpecialArea~subscribe-overview.055aad4d.js",
+    ]);
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
@@ -401,8 +420,12 @@ Max
       "month",
     ]);
     expect(
-      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v6"),
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v7"),
     ).toBe(true);
+    expect(officialPageHealthCheck(glm, 9)).toMatchObject({
+      ok: false,
+      code: "MISSING_PRICE",
+    });
   });
 
   it("parses additional domestic token plans", () => {
