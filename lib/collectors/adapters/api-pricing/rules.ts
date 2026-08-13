@@ -967,8 +967,11 @@ function parseGlobalUsdTables(
         raw.observedAt,
       );
       if (!modelName || /model|模型/i.test(modelName)) continue;
+      // Context capacity is descriptive metadata, not a pricing tier. Keep
+      // tier signals from the table/section and model label only so a value
+      // such as Grok's `500k` context cell cannot disable ranking eligibility.
       const tier = globalTier(
-        `${table.context} ${headers.join(" ")} ${rawModelName} ${row.join(" ")}`,
+        `${table.context} ${headers.join(" ")} ${rawModelName}`,
       );
       for (const column of columns) {
         const cell = row[column.index] ?? "";
