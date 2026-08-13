@@ -594,12 +594,13 @@ export async function listActivePriceSubscribers(
       }));
   }
 
-  return getDatabase()
+  const rows = await getDatabase()
     .select({
       subscriptionId: subscriptions.id,
       email: subscribers.emailNormalized,
-      activeSince: sql<Date>`coalesce(${subscriptions.confirmedAt}, ${subscriptions.createdAt})`,
-      locale: sql<Locale>`case when ${subscriptions.locale} = 'en' then 'en' else 'zh-CN' end`,
+      confirmedAt: subscriptions.confirmedAt,
+      createdAt: subscriptions.createdAt,
+      locale: subscriptions.locale,
     })
     .from(subscriptions)
     .innerJoin(subscribers, eq(subscriptions.subscriberId, subscribers.id))
@@ -613,6 +614,13 @@ export async function listActivePriceSubscribers(
         ),
       ),
     );
+
+  return rows.map((row) => ({
+    subscriptionId: row.subscriptionId,
+    email: row.email,
+    activeSince: row.confirmedAt ?? row.createdAt,
+    locale: row.locale === "en" ? "en" : "zh-CN",
+  }));
 }
 
 export async function createUnsubscribeToken(
