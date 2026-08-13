@@ -12,6 +12,7 @@ import {
   MODEL_CATALOG_CACHE_TAG,
   modelCacheTag,
 } from "@/lib/model-catalog/cache";
+import { SITEMAP_CACHE_TAG } from "@/lib/catalog-sitemap";
 import { isSafeModelId, modelDetailPath } from "@/lib/model-catalog/paths";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
   }
 
   revalidateTag(PRICING_PAGE_CACHE_TAG, { expire: 0 });
+  revalidateTag(SITEMAP_CACHE_TAG, "max");
   if (parsed.data.catalogChanged || parsed.data.changedModelIds.length > 0) {
     revalidateTag(MODEL_CATALOG_CACHE_TAG, { expire: 0 });
     revalidatePath("/api-pricing");

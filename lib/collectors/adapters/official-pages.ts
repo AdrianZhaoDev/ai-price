@@ -871,6 +871,8 @@ export function parseHuaweiTokenPlan(
     });
 }
 
+const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v6";
+
 export function parseGlmCodingPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
@@ -904,7 +906,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     );
   }
@@ -930,7 +932,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
   });
@@ -938,7 +940,7 @@ export function parseGlmCodingPlan(
 
   return [
     ...raw.body.matchAll(
-      /(?:^|\n)(Lite|Pro|Max)\s*\n([\s\S]*?)(?=\n(?:Lite|Pro|Max)\s*\n|$)/g,
+      /(?:^|\n)\s*(?:#{1,6}\s*)?(Lite|Pro|Max)\s*(?:\n|$)([\s\S]*?)(?=\n\s*(?:#{1,6}\s*)?(?:Lite|Pro|Max)\s*(?:\n|$)|$)/g,
     ),
   ].flatMap((product) => {
     const monthlyPrices = [...product[2].matchAll(/[¥￥]\s*([\d.]+)\/月/g)].map(
@@ -948,12 +950,12 @@ export function parseGlmCodingPlan(
       product[2].match(/下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/)?.[1],
     );
     const standardMonth = monthlyPrices[1] ?? monthlyPrices[0];
-    if (!Number.isFinite(standardMonth) || !Number.isFinite(quarterTotal)) {
+    if (!Number.isFinite(standardMonth)) {
       return [];
     }
 
     const planName = product[1];
-    return [
+    const offers = [
       cnyOffer({
         providerSlug: "glm-coding-plan",
         planSlug: `glm-coding-${planName.toLowerCase()}-month`,
@@ -963,8 +965,12 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
+    ];
+    if (!Number.isFinite(quarterTotal)) return offers;
+    return [
+      ...offers,
       cnyOffer({
         providerSlug: "glm-coding-plan",
         planSlug: `glm-coding-${planName.toLowerCase()}-quarter`,
@@ -974,7 +980,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
   });
@@ -1336,7 +1342,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   readonly id = "glm-coding-plan-official";
   readonly providerSlug = "glm-coding-plan";
   readonly sourceUrl = "https://www.bigmodel.cn/claude-code";
-  readonly parserVersion = "glm-coding-plan-v5";
+  readonly parserVersion = GLM_CODING_PLAN_PARSER_VERSION;
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
     try {
@@ -1362,14 +1368,14 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         observedAt: context.observedAt,
         signal: context.signal,
       });
-      const hash = runtime.body.match(
-        /"ClaudeCode~subscribe-overview":"([a-f0-9]+)"/,
-      )?.[1];
-      if (!hash) {
+      const chunk = runtime.body.match(
+        /"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)":"([a-f0-9]+)"/,
+      );
+      if (!chunk) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
       const chunkUrl = new URL(
-        `ClaudeCode~subscribe-overview.${hash}.js`,
+        `${chunk[1]}.${chunk[2]}.js`,
         runtimeUrl,
       ).toString();
       const raw = await fetchPage(chunkUrl, {
@@ -1377,6 +1383,13 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         signal: context.signal,
         timeoutMs: 35_000,
       });
+      if (
+        parseGlmCodingPlan({ ...raw, sourceUrl: this.sourceUrl }).length === 0
+      ) {
+        throw new Error(
+          "GLM Coding Plan price chunk did not contain plan prices.",
+        );
+      }
       return { ...raw, sourceUrl: this.sourceUrl };
     } catch (primaryError) {
       const renderedFallbackUrl =
@@ -1409,7 +1422,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, 6);
+    return officialPageHealthCheck(offers, 3);
   }
 }
 
@@ -1682,7 +1695,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v4",
+    "huawei-maas-api-v5",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

@@ -341,7 +341,7 @@ describe("official table adapters", () => {
       "year",
     ]);
     expect(
-      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v5"),
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v6"),
     ).toBe(true);
   });
 
@@ -374,6 +374,35 @@ Max
       "month",
       "quarter",
     ]);
+  });
+
+  it("parses the current heading-based GLM rendered fallback", () => {
+    const glm = parseGlmCodingPlan(
+      raw(`
+连续包月
+### Lite
+¥94.4/月
+¥118/月
+### Pro
+¥430.4/月
+¥538/月
+### Max
+¥862.4/月
+¥1078/月
+`),
+    );
+
+    expect(glm.map((offer) => offer.amountMinor)).toEqual([
+      11800, 53800, 107800,
+    ]);
+    expect(glm.map((offer) => offer.billingPeriod)).toEqual([
+      "month",
+      "month",
+      "month",
+    ]);
+    expect(
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v6"),
+    ).toBe(true);
   });
 
   it("parses additional domestic token plans", () => {

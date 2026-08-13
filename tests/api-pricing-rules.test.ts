@@ -306,6 +306,45 @@ describe("maintainable API pricing rules", () => {
     expect(unnamedTeleai[0].modelName).toBe("TeleAI 价格项 1");
   });
 
+  it("parses Huawei MaaS nested price-type headers and token tiers", () => {
+    const huawei = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th rowspan="2">模型名称</th><th rowspan="2">单次请求的Token数</th><th colspan="3">单价（元/百万Tokens）</th></tr>
+        <tr><th>输入（缓存命中）</th><th>输入</th><th>输出</th></tr>
+        <tr><td rowspan="2">openPangu-2.0-Pro</td><td>0≤Token&lt;32K</td><td>0.8</td><td>3.2</td><td>14.5</td></tr>
+        <tr><td>Token≥32K</td><td>1.2</td><td>4.8</td><td>17.6</td></tr>
+        <tr><td>GLM-5.2</td><td>-</td><td>-</td><td>8</td><td>28</td></tr>
+      </table>`),
+    );
+
+    expect(huawei).toHaveLength(8);
+    expect(huawei).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          modelName: "openPangu-2.0-Pro",
+          priceType: "cached_input",
+          amountMinor: 80,
+          unit: "/百万 tokens",
+          priceTier: "0≤Token<32K",
+        }),
+        expect.objectContaining({
+          modelName: "openPangu-2.0-Pro",
+          priceType: "output",
+          amountMinor: 1760,
+          priceTier: "Token≥32K",
+        }),
+        expect.objectContaining({
+          modelName: "GLM-5.2",
+          priceType: "input",
+          amountMinor: 800,
+        }),
+      ]),
+    );
+    expect(
+      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v5"),
+    ).toBe(true);
+  });
+
   describe.each([
     ["OpenAI", parseOpenAiApi, openAiFixture],
     ["Claude", parseClaudeApi, claudeFixture],
