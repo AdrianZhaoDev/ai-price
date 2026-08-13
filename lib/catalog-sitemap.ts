@@ -15,8 +15,11 @@ import {
 } from "@/lib/model-release-watch";
 import { absoluteUrl } from "@/lib/seo";
 import { localizedPath, type Locale } from "@/lib/i18n";
+import { unstable_cache } from "next/cache";
 
 export const SITEMAP_PAGE_SIZE = 45_000;
+export const SITEMAP_CACHE_TAG = "catalog-sitemap";
+export const SITEMAP_CACHE_REVALIDATE_SECONDS = 60 * 60;
 export const MODEL_PAGE_TEMPLATE_UPDATED_AT = new Date(
   "2026-08-11T00:00:00.000Z",
 );
@@ -75,12 +78,23 @@ export function buildSitemap(
   ];
 }
 
+const loadCachedSitemapEntries = unstable_cache(
+  async (): Promise<MetadataRoute.Sitemap> => {
+    const [snapshot, models] = await Promise.all([
+      loadLandingCatalogSnapshot(),
+      loadCachedModelCatalogSummaries(),
+    ]);
+    return buildSitemap(snapshot, new Date(), models);
+  },
+  ["catalog-sitemap-entries-v1"],
+  {
+    tags: [SITEMAP_CACHE_TAG],
+    revalidate: SITEMAP_CACHE_REVALIDATE_SECONDS,
+  },
+);
+
 export async function loadSitemapEntries(): Promise<MetadataRoute.Sitemap> {
-  const [snapshot, models] = await Promise.all([
-    loadLandingCatalogSnapshot(),
-    loadCachedModelCatalogSummaries(),
-  ]);
-  return buildSitemap(snapshot, new Date(), models);
+  return loadCachedSitemapEntries();
 }
 
 export function sitemapPageCount(entryCount: number): number {

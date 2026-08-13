@@ -3,6 +3,7 @@ import robots from "@/app/robots";
 import {
   buildSitemap,
   renderSitemapIndexXml,
+  SITEMAP_CACHE_REVALIDATE_SECONDS,
   sitemapPageCount,
 } from "@/lib/catalog-sitemap";
 import { providersForMode } from "@/lib/data/catalog";
@@ -39,6 +40,7 @@ import { describe, expect, it } from "vitest";
 
 describe("SEO routes", () => {
   it("renders the sitemap dynamically from the authoritative runtime cache", () => {
+    expect(SITEMAP_CACHE_REVALIDATE_SECONDS).toBe(60 * 60);
     expect(sitemapPageCount(45_000)).toBe(1);
     expect(sitemapPageCount(45_001)).toBe(2);
     expect(

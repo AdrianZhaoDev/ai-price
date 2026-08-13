@@ -871,6 +871,42 @@ export function parseHuaweiTokenPlan(
     });
 }
 
+const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v7";
+const GLM_CODING_PLAN_MINIMUM_OFFERS = 9;
+
+export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
+  const paths: string[] = [];
+  for (const match of runtimeBody.matchAll(
+    /(?:"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)"|"?(ClaudeCode)"?):"([a-f0-9]+)"/g,
+  )) {
+    const path = `${match[1] ?? match[2]}.${match[3]}.js`;
+    if (!paths.includes(path)) paths.push(path);
+  }
+  return paths.sort((left, right) => {
+    const leftIsPriceChunk = left.startsWith("ClaudeCode.");
+    const rightIsPriceChunk = right.startsWith("ClaudeCode.");
+    return Number(rightIsPriceChunk) - Number(leftIsPriceChunk);
+  });
+}
+
+export async function findCompleteGlmCodingPlanChunk(
+  chunkPaths: string[],
+  loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
+  signal?: AbortSignal,
+): Promise<RawCollectionResult | null> {
+  for (const chunkPath of chunkPaths) {
+    try {
+      const raw = await loadChunk(chunkPath);
+      if (parseGlmCodingPlan(raw).length >= GLM_CODING_PLAN_MINIMUM_OFFERS) {
+        return raw;
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
+  }
+  return null;
+}
+
 export function parseGlmCodingPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
@@ -904,7 +940,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     );
   }
@@ -930,7 +966,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
   });
@@ -938,7 +974,7 @@ export function parseGlmCodingPlan(
 
   return [
     ...raw.body.matchAll(
-      /(?:^|\n)(Lite|Pro|Max)\s*\n([\s\S]*?)(?=\n(?:Lite|Pro|Max)\s*\n|$)/g,
+      /(?:^|\n)\s*(?:#{1,6}\s*)?(Lite|Pro|Max)\s*(?:\n|$)([\s\S]*?)(?=\n\s*(?:#{1,6}\s*)?(?:Lite|Pro|Max)\s*(?:\n|$)|$)/g,
     ),
   ].flatMap((product) => {
     const monthlyPrices = [...product[2].matchAll(/[¥￥]\s*([\d.]+)\/月/g)].map(
@@ -948,12 +984,12 @@ export function parseGlmCodingPlan(
       product[2].match(/下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/)?.[1],
     );
     const standardMonth = monthlyPrices[1] ?? monthlyPrices[0];
-    if (!Number.isFinite(standardMonth) || !Number.isFinite(quarterTotal)) {
+    if (!Number.isFinite(standardMonth)) {
       return [];
     }
 
     const planName = product[1];
-    return [
+    const offers = [
       cnyOffer({
         providerSlug: "glm-coding-plan",
         planSlug: `glm-coding-${planName.toLowerCase()}-month`,
@@ -963,8 +999,12 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
+    ];
+    if (!Number.isFinite(quarterTotal)) return offers;
+    return [
+      ...offers,
       cnyOffer({
         providerSlug: "glm-coding-plan",
         planSlug: `glm-coding-${planName.toLowerCase()}-quarter`,
@@ -974,7 +1014,7 @@ export function parseGlmCodingPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "glm-coding-plan-v5",
+        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
   });
@@ -1221,13 +1261,58 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "baichuan-pricing-official": 2,
   "longcat-pricing-official": 3,
   "siliconflow-pricing-official": 3,
-  "huawei-maas-pricing-official": 2,
   "teleai-pricing-official": 2,
   "openai-api-pricing-official": 6,
   "claude-api-pricing-official": 6,
   "gemini-api-pricing-official": 6,
   "grok-api-pricing-official": 9,
 };
+
+const HUAWEI_MAAS_MINIMUM_OFFERS = 35;
+const HUAWEI_MAAS_MINIMUM_MODELS = 13;
+const HUAWEI_MAAS_REQUIRED_PRICE_TYPES = [
+  "cached_input",
+  "input",
+  "output",
+] as const;
+
+function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const baseHealth = officialPageHealthCheck(
+    offers,
+    HUAWEI_MAAS_MINIMUM_OFFERS,
+  );
+  if (!baseHealth.ok) return baseHealth;
+
+  const modelNames = new Set(
+    offers
+      .map((offer) => offer.modelName?.trim())
+      .filter((modelName): modelName is string => Boolean(modelName)),
+  );
+  const priceTypes = new Set(
+    offers.flatMap((offer) => (offer.priceType ? [offer.priceType] : [])),
+  );
+  const missingPriceTypes = HUAWEI_MAAS_REQUIRED_PRICE_TYPES.filter(
+    (priceType) => !priceTypes.has(priceType),
+  );
+  if (
+    modelNames.size < HUAWEI_MAAS_MINIMUM_MODELS ||
+    missingPriceTypes.length > 0
+  ) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message:
+        "Huawei MaaS price table did not include its verified model and price-type baseline.",
+      details: {
+        modelCount: modelNames.size,
+        minimumModelCount: HUAWEI_MAAS_MINIMUM_MODELS,
+        priceTypes: [...priceTypes].sort(),
+        missingPriceTypes,
+      },
+    };
+  }
+  return baseHealth;
+}
 
 const globalApiAdapterIds = new Set([
   "openai-api-pricing-official",
@@ -1321,6 +1406,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
+    if (this.id === "huawei-maas-pricing-official") {
+      return huaweiMaaSHealthCheck(offers);
+    }
     const baseHealth = officialPageHealthCheck(
       offers,
       minimumOffersByAdapterId[this.id] ?? 1,
@@ -1336,7 +1424,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   readonly id = "glm-coding-plan-official";
   readonly providerSlug = "glm-coding-plan";
   readonly sourceUrl = "https://www.bigmodel.cn/claude-code";
-  readonly parserVersion = "glm-coding-plan-v5";
+  readonly parserVersion = GLM_CODING_PLAN_PARSER_VERSION;
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
     try {
@@ -1362,22 +1450,26 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         observedAt: context.observedAt,
         signal: context.signal,
       });
-      const hash = runtime.body.match(
-        /"ClaudeCode~subscribe-overview":"([a-f0-9]+)"/,
-      )?.[1];
-      if (!hash) {
+      const chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      if (chunkPaths.length === 0) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
-      const chunkUrl = new URL(
-        `ClaudeCode~subscribe-overview.${hash}.js`,
-        runtimeUrl,
-      ).toString();
-      const raw = await fetchPage(chunkUrl, {
-        observedAt: context.observedAt,
-        signal: context.signal,
-        timeoutMs: 35_000,
-      });
-      return { ...raw, sourceUrl: this.sourceUrl };
+      const raw = await findCompleteGlmCodingPlanChunk(
+        chunkPaths,
+        (chunkPath) =>
+          fetchPage(new URL(chunkPath, runtimeUrl).toString(), {
+            observedAt: context.observedAt,
+            signal: context.signal,
+            timeoutMs: 35_000,
+          }),
+        context.signal,
+      );
+      if (raw) {
+        return { ...raw, sourceUrl: this.sourceUrl };
+      }
+      throw new Error(
+        "GLM Coding Plan price chunks did not contain all billing periods.",
+      );
     } catch (primaryError) {
       const renderedFallbackUrl =
         "https://r.jina.ai/https://bigmodel.cn/claude-code";
@@ -1409,7 +1501,7 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, 6);
+    return officialPageHealthCheck(offers, GLM_CODING_PLAN_MINIMUM_OFFERS);
   }
 }
 
@@ -1682,7 +1774,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v4",
+    "huawei-maas-api-v6",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

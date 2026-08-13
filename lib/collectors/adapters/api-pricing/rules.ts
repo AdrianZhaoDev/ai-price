@@ -707,20 +707,105 @@ export function parseHuaweiMaaSApi(
 ): NormalizedOffer[] {
   const orderFor = modelOrderer();
   const rows = officialTables(raw.body)[0]?.rows ?? [];
-  const priceIndex = rows[0]?.findIndex((cell) => /单价|价格/.test(cell)) ?? -1;
+  const headerIndex = rows.findIndex(
+    (row) =>
+      row.some((cell) => /模型/.test(cell)) &&
+      row.some((cell) => /单价|价格/.test(cell)),
+  );
+  const primaryHeader = rows[headerIndex >= 0 ? headerIndex : 0] ?? [];
+  const modelIndex = Math.max(
+    0,
+    primaryHeader.findIndex((cell) => /模型/.test(cell)),
+  );
+  const detailHeader = rows[(headerIndex >= 0 ? headerIndex : 0) + 1] ?? [];
+  const inheritedHeaderColumnCount = primaryHeader.filter(
+    (cell, index) =>
+      Boolean(cell) &&
+      compactLabel(cell) === compactLabel(detailHeader[index] ?? ""),
+  ).length;
+  const hasPriceTypeHeader =
+    inheritedHeaderColumnCount >= 2 &&
+    /模型/.test(primaryHeader[modelIndex] ?? "") &&
+    detailHeader.some(
+      (cell, index) => index > modelIndex && priceTypeFrom(cell) !== "other",
+    );
+  const headers = hasPriceTypeHeader ? detailHeader : primaryHeader;
+  const dataStart =
+    (headerIndex >= 0 ? headerIndex : 0) + (hasPriceTypeHeader ? 2 : 1);
+  const unitInfo = normalizeTokenUnit(
+    primaryHeader.find((cell) => /单价|价格/.test(cell)) ??
+      headers.find((cell) => /单价|价格/.test(cell)) ??
+      "/千Token",
+  );
+  const priceTypeColumns = hasPriceTypeHeader
+    ? headers.flatMap((label, index) => {
+        const priceType = priceTypeFrom(label);
+        return priceType === "other"
+          ? []
+          : [{ index, label: compactLabel(label), priceType }];
+      })
+    : [];
+  if (priceTypeColumns.length > 0) {
+    const tierEnd = Math.min(...priceTypeColumns.map((column) => column.index));
+    return dedupeOffers(
+      rows.slice(dataStart).flatMap((row, tierOrder) => {
+        const modelName = compactLabel(row[modelIndex] ?? "");
+        const tier = [
+          ...new Set(
+            row
+              .slice(modelIndex + 1, tierEnd)
+              .map(compactLabel)
+              .filter((value) => value && value !== "-"),
+          ),
+        ].join(" · ");
+        if (!modelName) return [];
+        return priceTypeColumns.flatMap(({ index, label, priceType }) => {
+          const value = numberFrom(row[index]);
+          if (!validPrice(value)) return [];
+          return [
+            apiOffer({
+              raw,
+              providerSlug: "huawei-maas-api",
+              parserVersion: "huawei-maas-api-v6",
+              modelName,
+              modelOrder: orderFor(modelName),
+              priceLabel: label,
+              priceType,
+              value,
+              unit: unitInfo.unit,
+              multiplier: unitInfo.multiplier,
+              category: "华为云 MaaS",
+              tier: tier || undefined,
+              tierOrder,
+            }),
+          ];
+        });
+      }),
+    );
+  }
+
+  const priceIndex = primaryHeader.findIndex((cell) => /单价|价格/.test(cell));
+  const priceLabelIndex = primaryHeader.findIndex((cell) =>
+    /计费项|输入|输出|缓存/.test(cell),
+  );
   return dedupeOffers(
-    rows.slice(1).flatMap((row) => {
-      const modelName = compactLabel(row[0] ?? "");
-      const priceIndexInRow =
-        [3, 1].find((index) => /输入|输出|缓存/.test(row[index] ?? "")) ?? 1;
-      const priceLabel = compactLabel(row[priceIndexInRow] ?? "价格");
+    rows.slice(dataStart).flatMap((row, tierOrder) => {
+      const modelName = compactLabel(row[modelIndex] ?? "");
+      const priceLabel = compactLabel(
+        (priceLabelIndex >= 0 ? row[priceLabelIndex] : undefined) ??
+          (priceLabelIndex >= 0 ? primaryHeader[priceLabelIndex] : undefined) ??
+          "价格",
+      );
+      const tierEnd = priceIndex >= 0 ? priceIndex : row.length - 1;
       const tier = [
         ...new Set(
           row
-            .slice(1, 4)
+            .slice(modelIndex + 1, tierEnd)
+            .map(compactLabel)
             .filter(
               (value) =>
                 value &&
+                value !== "-" &&
                 value !== priceLabel &&
                 !/^(输入|输出|缓存)$/.test(value),
             ),
@@ -728,14 +813,11 @@ export function parseHuaweiMaaSApi(
       ].join(" · ");
       const value = numberFrom(priceIndex >= 0 ? row[priceIndex] : row.at(-1));
       if (!modelName || !validPrice(value)) return [];
-      const unitInfo = normalizeTokenUnit(
-        (priceIndex >= 0 ? rows[0]?.[priceIndex] : undefined) || "/千Token",
-      );
       return [
         apiOffer({
           raw,
           providerSlug: "huawei-maas-api",
-          parserVersion: "huawei-maas-api-v4",
+          parserVersion: "huawei-maas-api-v6",
           modelName,
           modelOrder: orderFor(modelName),
           priceLabel,
@@ -744,6 +826,7 @@ export function parseHuaweiMaaSApi(
           multiplier: unitInfo.multiplier,
           category: "华为云 MaaS",
           tier: tier || undefined,
+          tierOrder,
         }),
       ];
     }),
