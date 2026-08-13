@@ -1,10 +1,6 @@
 import { landingPages, type LandingPageDefinition } from "@/lib/landing-pages";
 import { displayableOffers } from "@/lib/pricing/format";
-import {
-  PRICING_PAGE_CACHE_TAG,
-  PRICING_PAGE_REVALIDATE_SECONDS,
-} from "@/lib/pricing/page-cache";
-import { loadProviderCatalog } from "@/lib/pricing/repository";
+import { loadCachedProviderCatalog } from "@/lib/pricing/page-cache";
 import type {
   ApiPriceType,
   BillingPeriod,
@@ -12,7 +8,6 @@ import type {
   PriceOffer,
   ProviderCatalogItem,
 } from "@/lib/pricing/types";
-import { unstable_cache } from "next/cache";
 
 export type LandingFreshness = "fresh" | "delayed" | "stale" | "unknown";
 
@@ -484,19 +479,11 @@ export function buildLandingPageData(
   };
 }
 
-const loadCachedLandingProvider = unstable_cache(
-  async (mode: PriceMode, providerId: string) => {
-    const strict = process.env.NODE_ENV === "production";
-    return loadProviderCatalog(mode, providerId, {
-      fallbackOnError: !strict,
-    });
-  },
-  ["seo-landing-provider-v1"],
-  {
-    revalidate: PRICING_PAGE_REVALIDATE_SECONDS,
-    tags: [PRICING_PAGE_CACHE_TAG],
-  },
-);
+async function loadCachedLandingProvider(mode: PriceMode, providerId: string) {
+  return loadCachedProviderCatalog(mode, providerId, {
+    fallbackOnError: process.env.NODE_ENV !== "production",
+  });
+}
 
 export async function loadLandingCatalogSnapshot(): Promise<LandingCatalogSnapshot> {
   const providersByMode = new Map<PriceMode, Set<string>>(
