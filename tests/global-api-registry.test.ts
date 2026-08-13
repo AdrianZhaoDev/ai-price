@@ -53,7 +53,9 @@ describe("global API adapter registry", () => {
         (adapter) =>
           adapter.sourceUrl.startsWith("https://") &&
           adapter.quoteCurrencies?.includes("USD") &&
-          adapter.parserVersion.endsWith("-v3"),
+          (adapter.parserVersion.endsWith("-v3") ||
+            (adapter.id === "grok-api-pricing-official" &&
+              adapter.parserVersion === "grok-api-v4")),
       ),
     ).toBe(true);
   });

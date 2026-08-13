@@ -1,4 +1,8 @@
 import type { Locale } from "@/lib/i18n";
+import {
+  hotModelReleaseFor,
+  type HotModelRelease,
+} from "@/lib/model-release-watch";
 
 type SubscriptionCreatedTemplateInput = {
   locale?: Locale;
@@ -77,6 +81,7 @@ type AdminAlertTemplateInput = {
 type ModelCatalogDigestTemplateInput = {
   locale?: Locale;
   models: Array<{
+    id?: string;
     name: string;
     labName: string;
     releaseDate: string;
@@ -84,6 +89,7 @@ type ModelCatalogDigestTemplateInput = {
   }>;
   catalogVersion: string;
   viewUrl: string;
+  releaseWatchUrl?: string;
   unsubscribeUrl: string;
 };
 
@@ -390,8 +396,23 @@ export function modelCatalogDigestEmail({
   models,
   catalogVersion,
   viewUrl,
+  releaseWatchUrl,
   unsubscribeUrl,
 }: ModelCatalogDigestTemplateInput) {
+  const hotReleases = [
+    ...new Map(
+      models
+        .map((model) =>
+          hotModelReleaseFor({
+            id: model.id,
+            name: model.name,
+            labName: model.labName,
+          }),
+        )
+        .filter((release): release is HotModelRelease => Boolean(release))
+        .map((release) => [release.key, release] as const),
+    ).values(),
+  ];
   const rows = models
     .map(
       (model) => `<tr>
@@ -399,11 +420,25 @@ export function modelCatalogDigestEmail({
       </tr>`,
     )
     .join("");
+  const hotReleaseHtml = hotReleases.length
+    ? `<aside style="margin:0 0 18px;padding:14px 15px;border:1px solid #f0c36b;border-radius:14px;background:#fff8e8;"><p style="margin:0 0 5px;color:#a85400;font-size:11px;font-weight:800;">${locale === "en" ? "HOT MODEL RELEASE WATCH" : "热点模型发布追踪"}</p><p style="margin:0;color:#5f5f65;font-size:12px;line-height:1.65;">${hotReleases.map((release) => escapeHtml(release.status[locale])).join(" ")}${releaseWatchUrl ? ` <a href="${safeHttpUrl(releaseWatchUrl)}" style="color:#0066cc;font-weight:700;">${locale === "en" ? "Read the release watch" : "查看发布追踪"} →</a>` : ""}</p></aside>`
+    : "";
+  const hotReleaseText = hotReleases.length
+    ? `\n\n${locale === "en" ? "Hot model release watch" : "热点模型发布追踪"}\n${hotReleases.map((release) => `${release.name}: ${release.status[locale]}\n${release.sourceLinks[0]?.url ?? ""}`).join("\n\n")}${releaseWatchUrl ? `\n\n${locale === "en" ? "Release watch" : "发布追踪"}: ${safeHttpTextUrl(releaseWatchUrl)}` : ""}`
+    : "";
+  const subject = hotReleases.length
+    ? locale === "en"
+      ? `Hot model update: ${hotReleases.map((release) => release.name).join(" / ")}`
+      : `热点模型更新：${hotReleases.map((release) => release.name).join("、")}`
+    : locale === "en"
+      ? `${models.length} new model${models.length === 1 ? "" : "s"} in the API price ranking`
+      : `API 价格排行榜新增 ${models.length} 个模型`;
   const html = shell(
     `
-    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">${locale === "en" ? "API price ranking update" : "API 价格排行榜更新"}</p>
+    <p style="margin:0;color:#0066cc;font-size:12px;font-weight:800;">${locale === "en" ? "API model release digest" : "API 模型发布快讯"}</p>
     <h1 style="margin:10px 0 8px;font-size:25px;line-height:1.2;">${locale === "en" ? `${models.length} new model${models.length === 1 ? "" : "s"} found` : `发现 ${models.length} 个新模型`}</h1>
     <p style="margin:0 0 14px;color:#5f5f65;font-size:13px;line-height:1.6;">${locale === "en" ? "These canonical models appeared in the latest catalog for the first time." : "以下 canonical model 首次出现在最新目录中。"}</p>
+    ${hotReleaseHtml}
     <table style="width:100%;border-collapse:collapse;">${rows}</table>
     <p style="margin:24px 0 0;"><a href="${safeHttpUrl(viewUrl)}" style="display:inline-block;padding:13px 19px;border-radius:12px;background:#0066cc;color:white;text-decoration:none;font-size:14px;font-weight:700;">${locale === "en" ? "View API price ranking" : "查看 API 价格排行榜"}</a></p>
     <p style="margin:18px 0 0;color:#85858c;font-size:10px;">${locale === "en" ? "Catalog version" : "目录版本"} ${escapeHtml(catalogVersion.slice(0, 12))}</p>
@@ -412,15 +447,12 @@ export function modelCatalogDigestEmail({
     locale,
   );
   return {
-    subject:
-      locale === "en"
-        ? `${models.length} new model${models.length === 1 ? "" : "s"} in the API price ranking`
-        : `API 价格排行榜新增 ${models.length} 个模型`,
+    subject,
     html,
     text:
       locale === "en"
-        ? `${models.length} new model${models.length === 1 ? "" : "s"} in the API price ranking\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\nRanking: ${safeHttpTextUrl(viewUrl)}\nVersion: ${catalogVersion}\nUnsubscribe: ${safeHttpTextUrl(unsubscribeUrl)}`
-        : `API 价格排行榜新增 ${models.length} 个模型\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}\n\n排行榜：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
+        ? `${subject}\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}${hotReleaseText}\n\nRanking: ${safeHttpTextUrl(viewUrl)}\nVersion: ${catalogVersion}\nUnsubscribe: ${safeHttpTextUrl(unsubscribeUrl)}`
+        : `${subject}\n\n${models.map((model) => `${model.name} · ${model.labName} · ${model.releaseDate}\n${safeHttpTextUrl(model.url)}`).join("\n\n")}${hotReleaseText}\n\n排行榜：${safeHttpTextUrl(viewUrl)}\n版本：${catalogVersion}\n退订：${safeHttpTextUrl(unsubscribeUrl)}`,
   };
 }
 

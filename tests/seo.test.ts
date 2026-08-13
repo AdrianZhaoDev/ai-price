@@ -16,6 +16,10 @@ import {
   modelSeoDescription,
   modelSeoTitle,
 } from "@/lib/model-catalog/seo";
+import {
+  modelReleaseWatchMetadata,
+  modelReleaseWatchPath,
+} from "@/lib/model-release-watch";
 import type {
   ModelCatalogSummary,
   ModelDetail,
@@ -60,6 +64,25 @@ describe("SEO routes", () => {
     });
     expect(metadataForMode("api").description).toContain("API 价格排行榜");
     expect(metadataForMode("global").description?.length).toBeGreaterThan(70);
+  });
+
+  it("publishes bilingual metadata for the release watch page", () => {
+    const metadata = modelReleaseWatchMetadata("zh-CN");
+    expect(metadata.title).toEqual({
+      absolute: "DeepSeek V4 Pro-0813 与 Grok 4.6 API 价格对比",
+    });
+    expect(metadata.description).toContain("Grok 4.6");
+    expect(metadata.alternates?.canonical).toBe(modelReleaseWatchPath());
+    expect(metadata.alternates?.languages).toMatchObject({
+      "zh-CN": "/ai-model-release-watch",
+      en: "/en/ai-model-release-watch",
+    });
+
+    const english = modelReleaseWatchMetadata("en");
+    expect(english.title).toEqual({
+      absolute: "DeepSeek V4 Pro-0813 vs Grok 4.6 API Prices",
+    });
+    expect(english.alternates?.canonical).toBe("/en/ai-model-release-watch");
   });
 
   it("disambiguates SEO metadata for models with the same display name", () => {
@@ -161,15 +184,19 @@ describe("SEO routes", () => {
       absoluteUrl("/api-pricing"),
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
+      absoluteUrl("/ai-model-release-watch"),
       absoluteUrl("/en"),
       absoluteUrl("/en/china-ai-subscriptions"),
       absoluteUrl("/en/api-pricing"),
       absoluteUrl("/en/methodology"),
+    ]);
+    expect(urls.slice(10, 12)).toEqual([
       absoluteUrl("/en/privacy"),
+      absoluteUrl("/en/ai-model-release-watch"),
     ]);
     expect(
       urls
-        .slice(10)
+        .slice(12)
         .every((url) =>
           landingPages.some(
             (page) =>

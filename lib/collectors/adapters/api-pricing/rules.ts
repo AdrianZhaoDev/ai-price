@@ -815,6 +815,7 @@ const globalApiModelNames: Record<string, Array<[RegExp, string]>> = {
     [/^Gemini 3\.1 Flash-Lite$/i, "Gemini 3.1 Flash-Lite"],
   ],
   "grok-api": [
+    [/^grok-4\.6$/i, "grok-4.6"],
     [/^grok-4\.5$/i, "grok-4.5"],
     [/^grok-4\.3$/i, "grok-4.3"],
     [/^grok-4\.20-0309-reasoning$/i, "grok-4.20-0309-reasoning"],
@@ -966,8 +967,11 @@ function parseGlobalUsdTables(
         raw.observedAt,
       );
       if (!modelName || /model|模型/i.test(modelName)) continue;
+      // Context capacity is descriptive metadata, not a pricing tier. Keep
+      // tier signals from the table/section and model label only so a value
+      // such as Grok's `500k` context cell cannot disable ranking eligibility.
       const tier = globalTier(
-        `${table.context} ${headers.join(" ")} ${rawModelName} ${row.join(" ")}`,
+        `${table.context} ${headers.join(" ")} ${rawModelName}`,
       );
       for (const column of columns) {
         const cell = row[column.index] ?? "";
@@ -1027,7 +1031,7 @@ export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseGrokApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "grok-api",
-    parserVersion: "grok-api-v3",
+    parserVersion: "grok-api-v4",
   });
 }
 

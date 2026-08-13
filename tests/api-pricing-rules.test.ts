@@ -361,6 +361,18 @@ describe("maintainable API pricing rules", () => {
     });
   });
 
+  it("keeps Grok context capacity out of tier classification", () => {
+    const offers = parseGrokApi(raw(grokFixture.normal)).filter(
+      (offer) => offer.modelName === "grok-4.6",
+    );
+
+    expect(offers).toHaveLength(3);
+    expect(offers.every((offer) => offer.rankingEligible === true)).toBe(true);
+    expect(new Set(offers.map((offer) => offer.priceTier))).toEqual(
+      new Set(["标准实时"]),
+    );
+  });
+
   it("keeps only current mainline models from each global API source", () => {
     const openAi = parseOpenAiApi(
       raw(`Prices per 1M tokens.
@@ -410,11 +422,13 @@ describe("maintainable API pricing rules", () => {
     const grok = parseGrokApi(
       raw(`| Model | Input / 1M tokens | Cached input / 1M tokens | Output / 1M tokens |
 | --- | --- | --- | --- |
+| grok-4.6 | $2 | $0.50 | $6 |
 | grok-4.5 | $2 | $0.30 | $6 |
 | grok-4.3 | $1.25 | $0.20 | $2.50 |
 | grok-build-0.1 | $1 | $0.20 | $2 |`),
     );
     expect([...new Set(grok.map((offer) => offer.modelName))]).toEqual([
+      "grok-4.6",
       "grok-4.5",
       "grok-4.3",
     ]);

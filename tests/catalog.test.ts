@@ -69,7 +69,7 @@ describe("catalog contract", () => {
     const grok = providerCatalog.find((provider) => provider.id === "grok-api");
     expect(grok).toBeDefined();
     expect(new Set(grok?.offers.map((offer) => offer.modelSlug))).toEqual(
-      new Set(["grok-4-5", "grok-4-3"]),
+      new Set(["grok-4-6", "grok-4-5", "grok-4-3"]),
     );
   });
 });

@@ -17,6 +17,7 @@ import {
   API_MODEL_NEW_PLAN_SLUG,
   API_MODEL_NEW_PROVIDER_SLUG,
 } from "@/lib/subscriptions/scopes";
+import { modelReleaseWatchPath } from "@/lib/model-release-watch";
 import { modelDetailPath } from "./paths";
 
 type AddedModelSnapshot = {
@@ -93,6 +94,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
           );
           modelUrl.searchParams.set("locale", subscriber.locale);
           return {
+            id: event.modelId,
             ...snapshot,
             url: modelUrl.toString(),
           };
@@ -102,6 +104,10 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
           baseUrl,
         );
         viewUrl.searchParams.set("locale", subscriber.locale);
+        const releaseWatchUrl = new URL(
+          modelReleaseWatchPath(subscriber.locale),
+          baseUrl,
+        );
         const result = await getEmailTransport().sendMail({
           from: process.env.SMTP_FROM,
           to: subscriber.email,
@@ -110,6 +116,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
             models,
             catalogVersion: version,
             viewUrl: viewUrl.toString(),
+            releaseWatchUrl: releaseWatchUrl.toString(),
             unsubscribeUrl: unsubscribeUrl.toString(),
           }),
         });

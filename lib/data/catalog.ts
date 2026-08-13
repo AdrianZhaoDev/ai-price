@@ -28,6 +28,7 @@ export const modes: ModeDefinition[] = [
 
 const observedAt = "2026-07-23T18:00:00+08:00";
 const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
+const grokApiObservedAt = "2026-08-13T00:00:00+08:00";
 const globalApiFxRate = 1 / 0.14797;
 
 function globalApiOffers(
@@ -38,6 +39,7 @@ function globalApiOffers(
     input: number;
     output: number;
   }>,
+  offerObservedAt = globalApiObservedAt,
 ): PriceOffer[] {
   return models.flatMap((model, modelOrder) => {
     const modelSlug = model.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -61,7 +63,7 @@ function globalApiOffers(
       fxRateObservedAt: globalApiObservedAt,
       unit: "/百万 tokens",
       status: "verified",
-      observedAt: globalApiObservedAt,
+      observedAt: offerObservedAt,
       modelName: model.name,
       modelSlug,
       modelOrder,
@@ -2037,11 +2039,16 @@ export const providerCatalog: ProviderCatalogItem[] = [
     sourceType: "official_api",
     color: "#111111",
     status: "verified",
-    lastCheckedAt: globalApiObservedAt,
-    offers: globalApiOffers("grok-api", [
-      { name: "grok-4.5", cached: 0.3, input: 2, output: 6 },
-      { name: "grok-4.3", cached: 0.2, input: 1.25, output: 2.5 },
-    ]),
+    lastCheckedAt: grokApiObservedAt,
+    offers: globalApiOffers(
+      "grok-api",
+      [
+        { name: "grok-4.6", cached: 0.5, input: 2, output: 6 },
+        { name: "grok-4.5", cached: 0.3, input: 2, output: 6 },
+        { name: "grok-4.3", cached: 0.2, input: 1.25, output: 2.5 },
+      ],
+      grokApiObservedAt,
+    ),
   },
 ];
 

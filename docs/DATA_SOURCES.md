@@ -126,6 +126,10 @@ TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 保留 GPT-5.5 与 GPT-5.6 全系，Claude、Gemini 和 Grok 保留各自当前主力型号；
 海外平台参与排行榜的模型上限为 10 个，国内平台仍为 2 个。
 
+xAI Grok API 当前主力型号包含 Grok 4.6；其公开短上下文标准价按每百万 tokens
+缓存输入 $0.50、输入 $2、输出 $6 采集，规则版本为 `grok-api-v4`。官方页面仍是
+价格依据，模型版本和可用性变化时必须同步更新规则、fixture 与目录回退数据。
+
 ### API 规则维护
 
 - 平台入口与调度仍在 `lib/collectors/adapters/official-pages.ts`。
