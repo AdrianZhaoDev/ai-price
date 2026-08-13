@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   officialPageHealthCheck,
   parseBaichuanPricing,
@@ -11,7 +11,9 @@ import {
   parseGlmCodingPlan,
   parseGlmPricing,
   parseGlmResourcePackages,
+  findCompleteGlmCodingPlanChunk,
   glmCodingPlanPriceChunkPaths,
+  officialPageAdapters,
   parseHuaweiMaaSPricing,
   parseHuaweiTokenPlan,
   parseHunyuanPricing,
@@ -362,6 +364,63 @@ describe("official table adapters", () => {
       "ClaudeCode~SpecialArea~subscribe-overview.064a6780.js",
       "ClaudeCode~SpecialArea~subscribe-overview.055aad4d.js",
     ]);
+  });
+
+  it("continues after a failed GLM chunk candidate", async () => {
+    const complete = raw(
+      [
+        '{type:"lite",unitKey:"month",productId:"lite-month",salePrice:118,renewAmount:118}',
+        '{type:"pro",unitKey:"month",productId:"pro-month",salePrice:538,renewAmount:538}',
+        '{type:"max",unitKey:"month",productId:"max-month",salePrice:1078,renewAmount:1078}',
+        '{type:"lite",unitKey:"quarter",productId:"lite-quarter",salePrice:283.2,renewAmount:283.2}',
+        '{type:"pro",unitKey:"quarter",productId:"pro-quarter",salePrice:1291.2,renewAmount:1291.2}',
+        '{type:"max",unitKey:"quarter",productId:"max-quarter",salePrice:2587.2,renewAmount:2587.2}',
+        '{type:"lite",unitKey:"year",productId:"lite-year",salePrice:991.2,renewAmount:991.2}',
+        '{type:"pro",unitKey:"year",productId:"pro-year",salePrice:4519.2,renewAmount:4519.2}',
+        '{type:"max",unitKey:"year",productId:"max-year",salePrice:9055.2,renewAmount:9055.2}',
+      ].join(","),
+    );
+    const loadChunk = vi
+      .fn<(chunkPath: string) => Promise<RawCollectionResult>>()
+      .mockRejectedValueOnce(new Error("first chunk timed out"))
+      .mockResolvedValueOnce(complete);
+
+    await expect(
+      findCompleteGlmCodingPlanChunk(["first.js", "second.js"], loadChunk),
+    ).resolves.toBe(complete);
+    expect(loadChunk).toHaveBeenNthCalledWith(1, "first.js");
+    expect(loadChunk).toHaveBeenNthCalledWith(2, "second.js");
+  });
+
+  it("requires Huawei MaaS's verified full model and price-type baseline", () => {
+    const sample = parseGlmCodingPlan(
+      raw(
+        '{type:"lite",unitKey:"month",productId:"lite",salePrice:118,renewAmount:118}',
+      ),
+    )[0]!;
+    const priceTypes = ["cached_input", "input", "output"] as const;
+    const baseline = Array.from({ length: 35 }, (_, index) => ({
+      ...sample,
+      canonicalPlanSlug: `huawei-model-${index}`,
+      rawPlanName: `Huawei Model ${index}`,
+      modelName: `Huawei Model ${index % 13}`,
+      priceType: priceTypes[index % priceTypes.length],
+    }));
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "huawei-maas-pricing-official",
+    );
+
+    expect(adapter).toBeDefined();
+    expect(adapter!.healthCheck(baseline)).toMatchObject({ ok: true });
+    expect(adapter!.healthCheck(baseline.slice(0, -1))).toMatchObject({
+      ok: false,
+      code: "MISSING_PRICE",
+    });
+    expect(
+      adapter!.healthCheck(
+        baseline.map((offer) => ({ ...offer, priceType: "input" })),
+      ),
+    ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {

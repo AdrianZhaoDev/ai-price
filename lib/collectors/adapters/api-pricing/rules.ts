@@ -718,9 +718,17 @@ export function parseHuaweiMaaSApi(
     primaryHeader.findIndex((cell) => /模型/.test(cell)),
   );
   const detailHeader = rows[(headerIndex >= 0 ? headerIndex : 0) + 1] ?? [];
+  const inheritedHeaderColumnCount = primaryHeader.filter(
+    (cell, index) =>
+      Boolean(cell) &&
+      compactLabel(cell) === compactLabel(detailHeader[index] ?? ""),
+  ).length;
   const hasPriceTypeHeader =
-    /模型/.test(detailHeader[modelIndex] ?? "") &&
-    detailHeader.some((cell) => priceTypeFrom(cell) !== "other");
+    inheritedHeaderColumnCount >= 2 &&
+    /模型/.test(primaryHeader[modelIndex] ?? "") &&
+    detailHeader.some(
+      (cell, index) => index > modelIndex && priceTypeFrom(cell) !== "other",
+    );
   const headers = hasPriceTypeHeader ? detailHeader : primaryHeader;
   const dataStart =
     (headerIndex >= 0 ? headerIndex : 0) + (hasPriceTypeHeader ? 2 : 1);
@@ -758,7 +766,7 @@ export function parseHuaweiMaaSApi(
             apiOffer({
               raw,
               providerSlug: "huawei-maas-api",
-              parserVersion: "huawei-maas-api-v5",
+              parserVersion: "huawei-maas-api-v6",
               modelName,
               modelOrder: orderFor(modelName),
               priceLabel: label,
@@ -809,7 +817,7 @@ export function parseHuaweiMaaSApi(
         apiOffer({
           raw,
           providerSlug: "huawei-maas-api",
-          parserVersion: "huawei-maas-api-v5",
+          parserVersion: "huawei-maas-api-v6",
           modelName,
           modelOrder: orderFor(modelName),
           priceLabel,

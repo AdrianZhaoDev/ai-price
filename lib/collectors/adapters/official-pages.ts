@@ -889,6 +889,24 @@ export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
   });
 }
 
+export async function findCompleteGlmCodingPlanChunk(
+  chunkPaths: string[],
+  loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
+  signal?: AbortSignal,
+): Promise<RawCollectionResult | null> {
+  for (const chunkPath of chunkPaths) {
+    try {
+      const raw = await loadChunk(chunkPath);
+      if (parseGlmCodingPlan(raw).length >= GLM_CODING_PLAN_MINIMUM_OFFERS) {
+        return raw;
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
+  }
+  return null;
+}
+
 export function parseGlmCodingPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
@@ -1243,13 +1261,58 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "baichuan-pricing-official": 2,
   "longcat-pricing-official": 3,
   "siliconflow-pricing-official": 3,
-  "huawei-maas-pricing-official": 2,
   "teleai-pricing-official": 2,
   "openai-api-pricing-official": 6,
   "claude-api-pricing-official": 6,
   "gemini-api-pricing-official": 6,
   "grok-api-pricing-official": 9,
 };
+
+const HUAWEI_MAAS_MINIMUM_OFFERS = 35;
+const HUAWEI_MAAS_MINIMUM_MODELS = 13;
+const HUAWEI_MAAS_REQUIRED_PRICE_TYPES = [
+  "cached_input",
+  "input",
+  "output",
+] as const;
+
+function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const baseHealth = officialPageHealthCheck(
+    offers,
+    HUAWEI_MAAS_MINIMUM_OFFERS,
+  );
+  if (!baseHealth.ok) return baseHealth;
+
+  const modelNames = new Set(
+    offers
+      .map((offer) => offer.modelName?.trim())
+      .filter((modelName): modelName is string => Boolean(modelName)),
+  );
+  const priceTypes = new Set(
+    offers.flatMap((offer) => (offer.priceType ? [offer.priceType] : [])),
+  );
+  const missingPriceTypes = HUAWEI_MAAS_REQUIRED_PRICE_TYPES.filter(
+    (priceType) => !priceTypes.has(priceType),
+  );
+  if (
+    modelNames.size < HUAWEI_MAAS_MINIMUM_MODELS ||
+    missingPriceTypes.length > 0
+  ) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message:
+        "Huawei MaaS price table did not include its verified model and price-type baseline.",
+      details: {
+        modelCount: modelNames.size,
+        minimumModelCount: HUAWEI_MAAS_MINIMUM_MODELS,
+        priceTypes: [...priceTypes].sort(),
+        missingPriceTypes,
+      },
+    };
+  }
+  return baseHealth;
+}
 
 const globalApiAdapterIds = new Set([
   "openai-api-pricing-official",
@@ -1343,6 +1406,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
+    if (this.id === "huawei-maas-pricing-official") {
+      return huaweiMaaSHealthCheck(offers);
+    }
     const baseHealth = officialPageHealthCheck(
       offers,
       minimumOffersByAdapterId[this.id] ?? 1,
@@ -1388,19 +1454,18 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
       if (chunkPaths.length === 0) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
-      for (const chunkPath of chunkPaths) {
-        const chunkUrl = new URL(chunkPath, runtimeUrl).toString();
-        const raw = await fetchPage(chunkUrl, {
-          observedAt: context.observedAt,
-          signal: context.signal,
-          timeoutMs: 35_000,
-        });
-        if (
-          parseGlmCodingPlan({ ...raw, sourceUrl: this.sourceUrl }).length >=
-          GLM_CODING_PLAN_MINIMUM_OFFERS
-        ) {
-          return { ...raw, sourceUrl: this.sourceUrl };
-        }
+      const raw = await findCompleteGlmCodingPlanChunk(
+        chunkPaths,
+        (chunkPath) =>
+          fetchPage(new URL(chunkPath, runtimeUrl).toString(), {
+            observedAt: context.observedAt,
+            signal: context.signal,
+            timeoutMs: 35_000,
+          }),
+        context.signal,
+      );
+      if (raw) {
+        return { ...raw, sourceUrl: this.sourceUrl };
       }
       throw new Error(
         "GLM Coding Plan price chunks did not contain all billing periods.",
@@ -1709,7 +1774,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v5",
+    "huawei-maas-api-v6",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

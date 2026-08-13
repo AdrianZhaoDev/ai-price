@@ -306,6 +306,32 @@ describe("maintainable API pricing rules", () => {
     expect(unnamedTeleai[0].modelName).toBe("TeleAI 价格项 1");
   });
 
+  it("does not mistake a Huawei MaaS data row for a nested header", () => {
+    const huawei = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th>模型名称</th><th>计费项</th><th>单价/百万Token</th></tr>
+        <tr><td>模型-Alpha</td><td>输入</td><td>1</td></tr>
+        <tr><td>模型-Beta</td><td>输出</td><td>2</td></tr>
+      </table>`),
+    );
+
+    expect(huawei).toHaveLength(2);
+    expect(huawei).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          modelName: "模型-Alpha",
+          priceType: "input",
+          amountMinor: 100,
+        }),
+        expect.objectContaining({
+          modelName: "模型-Beta",
+          priceType: "output",
+          amountMinor: 200,
+        }),
+      ]),
+    );
+  });
+
   it("parses Huawei MaaS nested price-type headers and token tiers", () => {
     const huawei = parseHuaweiMaaSApi(
       raw(`<table>
@@ -341,7 +367,7 @@ describe("maintainable API pricing rules", () => {
       ]),
     );
     expect(
-      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v5"),
+      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v6"),
     ).toBe(true);
   });
 
