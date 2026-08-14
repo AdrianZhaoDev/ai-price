@@ -113,6 +113,7 @@ test("publishes distinct indexable pricing pages and structured data", async ({
     );
     if (entry.path === "/api-pricing") {
       await expect(page.locator(".model-catalog-table")).toBeVisible();
+      await expect(page.locator('a[href="/deepseek-price"]')).toBeVisible();
     } else {
       await expect(page.locator(".price-index")).toBeVisible();
       await expect(
@@ -180,11 +181,11 @@ test("publishes the bilingual hot model release watch page", async ({
   );
 
   await page.goto("/api-pricing");
-  await expect(page.locator(".model-release-watch-link")).toHaveAttribute(
-    "href",
-    "/ai-model-release-watch",
+  const releaseWatchLink = page.locator(
+    '.model-release-watch-link[href="/ai-model-release-watch"]',
   );
-  await page.locator(".model-release-watch-link").click();
+  await expect(releaseWatchLink).toBeVisible();
+  await releaseWatchLink.click();
   await expect(page).toHaveURL(/\/ai-model-release-watch$/);
 });
 
