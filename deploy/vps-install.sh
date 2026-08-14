@@ -282,11 +282,45 @@ EOF
 
 install -d -o root -g root -m 0755 /var/www/html/.well-known/acme-challenge
 
+if [ -L /var/cache/nginx/ai-price-public ]; then
+  echo "Refusing to use a symlink as the public Nginx cache directory." >&2
+  exit 1
+fi
+install -d -o www-data -g www-data -m 0750 /var/cache/nginx/ai-price-public
+
 cat >/etc/nginx/sites-available/ai-price <<'EOF'
 map $http_referer $ai_price_referer {
     ~^(?<ai_price_referer_without_query>[^?]*) $ai_price_referer_without_query;
     default "-";
 }
+
+map $request_method $ai_price_skip_cache_method {
+    default 1;
+    GET 0;
+    HEAD 0;
+}
+
+map $args $ai_price_skip_cache_query {
+    default 1;
+    "" 0;
+}
+
+map $http_cookie $ai_price_skip_cache_cookie {
+    default 1;
+    "" 0;
+}
+
+map $http_authorization $ai_price_skip_cache_authorization {
+    default 1;
+    "" 0;
+}
+
+proxy_cache_path /var/cache/nginx/ai-price-public
+    levels=1:2
+    keys_zone=ai_price_public:20m
+    max_size=512m
+    inactive=1h
+    use_temp_path=off;
 
 log_format ai_price escape=json
     '{"time":"$time_iso8601",'
@@ -300,6 +334,7 @@ log_format ai_price escape=json
     '"request_time":$request_time,'
     '"upstream_response_time":"$upstream_response_time",'
     '"upstream_status":"$upstream_status",'
+    '"cache_status":"$upstream_cache_status",'
     '"cf_ray":"$http_cf_ray",'
     '"request_id":"$request_id"}';
 
@@ -358,7 +393,7 @@ server {
         try_files $uri =404;
     }
 
-    location ~ ^/(?:admin|api|subscription)(?:/|$) {
+    location ~ ^/(?:admin|api|subscription)(?:/|$)|^/en/subscription(?:/|$) {
         proxy_pass http://127.0.0.1:3100;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -374,9 +409,7 @@ server {
         add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
     }
 
-    client_max_body_size 1m;
-
-    location / {
+    location ^~ /pricing-data/ {
         proxy_pass http://127.0.0.1:3100;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -385,6 +418,67 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_read_timeout 60s;
+    }
+
+    location ^~ /_next/static/ {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+    }
+
+    location ~* \.(?:avif|css|gif|ico|jpe?g|js|png|svg|webp|woff2?)$ {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+    }
+
+    client_max_body_size 1m;
+
+    location / {
+        proxy_cache ai_price_public;
+        proxy_cache_key "$scheme|$host|$request_uri|$http_accept_language";
+        proxy_cache_methods GET HEAD;
+        proxy_cache_valid 200 15m;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 10s;
+        proxy_cache_lock_age 30s;
+        proxy_cache_background_update on;
+        proxy_cache_use_stale updating error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_ignore_headers Cache-Control Expires;
+        proxy_cache_bypass
+            $ai_price_skip_cache_method
+            $ai_price_skip_cache_query
+            $ai_price_skip_cache_cookie
+            $ai_price_skip_cache_authorization;
+        proxy_no_cache
+            $ai_price_skip_cache_method
+            $ai_price_skip_cache_query
+            $ai_price_skip_cache_cookie
+            $ai_price_skip_cache_authorization
+            $upstream_http_set_cookie;
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "private, no-cache, no-store, max-age=0, must-revalidate" always;
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
     }
 }
 
@@ -423,6 +517,7 @@ systemctl enable --now \
   ai-price.service ai-price-collect.timer nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
+find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 
 sleep 3
 curl -fsS --max-time 15 http://127.0.0.1:3100/ >/dev/null

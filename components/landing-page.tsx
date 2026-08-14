@@ -358,6 +358,8 @@ function CtaBlock({
             key={link.href}
             href={link.href}
             className={`landing-cta-link ${link.primary ? "landing-cta-link-primary" : ""}`}
+            rel="nofollow"
+            prefetch={false}
           >
             <span>
               <strong>{link.label}</strong>
@@ -672,6 +674,7 @@ export async function LandingPage({
                       key={`${model.providerId}-${model.slug}`}
                       href={`${locale === "en" ? "/en/api-pricing" : "/api-pricing"}?provider=${encodeURIComponent(model.providerId)}&model=${encodeURIComponent(model.slug)}`}
                       className="landing-model-link"
+                      rel="nofollow"
                       prefetch={false}
                     >
                       <span>

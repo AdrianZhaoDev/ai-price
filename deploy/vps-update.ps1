@@ -209,14 +209,22 @@ http_status=`$(curl -sS -o /dev/null -w '%{http_code}' \
   http://$PublicDomain/)
 admin_status=`$(curl -sS -o /dev/null -w '%{http_code}' \
   http://127.0.0.1:3100/admin/errors)
+curl -fsS --resolve '$PublicDomain`:443:127.0.0.1' \
+  -H 'Accept-Language: zh-CN' -o /dev/null \
+  https://$PublicDomain/methodology
+cache_status=`$(curl -fsSI --resolve '$PublicDomain`:443:127.0.0.1' \
+  -H 'Accept-Language: zh-CN' https://$PublicDomain/methodology | \
+  awk 'tolower(`$1) == "x-cache-status:" { gsub("\r", "", `$2); print `$2 }' | tail -n 1)
 printf 'origin-https=%s\n' "`$origin_status"
 printf 'public=%s\n' "`$public_status"
 printf 'http-redirect=%s\n' "`$http_status"
 printf 'admin-errors=%s\n' "`$admin_status"
+printf 'origin-cache=%s\n' "`$cache_status"
 [[ "`$origin_status" == "200" ]]
 [[ "`$public_status" == "200" ]]
 [[ "`$http_status" == "301" ]]
 [[ "`$admin_status" == "307" ]]
+[[ "`$cache_status" == "HIT" ]]
 "@
   $deployCommand = $deployCommand.Replace("`r", "")
   ssh $SshAlias $deployCommand

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { localizedPath, type Locale } from "@/lib/i18n";
-import { absoluteUrl, SITE_NAME } from "@/lib/seo";
+import { absoluteUrl, normalizeSeoDescription, SITE_NAME } from "@/lib/seo";
 
 export const MODEL_RELEASE_WATCH_PATH = "/ai-model-release-watch";
 export const MODEL_RELEASE_WATCH_UPDATED_AT = "2026-08-13T00:00:00.000Z";
@@ -117,9 +117,12 @@ export function modelReleaseWatchMetadata(locale: Locale = "zh-CN"): Metadata {
   const title = isEnglish
     ? "DeepSeek V4 Pro-0813 vs Grok 4.6 API Prices"
     : "DeepSeek V4 Pro-0813 与 Grok 4.6 API 价格对比";
-  const description = isEnglish
-    ? "Track DeepSeek V4 Pro-0813 and Grok 4.6 API prices, context windows, release status, and official sources, then compare current provider offers."
-    : "跟踪 DeepSeek V4 Pro-0813 与 Grok 4.6 的官方 API 价格、上下文、发布状态和来源，区分版本更新与正式公告，并比较当前提供商报价。";
+  const description = normalizeSeoDescription(
+    isEnglish
+      ? "Track DeepSeek V4 Pro-0813 and Grok 4.6 API prices, context windows, release status, and official sources, then compare current provider offers."
+      : "跟踪 DeepSeek V4 Pro-0813 与 Grok 4.6 的官方 API 价格、上下文、发布状态和来源，区分版本更新与正式公告，并比较当前提供商报价。",
+    locale,
+  );
   const imageUrl = absoluteUrl("/og.png");
 
   return {

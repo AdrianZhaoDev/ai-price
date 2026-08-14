@@ -12,7 +12,9 @@ test("redirects an English browser to /en when there is no manual preference", a
   await expect(
     page.getByRole("button", { name: "Switch to Chinese" }),
   ).toBeVisible();
-  await expect(page).toHaveTitle(/Compare Global AI Subscription Prices/);
+  await expect(page).toHaveTitle(
+    "Global AI Subscription Prices | Low Price Radar",
+  );
 });
 
 test("switches only the locale prefix and preserves filters and model query", async ({

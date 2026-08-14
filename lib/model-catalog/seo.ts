@@ -3,7 +3,7 @@ import type { Locale } from "@/lib/i18n";
 import type { ModelDetail } from "@/lib/model-catalog/types";
 import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
-import { absoluteUrl, SITE_NAME } from "@/lib/seo";
+import { absoluteUrl, normalizeSeoDescription, SITE_NAME } from "@/lib/seo";
 
 type ModelSeoIdentity = Pick<ModelDetail, "id" | "name">;
 type ModelSeoSummary = Pick<ModelDetail, "id" | "name" | "description">;
@@ -66,7 +66,7 @@ export function modelSeoDescription(
   ]
     .filter(Boolean)
     .join(" ");
-  return truncate(description, MODEL_DESCRIPTION_MAX_LENGTH);
+  return normalizeSeoDescription(description, locale);
 }
 
 export function modelSnapshotSummary(

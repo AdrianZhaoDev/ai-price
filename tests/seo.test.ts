@@ -30,6 +30,8 @@ import {
   metadataForDocument,
   metadataForMode,
   modeHref,
+  SEO_DESCRIPTION_MAX_LENGTH,
+  SEO_DESCRIPTION_MIN_LENGTH,
   SITE_ORIGIN,
 } from "@/lib/seo";
 import nextConfig, {
@@ -64,8 +66,21 @@ describe("SEO routes", () => {
     expect(metadataForMode("api").title).toEqual({
       absolute: "AI 模型 API 价格与规格排行榜",
     });
-    expect(metadataForMode("api").description).toContain("API 价格排行榜");
-    expect(metadataForMode("global").description?.length).toBeGreaterThan(70);
+    expect(metadataForMode("api").description).toContain("API 价格与规格");
+    for (const locale of ["zh-CN", "en"] as const) {
+      for (const mode of ["global", "china-subscription", "api"] as const) {
+        const metadata = metadataForMode(mode, locale);
+        const title = (metadata.title as { absolute: string }).absolute;
+        const description = metadata.description ?? "";
+        expect(title.length).toBeLessThanOrEqual(60);
+        expect(description.length).toBeGreaterThanOrEqual(
+          SEO_DESCRIPTION_MIN_LENGTH,
+        );
+        expect(description.length).toBeLessThanOrEqual(
+          SEO_DESCRIPTION_MAX_LENGTH,
+        );
+      }
+    }
   });
 
   it("publishes bilingual metadata for the release watch page", () => {
@@ -85,6 +100,14 @@ describe("SEO routes", () => {
       absolute: "DeepSeek V4 Pro-0813 vs Grok 4.6 API Prices",
     });
     expect(english.alternates?.canonical).toBe("/en/ai-model-release-watch");
+    for (const localized of [metadata, english]) {
+      expect(localized.description?.length).toBeGreaterThanOrEqual(
+        SEO_DESCRIPTION_MIN_LENGTH,
+      );
+      expect(localized.description?.length).toBeLessThanOrEqual(
+        SEO_DESCRIPTION_MAX_LENGTH,
+      );
+    }
   });
 
   it("disambiguates SEO metadata for models with the same display name", () => {
@@ -111,7 +134,7 @@ describe("SEO routes", () => {
       expect(modelSeoTitle(preview, locale).length).toBeLessThanOrEqual(60);
       expect(
         modelSeoDescription(preview, locale).length,
-      ).toBeGreaterThanOrEqual(70);
+      ).toBeGreaterThanOrEqual(SEO_DESCRIPTION_MIN_LENGTH);
       expect(modelSeoDescription(preview, locale).length).toBeLessThanOrEqual(
         155,
       );
@@ -161,6 +184,12 @@ describe("SEO routes", () => {
     expect(metadata.twitter).toMatchObject({
       card: "summary_large_image",
     });
+    expect(metadata.description?.length).toBeGreaterThanOrEqual(
+      SEO_DESCRIPTION_MIN_LENGTH,
+    );
+    expect(metadata.description?.length).toBeLessThanOrEqual(
+      SEO_DESCRIPTION_MAX_LENGTH,
+    );
   });
 
   it("publishes public pages in the sitemap without duplicate URLs", () => {
@@ -258,8 +287,12 @@ describe("SEO routes", () => {
         const title = (localized.title as { absolute: string }).absolute;
         const description = localized.description ?? "";
         expect(title.length).toBeLessThanOrEqual(60);
-        expect(description.length).toBeGreaterThanOrEqual(70);
-        expect(description.length).toBeLessThanOrEqual(155);
+        expect(description.length).toBeGreaterThanOrEqual(
+          SEO_DESCRIPTION_MIN_LENGTH,
+        );
+        expect(description.length).toBeLessThanOrEqual(
+          SEO_DESCRIPTION_MAX_LENGTH,
+        );
       }
     }
     expect(

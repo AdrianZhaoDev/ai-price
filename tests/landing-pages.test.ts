@@ -96,7 +96,10 @@ describe("SEO landing page registry", () => {
       "chatgpt-go-price",
       "chatgpt-pro-price",
     ]);
-    expect(landingPagesForMode("global")).toHaveLength(4);
+    expect(landingPagesForMode("global")).toHaveLength(5);
+    expect(landingPagesForMode("global").map((page) => page.slug)).toContain(
+      "gemini-pro-price",
+    );
     expect(landingPagesForMode("china-subscription")).toHaveLength(14);
     expect(landingPagesForMode("api")).toHaveLength(16);
   });

@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { closeDatabase } from "@/lib/db/client";
-import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { loadModelCatalogSummaries } from "@/lib/model-catalog/repository";
+import { buildModelWarmPaths } from "@/lib/model-catalog/warm-paths";
 
 config({ path: [".env.local", ".env"] });
 
@@ -10,15 +10,7 @@ async function main() {
   const models = await loadModelCatalogSummaries();
   if (models.length === 0)
     throw new Error("No active model pages are available to warm.");
-  const paths = [
-    "/api-pricing",
-    "/en/api-pricing",
-    "/sitemap.xml",
-    ...models.flatMap((model) => [
-      modelDetailPath(model.id),
-      modelDetailPath(model.id, "en"),
-    ]),
-  ];
+  const paths = buildModelWarmPaths(models);
   let warmed = 0;
   for (let index = 0; index < paths.length; index += 5) {
     await Promise.all(

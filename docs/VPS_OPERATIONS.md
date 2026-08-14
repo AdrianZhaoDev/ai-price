@@ -90,9 +90,10 @@ production artifact + SHA-256 manifest
 脚本只接受当前本地 `HEAD` 对应且结论为 `success` 的 CI run。如果 CI 尚在执行，
 脚本会等待；失败则停止，不会改动生产。也可明确指定 run：
 
-原子切换并启动新 release 后，脚本会执行一次仅含 `models-dev` 的目录同步，再对全部
-active model 详情、API 目录与 sitemap 做有限并发预热。新 release 不复用旧 release
-的 ISR 文件缓存；同步或任一路径预热失败都会使发布验收失败。部署同步显式使用
+原子切换并启动新 release 后，脚本会执行一次仅含 `models-dev` 的目录同步，再对中英文
+首页、订阅页、发布追踪页、全部 SEO 落地页、active model 详情、API 目录与 sitemap
+做有限并发预热。新 release 不复用旧 release 的 ISR 文件缓存，并会清空站点专用的
+Nginx 公开页面微缓存；同步、预热或微缓存验收失败都会使发布验收失败。部署同步显式使用
 `NODE_ENV=production`，并与两个 systemd collector unit 共用
 `/run/ai-price-collect/collector.lock`，避免与四小时任务并发写库或跳过缓存失效。
 
@@ -136,6 +137,12 @@ curl -sS -o /dev/null -w "http=%{http_code} redirect=%{redirect_url}\n" \
   http://lowpriceradar.com/
 curl -sS -o /dev/null -w "admin-errors=%{http_code}\n" \
   http://127.0.0.1:3100/admin/errors
+curl -fsS --resolve lowpriceradar.com:443:127.0.0.1 \
+  -H 'Accept-Language: zh-CN' -o /dev/null \
+  https://lowpriceradar.com/methodology
+curl -fsSI --resolve lowpriceradar.com:443:127.0.0.1 \
+  -H 'Accept-Language: zh-CN' \
+  https://lowpriceradar.com/methodology | grep -i '^x-cache-status: HIT'
 openssl x509 -checkend 1209600 -noout \
   -in /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem
 sudo -u postgres psql -d ai_price -Atc \
@@ -157,7 +164,7 @@ nginx -t
 tail -n 1 /var/log/nginx/access.log | python3 -c '
 import json, sys
 row = json.load(sys.stdin)
-required = {"time", "remote_addr", "method", "uri", "status", "bytes", "referer", "user_agent", "request_time", "upstream_response_time", "upstream_status", "cf_ray", "request_id"}
+required = {"time", "remote_addr", "method", "uri", "status", "bytes", "referer", "user_agent", "request_time", "upstream_response_time", "upstream_status", "cache_status", "cf_ray", "request_id"}
 missing = required - row.keys()
 assert not missing, f"missing access-log fields: {sorted(missing)}"
 assert "?" not in row["uri"], "access log URI unexpectedly contains a query string"
@@ -180,13 +187,19 @@ sudo -u ai-price env HOME=/var/lib/ai-price bash -c '
 验收条件：五个服务/timer 均为 `active`，源站 HTTPS 和公网均为 `200`，HTTP
 一跳 `301` 到主站 HTTPS，错误页未登录时重定向，数据库记录大于 0，timer 有
 下次运行时间，证书剩余至少 14 天，Web 日志无持续重启或连接错误，Nginx 配置
-检查通过，模型导入数量与上游量级相符，代表性详情与 sitemap 模型链接可访问，且最新
-access log 是符合上述字段要求的 JSON。
+检查通过，模型导入数量与上游量级相符，代表性详情与 sitemap 模型链接可访问，公开
+canonical 页面连续请求能命中源站微缓存，且最新 access log 是符合上述字段要求的 JSON。
 
 生产 access log 使用站点级 `ai_price` JSON 格式。`uri` 和 `referer` 均不记录查询
 参数；字段包含请求方法、状态、响应字节、User-Agent、请求/上游耗时、上游状态、
-Cloudflare Ray ID 和 Nginx request ID。`remote_addr` 在 Cloudflare 代理下通常是边缘
+源站微缓存状态、Cloudflare Ray ID 和 Nginx request ID。`remote_addr` 在 Cloudflare 代理下通常是边缘
 节点地址，不能直接当作访客 IP；上游字段为 `-` 表示该请求没有进入应用上游。
+
+Nginx 只微缓存无查询参数、无 Cookie、无 Authorization 的公开 HTML `GET`/`HEAD`
+200 响应，缓存键包含完整 `Accept-Language`，有效期 15 分钟。后台、API、订阅结果和
+所有参数页都绕过缓存；浏览器与 Cloudflare 仍收到 `no-store`。`pricing-data` 使用独立
+location，不进入 HTML 微缓存，并保留应用返回的 `public, s-maxage=900`；
+`/_next/static/` 与公开静态资源同样保留应用的长期或 immutable 缓存头。
 
 ### 3.4 GitHub 不可用时的手工回退
 
@@ -336,7 +349,9 @@ test -d "$ROLLBACK_RELEASE"
 ```bash
 ln -sfn "$ROLLBACK_RELEASE" /opt/ai-price/current
 chown -h ai-price:ai-price /opt/ai-price/current
+test ! -L /var/cache/nginx/ai-price-public
 systemctl restart ai-price.service
+find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
 journalctl -u ai-price.service -n 150 --no-pager
 ```
@@ -497,9 +512,11 @@ openssl x509 -checkend 1209600 -noout \
 - DNSSEC：启用且注册商存在 DS；
 - HSTS：`max-age=15552000; includeSubDomains`，暂不加入 preload；
 - Early Hints、Crawler Hints：启用；Speed Brain、Rocket Loader、0-RTT：保持关闭；
-- HTML 默认不在边缘强制缓存；只对带内容哈希的 `/_next/static/` 和明确静态资源
-  使用长缓存；
-- `/admin/`、`/api/`、`/subscription/` 必须 `private, no-store`；
+- HTML 默认不在 Cloudflare 边缘强制缓存；源站 Nginx 只对无查询、无 Cookie、无鉴权
+  的公开 canonical 请求做 15 分钟微缓存；带内容哈希的 `/_next/static/` 和明确静态
+  资源使用长缓存；
+- `/admin/`、`/api/`、`/subscription/` 和 `/en/subscription/` 必须
+  `private, no-store`；`/pricing-data/` 保留版本化响应的共享缓存头；
 - 源站 80/443 只允许 Cloudflare 官方 IP 段，SSH 规则必须保留。
 
 详细的 SEO、边缘缓存、安全头和趋势观察流程见

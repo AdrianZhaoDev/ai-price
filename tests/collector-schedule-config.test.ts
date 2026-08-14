@@ -37,5 +37,7 @@ describe("VPS collector schedule", () => {
     expect(
       deployScript.indexOf("npm run collect -- --source=models-dev"),
     ).toBeLessThan(deployScript.indexOf("npm run warm:models"));
+    expect(deployScript).toContain('[[ "`$cache_status" == "HIT" ]]');
+    expect(deployScript).toContain('tolower(`$1) == "x-cache-status:"');
   });
 });
