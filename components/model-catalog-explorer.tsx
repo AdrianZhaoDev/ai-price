@@ -244,19 +244,32 @@ export function ModelCatalogExplorer({
               {locale === "en" ? "API price ranking" : "API 价格排行榜"}
             </h1>
             <p>{messages.apiCatalog.description}</p>
-            <Link
-              className="model-release-watch-link"
-              href={
-                locale === "en"
-                  ? "/en/ai-model-release-watch"
-                  : "/ai-model-release-watch"
-              }
-              prefetch={false}
-            >
-              {locale === "en"
-                ? "Latest DeepSeek V4 Pro-0813 and Grok 4.6 release watch →"
-                : "查看 DeepSeek V4 Pro-0813 与 Grok 4.6 最新发布追踪 →"}
-            </Link>
+            <div className="model-catalog-guide-links">
+              <Link
+                className="model-release-watch-link"
+                href={
+                  locale === "en" ? "/en/deepseek-price" : "/deepseek-price"
+                }
+                prefetch={false}
+              >
+                {locale === "en"
+                  ? "DeepSeek official API price guide →"
+                  : "查看 DeepSeek 官方 API 价格指南 →"}
+              </Link>
+              <Link
+                className="model-release-watch-link"
+                href={
+                  locale === "en"
+                    ? "/en/ai-model-release-watch"
+                    : "/ai-model-release-watch"
+                }
+                prefetch={false}
+              >
+                {locale === "en"
+                  ? "Latest DeepSeek V4 Pro-0813 and Grok 4.6 release watch →"
+                  : "查看 DeepSeek V4 Pro-0813 与 Grok 4.6 最新发布追踪 →"}
+              </Link>
+            </div>
           </div>
           <button
             type="button"

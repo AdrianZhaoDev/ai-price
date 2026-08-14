@@ -1698,6 +1698,12 @@ input:focus-visible {
   text-underline-offset: 3px;
 }
 
+.model-catalog-guide-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
 .model-subscribe {
   display: inline-flex;
   gap: 8px;
