@@ -214,7 +214,7 @@ curl -fsS --resolve '$PublicDomain`:443:127.0.0.1' \
   https://$PublicDomain/methodology
 cache_status=`$(curl -fsSI --resolve '$PublicDomain`:443:127.0.0.1' \
   -H 'Accept-Language: zh-CN' https://$PublicDomain/methodology | \
-  awk '/^X-Cache-Status:/ { gsub("\r", "", `$2); print `$2 }' | tail -n 1)
+  awk 'tolower(`$1) == "x-cache-status:" { gsub("\r", "", `$2); print `$2 }' | tail -n 1)
 printf 'origin-https=%s\n' "`$origin_status"
 printf 'public=%s\n' "`$public_status"
 printf 'http-redirect=%s\n' "`$http_status"

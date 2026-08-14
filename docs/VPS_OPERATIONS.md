@@ -350,8 +350,8 @@ test -d "$ROLLBACK_RELEASE"
 ln -sfn "$ROLLBACK_RELEASE" /opt/ai-price/current
 chown -h ai-price:ai-price /opt/ai-price/current
 test ! -L /var/cache/nginx/ai-price-public
-find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 systemctl restart ai-price.service
+find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
 journalctl -u ai-price.service -n 150 --no-pager
 ```

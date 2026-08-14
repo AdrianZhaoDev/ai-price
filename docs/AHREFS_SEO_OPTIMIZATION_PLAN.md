@@ -125,8 +125,9 @@ PostgreSQL、timer、日志和公网检查外，还要验证：
 - HTML 中标题、描述、canonical、robots 和重点内链符合本计划。
 
 如应用版本需要回滚，按运维手册原子切换旧 release；当前通用 Nginx 微缓存配置可以
-继续使用，但切换后必须清空精确的 `/var/cache/nginx/ai-price-public` 目录并验证配置，
-避免跨版本缓存。此次不包含数据库 schema 或数据迁移，数据库只做发布前例行备份。
+继续使用，但切换并重启目标 release 后必须清空精确的
+`/var/cache/nginx/ai-price-public` 目录并验证配置，避免跨版本缓存。此次不包含数据库
+schema 或数据迁移，数据库只做发布前例行备份。
 
 ## 6. 完成标准
 
