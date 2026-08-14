@@ -34,6 +34,8 @@
 7. 需要更新生产环境时，合并完成后继续完整执行本文件的“VPS 生产环境更新规则”
    以及 [`docs/VPS_OPERATIONS.md`](docs/VPS_OPERATIONS.md)；发布必须使用该
    `main` 提交对应且结论为成功的 GitHub Actions 生产构建产物，并完成全部生产验收。
+8. 发布完成后，必须删除本地和远端除 `main` 外的所有分支，自动切换到 `main` 分支并
+   拉取最新的 `origin/main` 更新。
 
 ## 托管范围
 
