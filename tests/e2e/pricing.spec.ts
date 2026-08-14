@@ -522,6 +522,7 @@ test("uses stable model query links for API landing-page handoff", async ({
     return;
   }
   await expect(modelLink).toBeVisible();
+  await expect(modelLink).toHaveAttribute("rel", "nofollow");
   const href = await modelLink.getAttribute("href");
   expect(href).toMatch(
     /^\/api-pricing\?provider=deepseek-api&model=[a-z0-9-]+$/,

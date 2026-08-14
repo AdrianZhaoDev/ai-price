@@ -9,7 +9,7 @@ const publicPages = [
   },
   {
     path: "/china-ai-subscriptions",
-    title: "国内 AI 会员订阅价格",
+    title: "国内 AI 订阅价格对比",
     canonical: "https://lowpriceradar.com/china-ai-subscriptions",
     sitemapUrl: "https://lowpriceradar.com/china-ai-subscriptions",
   },
@@ -118,6 +118,11 @@ test("publishes distinct indexable pricing pages and structured data", async ({
       await expect(
         page.locator(".price-index-links a").first(),
       ).toHaveAttribute("href", /.+-price|china-ai-subscriptions|api-pricing/);
+      if (entry.path === "/") {
+        await expect(
+          page.locator('.price-index-links a[href="/gemini-pro-price"]'),
+        ).toBeVisible();
+      }
     }
   }
 });
@@ -135,7 +140,7 @@ test("publishes the bilingual hot model release watch page", async ({
   );
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
-    /.{70,}/,
+    /.{100,}/,
   );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
@@ -152,6 +157,13 @@ test("publishes the bilingual hot model release watch page", async ({
   ).toBeVisible();
   await expect(page.getByText("Grok 4.6").first()).toBeVisible();
   await expect(page.locator('a[href="/api-pricing?q=grok-4.6"]')).toBeVisible();
+  await expect(
+    page.locator('a[href="/api-pricing?q=grok-4.6"]'),
+  ).toHaveAttribute("rel", "nofollow");
+  await expect(page.locator('a[href="/deepseek-price"]')).not.toHaveAttribute(
+    "rel",
+    "nofollow",
+  );
 
   const structuredData = (
     await page.locator('script[type="application/ld+json"]').allTextContents()
@@ -347,8 +359,11 @@ test("model pages publish canonical metadata, breadcrumbs, 404s, and filtered no
   );
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
-    /.{70,}/,
+    /.{100,}/,
   );
+  await expect(
+    page.locator('.model-provider-table a[href*="?provider="]').first(),
+  ).toHaveAttribute("rel", "nofollow");
   await expect(page.locator('meta[property="og:image"]')).toHaveCount(1);
   await expect(
     page.locator('meta[property="article:modified_time"]'),
@@ -489,6 +504,7 @@ test("repeated navigation components perform real browser navigation", async ({
   const ctaLink = page.locator(".landing-cta-link").first();
   const ctaTarget = await ctaLink.getAttribute("href");
   expect(ctaTarget).toBeTruthy();
+  await expect(ctaLink).toHaveAttribute("rel", "nofollow");
   await ctaLink.click();
   await expect(page).toHaveURL(new RegExp(ctaTarget!.replace("?", "\\?")));
   await expect(page.getByLabel("提供商")).toHaveValue("deepseek");

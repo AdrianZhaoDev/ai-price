@@ -608,7 +608,11 @@ export function ModelCatalogExplorer({
               aria-label={messages.apiCatalog.paginationLabel}
             >
               {currentPage > 1 ? (
-                <Link href={catalogHref(filters, currentPage - 1)}>
+                <Link
+                  href={catalogHref(filters, currentPage - 1)}
+                  rel="nofollow"
+                  prefetch={false}
+                >
                   {messages.apiCatalog.previousPage}
                 </Link>
               ) : (
@@ -620,7 +624,11 @@ export function ModelCatalogExplorer({
                 {messages.apiCatalog.pageStatus(currentPage, pageCount)}
               </strong>
               {currentPage < pageCount ? (
-                <Link href={catalogHref(filters, currentPage + 1)}>
+                <Link
+                  href={catalogHref(filters, currentPage + 1)}
+                  rel="nofollow"
+                  prefetch={false}
+                >
                   {messages.apiCatalog.nextPage}
                 </Link>
               ) : (

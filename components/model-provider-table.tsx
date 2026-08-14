@@ -150,6 +150,8 @@ export function ModelProviderTable({
                 <th scope="row">
                   <Link
                     href={`${locale === "en" ? "/en/api-pricing" : "/api-pricing"}?provider=${encodeURIComponent(provider.providerId)}`}
+                    rel="nofollow"
+                    prefetch={false}
                   >
                     {provider.providerName}
                   </Link>

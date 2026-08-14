@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { absoluteUrl, SITE_NAME } from "@/lib/seo";
+import { absoluteUrl, normalizeSeoDescription, SITE_NAME } from "@/lib/seo";
 import type { PriceMode } from "@/lib/pricing/types";
 import { DEFAULT_LOCALE, localizedPath, type Locale } from "@/lib/i18n";
 
@@ -22,24 +22,10 @@ export type LandingPageDefinition = {
 
 export const LANDING_CONTENT_UPDATED_AT = "2026-08-11T00:00:00.000Z";
 const LANDING_TITLE_MAX_LENGTH = 60;
-const LANDING_DESCRIPTION_MIN_LENGTH = 70;
-const LANDING_DESCRIPTION_MAX_LENGTH = 155;
 
 function truncateMetadata(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
-}
-
-function landingMetadataDescription(value: string, locale: Locale): string {
-  const expanded =
-    value.length >= LANDING_DESCRIPTION_MIN_LENGTH
-      ? value
-      : `${value}${
-          locale === "en"
-            ? " Includes current plans or models, source links, and the latest verification time."
-            : "同时展示当前可用套餐或模型、官方来源、价格口径、最近核验时间与数据说明。"
-        }`;
-  return truncateMetadata(expanded, LANDING_DESCRIPTION_MAX_LENGTH);
 }
 
 const globalProduct = (
@@ -517,7 +503,7 @@ export function metadataForLandingPage(
   const isEnglish = locale === "en";
   const copy = landingCopy(page, locale);
   const title = truncateMetadata(copy.title, LANDING_TITLE_MAX_LENGTH);
-  const description = landingMetadataDescription(copy.description, locale);
+  const description = normalizeSeoDescription(copy.description, locale);
   return {
     title: { absolute: title },
     description,
@@ -578,7 +564,9 @@ export function relatedLandingPages(
 export function landingPagesForMode(mode: PriceMode): LandingPageDefinition[] {
   if (mode === "global") {
     return landingPages.filter(
-      (page) => page.type === "global" && !page.parentSlug,
+      (page) =>
+        page.type === "global" &&
+        (!page.parentSlug || page.slug === "gemini-pro-price"),
     );
   }
   return landingPages.filter((page) => page.providerIds[mode]?.length);

@@ -121,6 +121,10 @@ export function ModelReleaseWatchPage({
                       ? `/en${release.internalPath}`
                       : release.internalPath
                   }
+                  rel={
+                    release.internalPath.includes("?") ? "nofollow" : undefined
+                  }
+                  prefetch={false}
                 >
                   {copy.brandLink}：{release.labName} ↗
                 </Link>
