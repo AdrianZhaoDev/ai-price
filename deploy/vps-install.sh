@@ -287,7 +287,6 @@ if [ -L /var/cache/nginx/ai-price-public ]; then
   exit 1
 fi
 install -d -o www-data -g www-data -m 0750 /var/cache/nginx/ai-price-public
-find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 
 cat >/etc/nginx/sites-available/ai-price <<'EOF'
 map $http_referer $ai_price_referer {
@@ -394,7 +393,7 @@ server {
         try_files $uri =404;
     }
 
-    location ~ ^/(?:admin|api|pricing-data|subscription)(?:/|$)|^/en/subscription(?:/|$) {
+    location ~ ^/(?:admin|api|subscription)(?:/|$)|^/en/subscription(?:/|$) {
         proxy_pass http://127.0.0.1:3100;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -408,6 +407,39 @@ server {
         add_header Cache-Control "private, no-store, max-age=0" always;
         add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
         add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+    }
+
+    location ^~ /pricing-data/ {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+    }
+
+    location ^~ /_next/static/ {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
+    }
+
+    location ~* \.(?:avif|css|gif|ico|jpe?g|js|png|svg|webp|woff2?)$ {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 60s;
     }
 
     client_max_body_size 1m;
@@ -446,6 +478,7 @@ server {
         proxy_hide_header Cache-Control;
         add_header Cache-Control "private, no-cache, no-store, max-age=0, must-revalidate" always;
         add_header X-Cache-Status $upstream_cache_status always;
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
     }
 }
 
@@ -484,6 +517,7 @@ systemctl enable --now \
   ai-price.service ai-price-collect.timer nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
+find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 
 sleep 3
 curl -fsS --max-time 15 http://127.0.0.1:3100/ >/dev/null

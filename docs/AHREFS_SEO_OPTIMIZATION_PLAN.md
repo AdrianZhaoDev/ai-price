@@ -31,11 +31,12 @@ Nginx 仅缓存满足全部条件的公开请求：
 - 没有查询参数；
 - 没有 Cookie；
 - 没有 Authorization；
-- 路径不属于后台、API、订阅结果或 `pricing-data`。
+- 路径不属于后台、API 或订阅结果，也不匹配独立的 `pricing-data` 与静态资源 location。
 
 缓存键包含完整 `Accept-Language`，避免自动语言跳转被错误复用。上游 `Set-Cookie`
 响应禁止写入缓存。缓存有效期为 15 分钟，启用缓存锁、后台更新和错误时 stale 回退；
-浏览器与 Cloudflare 仍收到 `no-store`，所以共享缓存只存在于受控 VPS Nginx。
+浏览器与 Cloudflare 仍收到 `no-store`，所以 HTML 共享缓存只存在于受控 VPS Nginx。
+版本化 `pricing-data` 和静态资源继续保留应用原有的共享或 immutable 缓存头。
 
 部署时清空精确的站点微缓存目录，避免新 release 短暂返回旧 HTML。Nginx access log
 增加缓存状态字段，发布验收连续请求同一 canonical 页面并要求出现 `HIT`。
@@ -118,8 +119,8 @@ PostgreSQL、timer、日志和公网检查外，还要验证：
 
 - 相同 canonical URL 连续请求的第二次 `X-Cache-Status` 为 `HIT`；
 - 带查询参数、Cookie 或 Authorization 的请求不出现 `HIT`；
-- `/admin`、`/api`、`/subscription`、`/en/subscription`、`/pricing-data` 保持
-  `private, no-store`；
+- `/admin`、`/api`、`/subscription`、`/en/subscription` 保持 `private, no-store`，
+  `pricing-data` 与静态资源保留原有共享缓存头；
 - 中英文首页、Gemini Pro、DeepSeek、API 目录和代表性模型详情均返回 200；
 - HTML 中标题、描述、canonical、robots 和重点内链符合本计划。
 

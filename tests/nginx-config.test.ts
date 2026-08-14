@@ -40,8 +40,11 @@ describe("production Nginx behavior", () => {
   });
 
   it("microcaches only cookie-less canonical public requests", () => {
-    expect(installScript).toContain(
-      "find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete",
+    const cacheClear =
+      "find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete";
+    expect(installScript).toContain(cacheClear);
+    expect(installScript.indexOf(cacheClear)).toBeGreaterThan(
+      installScript.indexOf("systemctl restart ai-price.service"),
     );
     expect(siteConfig).toContain(
       "proxy_cache_path /var/cache/nginx/ai-price-public",
@@ -61,11 +64,17 @@ describe("production Nginx behavior", () => {
     }
     expect(siteConfig).toContain("$upstream_http_set_cookie;");
     expect(siteConfig).toContain("add_header X-Cache-Status");
+    const publicLocation = siteConfig?.match(
+      /location \/ \{\n        proxy_cache ai_price_public;[\s\S]*?\n    \}/,
+    )?.[0];
+    expect(publicLocation).toContain(
+      'add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;',
+    );
   });
 
-  it("keeps private and parameter-data routes outside the public cache", () => {
+  it("keeps private routes outside the public cache", () => {
     const privateLocation = siteConfig?.match(
-      /location ~ \^\/\(\?:admin\|api\|pricing-data\|subscription\)[\s\S]*?\n    }/,
+      /location ~ \^\/\(\?:admin\|api\|subscription\)[\s\S]*?\n    }/,
     )?.[0];
     expect(privateLocation).toBeDefined();
     expect(privateLocation).toContain("^/en/subscription");
@@ -73,5 +82,19 @@ describe("production Nginx behavior", () => {
     expect(privateLocation).toContain(
       'add_header Cache-Control "private, no-store, max-age=0" always;',
     );
+  });
+
+  it("preserves shared caching for versioned pricing data and static assets", () => {
+    for (const locationPattern of [
+      /location \^~ \/pricing-data\/ \{[\s\S]*?\n    }/,
+      /location \^~ \/_next\/static\/ \{[\s\S]*?\n    }/,
+      /location ~\* \\.\(\?:avif\|css[\s\S]*?\n    }/,
+    ]) {
+      const location = siteConfig?.match(locationPattern)?.[0];
+      expect(location).toBeDefined();
+      expect(location).not.toContain("proxy_cache ai_price_public");
+      expect(location).not.toContain("proxy_hide_header Cache-Control");
+      expect(location).not.toContain("add_header Cache-Control");
+    }
   });
 });

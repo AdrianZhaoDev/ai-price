@@ -195,9 +195,11 @@ canonical 页面连续请求能命中源站微缓存，且最新 access log 是�
 源站微缓存状态、Cloudflare Ray ID 和 Nginx request ID。`remote_addr` 在 Cloudflare 代理下通常是边缘
 节点地址，不能直接当作访客 IP；上游字段为 `-` 表示该请求没有进入应用上游。
 
-Nginx 只微缓存无查询参数、无 Cookie、无 Authorization 的公开 `GET`/`HEAD` 200
-响应，缓存键包含完整 `Accept-Language`，有效期 15 分钟。后台、API、订阅结果、
-`pricing-data` 和所有参数页都绕过缓存；浏览器与 Cloudflare 仍收到 `no-store`。
+Nginx 只微缓存无查询参数、无 Cookie、无 Authorization 的公开 HTML `GET`/`HEAD`
+200 响应，缓存键包含完整 `Accept-Language`，有效期 15 分钟。后台、API、订阅结果和
+所有参数页都绕过缓存；浏览器与 Cloudflare 仍收到 `no-store`。`pricing-data` 使用独立
+location，不进入 HTML 微缓存，并保留应用返回的 `public, s-maxage=900`；
+`/_next/static/` 与公开静态资源同样保留应用的长期或 immutable 缓存头。
 
 ### 3.4 GitHub 不可用时的手工回退
 
@@ -513,8 +515,8 @@ openssl x509 -checkend 1209600 -noout \
 - HTML 默认不在 Cloudflare 边缘强制缓存；源站 Nginx 只对无查询、无 Cookie、无鉴权
   的公开 canonical 请求做 15 分钟微缓存；带内容哈希的 `/_next/static/` 和明确静态
   资源使用长缓存；
-- `/admin/`、`/api/`、`/subscription/`、`/en/subscription/` 和
-  `/pricing-data/` 必须 `private, no-store`；
+- `/admin/`、`/api/`、`/subscription/` 和 `/en/subscription/` 必须
+  `private, no-store`；`/pricing-data/` 保留版本化响应的共享缓存头；
 - 源站 80/443 只允许 Cloudflare 官方 IP 段，SSH 规则必须保留。
 
 详细的 SEO、边缘缓存、安全头和趋势观察流程见
