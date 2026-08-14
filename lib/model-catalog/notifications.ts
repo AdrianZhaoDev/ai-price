@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "@/lib/db/client";
 import { modelCatalogEvents, modelCatalogImports } from "@/lib/db/schema";
 import {
@@ -26,7 +26,58 @@ type AddedModelSnapshot = {
   releaseDate: string;
 };
 
-export async function notifyPendingModelCatalogChanges(): Promise<number> {
+const MODEL_CATALOG_TIME_ZONE = "Asia/Shanghai";
+const MODEL_RELEASE_LOOKBACK_DAYS = 2;
+
+function calendarDateInTimeZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function calendarDayNumber(date: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return Math.floor(timestamp / 86_400_000);
+}
+
+export function isModelReleaseDateWithinRecentDays(
+  releaseDate: unknown,
+  referenceAt: Date,
+): releaseDate is string {
+  if (typeof releaseDate !== "string") return false;
+  const releaseDay = calendarDayNumber(releaseDate);
+  const today = calendarDateInTimeZone(referenceAt, MODEL_CATALOG_TIME_ZONE);
+  const todayDay = calendarDayNumber(today);
+  if (releaseDay === null || todayDay === null) return false;
+  const age = todayDay - releaseDay;
+  return age >= 0 && age < MODEL_RELEASE_LOOKBACK_DAYS;
+}
+
+export async function notifyPendingModelCatalogChanges(
+  referenceAt = new Date(),
+): Promise<number> {
   if (!isDatabaseConfigured() || !isSmtpConfigured()) return 0;
   const db = getDatabase();
   const pending = await db
@@ -49,8 +100,26 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
     .orderBy(asc(modelCatalogEvents.createdAt));
   if (pending.length === 0) return 0;
 
-  const batches = new Map<string, typeof pending>();
-  for (const row of pending)
+  const eligible = [] as typeof pending;
+  const ignoredEventIds: string[] = [];
+  for (const row of pending) {
+    const snapshot = row.event.snapshot as Partial<AddedModelSnapshot>;
+    if (isModelReleaseDateWithinRecentDays(snapshot.releaseDate, referenceAt)) {
+      eligible.push(row);
+    } else {
+      ignoredEventIds.push(row.event.id);
+    }
+  }
+  if (ignoredEventIds.length > 0) {
+    await db
+      .update(modelCatalogEvents)
+      .set({ notifiedAt: new Date() })
+      .where(inArray(modelCatalogEvents.id, ignoredEventIds));
+  }
+  if (eligible.length === 0) return 0;
+
+  const batches = new Map<string, typeof eligible>();
+  for (const row of eligible)
     batches.set(row.importId, [...(batches.get(row.importId) ?? []), row]);
   const subscribers = await listActivePriceSubscribers(
     API_MODEL_NEW_PROVIDER_SLUG,
