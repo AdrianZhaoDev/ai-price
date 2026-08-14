@@ -27,6 +27,7 @@ type AddedModelSnapshot = {
 };
 
 const MODEL_CATALOG_TIME_ZONE = "Asia/Shanghai";
+const MODEL_RELEASE_LOOKBACK_DAYS = 2;
 
 function calendarDateInTimeZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -43,18 +44,40 @@ function calendarDateInTimeZone(date: Date, timeZone: string): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-export function isModelReleasedOnDetectionDate(
-  releaseDate: unknown,
-  detectedAt: Date,
-): releaseDate is string {
-  return (
-    typeof releaseDate === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) &&
-    releaseDate === calendarDateInTimeZone(detectedAt, MODEL_CATALOG_TIME_ZONE)
-  );
+function calendarDayNumber(date: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const parsed = new Date(timestamp);
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return Math.floor(timestamp / 86_400_000);
 }
 
-export async function notifyPendingModelCatalogChanges(): Promise<number> {
+export function isModelReleaseDateWithinRecentDays(
+  releaseDate: unknown,
+  referenceAt: Date,
+): releaseDate is string {
+  if (typeof releaseDate !== "string") return false;
+  const releaseDay = calendarDayNumber(releaseDate);
+  const today = calendarDateInTimeZone(referenceAt, MODEL_CATALOG_TIME_ZONE);
+  const todayDay = calendarDayNumber(today);
+  if (releaseDay === null || todayDay === null) return false;
+  const age = todayDay - releaseDay;
+  return age >= 0 && age < MODEL_RELEASE_LOOKBACK_DAYS;
+}
+
+export async function notifyPendingModelCatalogChanges(
+  referenceAt = new Date(),
+): Promise<number> {
   if (!isDatabaseConfigured() || !isSmtpConfigured()) return 0;
   const db = getDatabase();
   const pending = await db
@@ -81,9 +104,7 @@ export async function notifyPendingModelCatalogChanges(): Promise<number> {
   const ignoredEventIds: string[] = [];
   for (const row of pending) {
     const snapshot = row.event.snapshot as Partial<AddedModelSnapshot>;
-    if (
-      isModelReleasedOnDetectionDate(snapshot.releaseDate, row.event.createdAt)
-    ) {
+    if (isModelReleaseDateWithinRecentDays(snapshot.releaseDate, referenceAt)) {
       eligible.push(row);
     } else {
       ignoredEventIds.push(row.event.id);

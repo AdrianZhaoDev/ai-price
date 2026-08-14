@@ -45,7 +45,7 @@ vi.mock("@/lib/subscriptions/repository", () => ({
 }));
 
 import {
-  isModelReleasedOnDetectionDate,
+  isModelReleaseDateWithinRecentDays,
   notifyPendingModelCatalogChanges,
 } from "@/lib/model-catalog/notifications";
 
@@ -114,33 +114,43 @@ describe("model catalog notifications", () => {
     });
   });
 
-  it("compares release dates in the Shanghai calendar", () => {
-    const detectedAt = new Date("2026-08-13T16:00:00.000Z");
+  it("accepts the current and previous Shanghai calendar dates", () => {
+    const referenceAt = new Date("2026-08-14T00:00:00.000Z");
 
-    expect(isModelReleasedOnDetectionDate("2026-08-14", detectedAt)).toBe(true);
-    expect(isModelReleasedOnDetectionDate("2026-08-13", detectedAt)).toBe(
+    expect(isModelReleaseDateWithinRecentDays("2026-08-14", referenceAt)).toBe(
+      true,
+    );
+    expect(isModelReleaseDateWithinRecentDays("2026-08-13", referenceAt)).toBe(
+      true,
+    );
+    expect(isModelReleaseDateWithinRecentDays("2026-08-12", referenceAt)).toBe(
       false,
     );
-    expect(isModelReleasedOnDetectionDate("2025-03-24", detectedAt)).toBe(
+    expect(isModelReleaseDateWithinRecentDays("2026-08-15", referenceAt)).toBe(
       false,
     );
-    expect(isModelReleasedOnDetectionDate("not-a-date", detectedAt)).toBe(
+    expect(isModelReleaseDateWithinRecentDays("2025-03-24", referenceAt)).toBe(
+      false,
+    );
+    expect(isModelReleaseDateWithinRecentDays("not-a-date", referenceAt)).toBe(
       false,
     );
   });
 
   it("does not email historical models and marks them processed", async () => {
     mocks.pending = [
-      event("historical", "2025-03-24"),
-      event("released-today", "2026-08-14"),
+      event("historical", "2026-08-12"),
+      event("released-yesterday", "2026-08-13"),
     ];
 
-    const sent = await notifyPendingModelCatalogChanges();
+    const sent = await notifyPendingModelCatalogChanges(
+      new Date("2026-08-14T00:00:00.000Z"),
+    );
 
     expect(sent).toBe(1);
     expect(mocks.modelCatalogDigestEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        models: [expect.objectContaining({ id: "lab/released-today" })],
+        models: [expect.objectContaining({ id: "lab/released-yesterday" })],
       }),
     );
     expect(mocks.modelCatalogDigestEmail).not.toHaveBeenCalledWith(
