@@ -37,6 +37,7 @@ import {
   parseTraePricing,
 } from "@/lib/collectors/adapters/official-pages";
 import { hashContent } from "@/lib/collectors/http-client";
+import { parseHuaweiMaaSApi } from "@/lib/collectors/adapters/api-pricing/rules";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
 function raw(body: string): RawCollectionResult {
@@ -483,6 +484,32 @@ describe("official table adapters", () => {
       code: "STRUCTURE_CHANGED",
       details: { missingModels: expect.any(Array) },
     });
+  });
+
+  it("accepts the current Huawei MaaS public pricing table", () => {
+    const current = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th rowspan="2">模型名称</th><th rowspan="2">单次请求的Token数</th><th colspan="3">单价（元/百万Tokens）</th></tr>
+        <tr><th>输入（缓存命中）</th><th>输入</th><th>输出</th></tr>
+        <tr><td rowspan="2">openPangu-2.0-Pro</td><td>0≤Token&lt;32K</td><td>0.8</td><td>3.2</td><td>14.5</td></tr>
+        <tr><td>Token≥32K</td><td>1.2</td><td>4.8</td><td>17.6</td></tr>
+        <tr><td>openPangu-2.0-Flash</td><td>-</td><td>0.2</td><td>0.8</td><td>1.6</td></tr>
+        <tr><td>GLM-5.2</td><td>-</td><td>-</td><td>8</td><td>28</td></tr>
+        <tr><td rowspan="2">GLM-5.1</td><td>0≤Token&lt;32K</td><td>-</td><td>6</td><td>24</td></tr>
+        <tr><td>Token≥32K</td><td>-</td><td>8</td><td>28</td></tr>
+        <tr><td>Kimi-K2.6</td><td>-</td><td>-</td><td>6.5</td><td>27</td></tr>
+        <tr><td>DeepSeek-V4-Pro</td><td>-</td><td>-</td><td>12</td><td>24</td></tr>
+        <tr><td>DeepSeek-V4-Flash</td><td>-</td><td>-</td><td>1</td><td>2</td></tr>
+        <tr><td>Qwen3-30B-A3B</td><td>-</td><td>-</td><td>0.75</td><td>思考模式：7.5 非思考模式：3</td></tr>
+        <tr><td>Qwen3-32B</td><td>-</td><td>-</td><td>2</td><td>思考模式：20 非思考模式：8</td></tr>
+      </table>`),
+    );
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "huawei-maas-pricing-official",
+    );
+
+    expect(current).toHaveLength(25);
+    expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
