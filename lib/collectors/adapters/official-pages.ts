@@ -1308,7 +1308,7 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "grok-api-pricing-official": 9,
 };
 
-const HUAWEI_MAAS_MINIMUM_OFFERS = 25;
+const HUAWEI_MAAS_MINIMUM_OFFERS = 27;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",
@@ -1628,10 +1628,10 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "kimi-membership-official",
     "kimi-membership",
-    "https://www.kimi.com/zh-cn/help/membership/membership-pricing",
+    "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
     "kimi-membership-v2",
     parseKimiMembership,
-    "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
+    undefined,
     ["USD"],
   ),
   new OfficialPageAdapter(
