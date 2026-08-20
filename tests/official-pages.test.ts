@@ -37,6 +37,7 @@ import {
   parseTraePricing,
 } from "@/lib/collectors/adapters/official-pages";
 import { hashContent } from "@/lib/collectors/http-client";
+import { parseHuaweiMaaSApi } from "@/lib/collectors/adapters/api-pricing/rules";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
 function raw(body: string): RawCollectionResult {
@@ -58,6 +59,28 @@ describe("official table adapters", () => {
         <tr><td>Allegro</td><td>全能</td><td>¥699/月</td></tr></table>`),
     );
     expect(offers.map((offer) => offer.amountMinor)).toEqual([4900, 69900]);
+  });
+
+  it("parses the localized Kimi global membership table", () => {
+    const offers = parseKimiMembership(
+      raw(`<table><tr><th>功能</th><th>Moderato ($19/月)</th></tr>
+        <tr><td>Agent 额度</td><td>60</td></tr></table>
+        <table><tr><th>方案</th><th>月付</th><th>年付（折合每月）</th></tr>
+          <tr><td>Moderato</td><td>$19/月</td><td>$15/月</td></tr>
+          <tr><td>Allegretto</td><td>$39/月</td><td>$31/月</td></tr>
+          <tr><td>Allegro</td><td>$99/月</td><td>$79/月</td></tr>
+          <tr><td>Vivace</td><td>$199/月</td><td>$159/月</td></tr></table>`),
+    );
+
+    expect(offers).toHaveLength(4);
+    expect(offers.map((offer) => offer.amountMinor)).toEqual([
+      1900, 3900, 9900, 19900,
+    ]);
+    expect(offers.every((offer) => offer.currency === "USD")).toBe(true);
+    expect(offers.every((offer) => offer.region === "全球")).toBe(true);
+    expect(
+      offers.every((offer) => offer.parserVersion === "kimi-membership-v2"),
+    ).toBe(true);
   });
 
   it("parses MiniMax horizontal plans", () => {
@@ -392,18 +415,29 @@ describe("official table adapters", () => {
     expect(loadChunk).toHaveBeenNthCalledWith(2, "second.js");
   });
 
-  it("requires Huawei MaaS's verified full model and price-type baseline", () => {
+  it("requires Huawei MaaS's current model and price-type baseline", () => {
     const sample = parseGlmCodingPlan(
       raw(
         '{type:"lite",unitKey:"month",productId:"lite",salePrice:118,renewAmount:118}',
       ),
     )[0]!;
+    const modelNames = [
+      "openPangu-2.0-Pro",
+      "openPangu-2.0-Flash",
+      "GLM-5.2",
+      "GLM-5.1",
+      "Kimi-K2.6",
+      "DeepSeek-V4-Pro",
+      "DeepSeek-V4-Flash",
+      "Qwen3-30B-A3B",
+      "Qwen3-32B",
+    ];
     const priceTypes = ["cached_input", "input", "output"] as const;
-    const baseline = Array.from({ length: 35 }, (_, index) => ({
+    const baseline = Array.from({ length: 27 }, (_, index) => ({
       ...sample,
       canonicalPlanSlug: `huawei-model-${index}`,
-      rawPlanName: `Huawei Model ${index}`,
-      modelName: `Huawei Model ${index % 13}`,
+      rawPlanName: `${modelNames[index % modelNames.length]} · Price ${index}`,
+      modelName: modelNames[index % modelNames.length],
       priceType: priceTypes[index % priceTypes.length],
     }));
     const adapter = officialPageAdapters.find(
@@ -421,6 +455,60 @@ describe("official table adapters", () => {
         baseline.map((offer) => ({ ...offer, priceType: "input" })),
       ),
     ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+  });
+
+  it("accepts the current Huawei MaaS public pricing table", () => {
+    const current = parseHuaweiMaaSApi(
+      raw(`<table>
+        <tr><th rowspan="2">模型名称</th><th rowspan="2">单次请求的Token数</th><th colspan="3">单价（元/百万Tokens）</th></tr>
+        <tr><th>输入（缓存命中）</th><th>输入</th><th>输出</th></tr>
+        <tr><td rowspan="2">openPangu-2.0-Pro</td><td>0≤Token&lt;32K</td><td>0.8</td><td>3.2</td><td>14.5</td></tr>
+        <tr><td>Token≥32K</td><td>1.2</td><td>4.8</td><td>17.6</td></tr>
+        <tr><td>openPangu-2.0-Flash</td><td>-</td><td>0.2</td><td>0.8</td><td>1.6</td></tr>
+        <tr><td>GLM-5.2</td><td>-</td><td>-</td><td>8</td><td>28</td></tr>
+        <tr><td rowspan="2">GLM-5.1</td><td>0≤Token&lt;32K</td><td>-</td><td>6</td><td>24</td></tr>
+        <tr><td>Token≥32K</td><td>-</td><td>8</td><td>28</td></tr>
+        <tr><td>Kimi-K2.6</td><td>-</td><td>-</td><td>6.5</td><td>27</td></tr>
+        <tr><td>DeepSeek-V4-Pro</td><td>-</td><td>-</td><td>12</td><td>24</td></tr>
+        <tr><td>DeepSeek-V4-Flash</td><td>-</td><td>-</td><td>1</td><td>2</td></tr>
+        <tr><td>Qwen3-30B-A3B</td><td>-</td><td>-</td><td>0.75</td><td>思考模式：7.5 非思考模式：3</td></tr>
+        <tr><td>Qwen3-32B</td><td>-</td><td>-</td><td>2</td><td>思考模式：20 非思考模式：8</td></tr>
+      </table>`),
+    );
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "huawei-maas-pricing-official",
+    );
+
+    expect(current).toHaveLength(27);
+    expect(current).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 750,
+          priceTier: expect.stringContaining("思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-32B",
+          priceType: "output",
+          amountMinor: 2000,
+          priceTier: expect.stringContaining("思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 300,
+          priceTier: expect.stringContaining("非思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-32B",
+          priceType: "output",
+          amountMinor: 800,
+          priceTier: expect.stringContaining("非思考模式"),
+        }),
+      ]),
+    );
+    expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
