@@ -508,7 +508,35 @@ describe("official table adapters", () => {
       (candidate) => candidate.id === "huawei-maas-pricing-official",
     );
 
-    expect(current).toHaveLength(25);
+    expect(current).toHaveLength(27);
+    expect(current).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 750,
+          priceTier: expect.stringContaining("思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-32B",
+          priceType: "output",
+          amountMinor: 2000,
+          priceTier: expect.stringContaining("思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 300,
+          priceTier: expect.stringContaining("非思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-32B",
+          priceType: "output",
+          amountMinor: 800,
+          priceTier: expect.stringContaining("非思考模式"),
+        }),
+      ]),
+    );
     expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
   });
 
