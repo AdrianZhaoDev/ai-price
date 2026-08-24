@@ -79,7 +79,6 @@ export function parseSitemapDocument(xml: string): SitemapDocument {
 
 function canonicalUrl(value: string, base: string): string {
   const url = new URL(value, base);
-  url.search = "";
   url.hash = "";
   if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
   return url.toString();
@@ -114,6 +113,7 @@ function auditUrl(location: string, base: string): string {
 
 function robotsBlockApiPricing(robots: string): boolean {
   let appliesToAll = false;
+  let hasDirectives = false;
   for (const rawLine of robots.split(/\r?\n/)) {
     const line = rawLine.replace(/#.*/, "").trim();
     const separator = line.indexOf(":");
@@ -121,9 +121,14 @@ function robotsBlockApiPricing(robots: string): boolean {
     const directive = line.slice(0, separator).trim().toLowerCase();
     const value = line.slice(separator + 1).trim();
     if (directive === "user-agent") {
-      appliesToAll = value === "*";
+      if (hasDirectives) {
+        appliesToAll = false;
+        hasDirectives = false;
+      }
+      appliesToAll ||= value === "*";
       continue;
     }
+    hasDirectives = true;
     if (
       appliesToAll &&
       directive === "disallow" &&
@@ -362,7 +367,7 @@ export async function auditPublicSeo(
     }
     if (!response.ok) {
       throw new Error(
-        `Unable to fetch sitemap ${sitemapUrl}: HTTP ${response.status}`,
+        `Unable to fetch sitemap ${reportUrl(sitemapUrl)}: HTTP ${response.status}`,
       );
     }
     let sitemap: SitemapDocument;
@@ -370,7 +375,9 @@ export async function auditPublicSeo(
       sitemap = parseSitemapDocument(await response.text());
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Unable to parse sitemap ${sitemapUrl}: ${message}`);
+      throw new Error(
+        `Unable to parse sitemap ${reportUrl(sitemapUrl)}: ${message}`,
+      );
     }
     for (const location of sitemap.locations) {
       const url = auditUrl(location, sitemapUrl);

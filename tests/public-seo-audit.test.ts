@@ -74,6 +74,7 @@ describe("public SEO audit", () => {
     );
     expect(inspected.canonical).toBe("https://example.test/model");
     expect(inspected.issues).toContain("noindex");
+    expect(inspected.issues).toContain("canonical_mismatch");
   });
 
   it("rejects off-origin sitemap locations before fetching them", async () => {
@@ -109,7 +110,7 @@ describe("public SEO audit", () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       if (url.endsWith("/robots.txt")) {
-        return response("User-agent: *\nDisallow: /api");
+        return response("User-agent: *\nUser-agent: Googlebot\nDisallow: /api");
       }
       if (url.endsWith("/sitemap.xml")) {
         return response(
@@ -130,6 +131,44 @@ describe("public SEO audit", () => {
       "sitemap_count_collapse",
     ]);
     expect(summary.failed).toBe(2);
+  });
+
+  it("redacts nested sitemap URLs from HTTP and parse failures", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) return response("User-agent: *");
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<sitemapindex><sitemap><loc>https://example.test/sitemaps/1.xml?token=secret</loc></sitemap></sitemapindex>",
+        );
+      }
+      return response("unexpected", 500);
+    });
+    await expect(
+      auditPublicSeo({
+        baseUrl: "https://example.test",
+        fetcher,
+        minimumUrls: 0,
+      }),
+    ).rejects.not.toThrow("token=secret");
+
+    const parseFetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) return response("User-agent: *");
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<sitemapindex><sitemap><loc>https://example.test/sitemaps/2.xml?token=secret</loc></sitemap></sitemapindex>",
+        );
+      }
+      return response("not sitemap XML");
+    });
+    await expect(
+      auditPublicSeo({
+        baseUrl: "https://example.test",
+        fetcher: parseFetcher,
+        minimumUrls: 0,
+      }),
+    ).rejects.not.toThrow("token=secret");
   });
 
   it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {
