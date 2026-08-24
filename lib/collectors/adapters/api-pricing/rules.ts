@@ -745,6 +745,22 @@ export function parseHuaweiMaaSApi(
           : [{ index, label: compactLabel(label), priceType }];
       })
     : [];
+  const parseHuaweiPriceCell = (
+    value: string | undefined,
+  ): Array<{ value: number; tier?: string }> => {
+    if (!value) return [];
+    const labeledValues = [
+      ...value.matchAll(
+        /(非思考模式|思考模式|non[- ]thinking mode|thinking mode)\s*[:：]\s*(-?\d+(?:\.\d+)?)/gi,
+      ),
+    ].map((match) => ({
+      tier: compactLabel(match[1]),
+      value: Number(match[2]),
+    }));
+    if (labeledValues.length > 0) return labeledValues;
+    const parsed = numberFrom(value);
+    return parsed === null ? [] : [{ value: parsed }];
+  };
   if (priceTypeColumns.length > 0) {
     const tierEnd = Math.min(...priceTypeColumns.map((column) => column.index));
     return dedupeOffers(
@@ -760,25 +776,29 @@ export function parseHuaweiMaaSApi(
         ].join(" · ");
         if (!modelName) return [];
         return priceTypeColumns.flatMap(({ index, label, priceType }) => {
-          const value = numberFrom(row[index]);
-          if (!validPrice(value)) return [];
-          return [
-            apiOffer({
-              raw,
-              providerSlug: "huawei-maas-api",
-              parserVersion: "huawei-maas-api-v6",
-              modelName,
-              modelOrder: orderFor(modelName),
-              priceLabel: label,
-              priceType,
-              value,
-              unit: unitInfo.unit,
-              multiplier: unitInfo.multiplier,
-              category: "华为云 MaaS",
-              tier: tier || undefined,
-              tierOrder,
-            }),
-          ];
+          return parseHuaweiPriceCell(row[index]).flatMap(
+            ({ value, tier: priceTier }) => {
+              if (!validPrice(value)) return [];
+              return [
+                apiOffer({
+                  raw,
+                  providerSlug: "huawei-maas-api",
+                  parserVersion: "huawei-maas-api-v6",
+                  modelName,
+                  modelOrder: orderFor(modelName),
+                  priceLabel: label,
+                  priceType,
+                  value,
+                  unit: unitInfo.unit,
+                  multiplier: unitInfo.multiplier,
+                  category: "华为云 MaaS",
+                  tier:
+                    [tier, priceTier].filter(Boolean).join(" · ") || undefined,
+                  tierOrder,
+                }),
+              ];
+            },
+          );
         });
       }),
     );
@@ -811,24 +831,27 @@ export function parseHuaweiMaaSApi(
             ),
         ),
       ].join(" · ");
-      const value = numberFrom(priceIndex >= 0 ? row[priceIndex] : row.at(-1));
-      if (!modelName || !validPrice(value)) return [];
-      return [
-        apiOffer({
-          raw,
-          providerSlug: "huawei-maas-api",
-          parserVersion: "huawei-maas-api-v6",
-          modelName,
-          modelOrder: orderFor(modelName),
-          priceLabel,
-          value,
-          unit: unitInfo.unit,
-          multiplier: unitInfo.multiplier,
-          category: "华为云 MaaS",
-          tier: tier || undefined,
-          tierOrder,
-        }),
-      ];
+      return parseHuaweiPriceCell(
+        priceIndex >= 0 ? row[priceIndex] : row.at(-1),
+      ).flatMap(({ value, tier: priceTier }) => {
+        if (!modelName || !validPrice(value)) return [];
+        return [
+          apiOffer({
+            raw,
+            providerSlug: "huawei-maas-api",
+            parserVersion: "huawei-maas-api-v6",
+            modelName,
+            modelOrder: orderFor(modelName),
+            priceLabel,
+            value,
+            unit: unitInfo.unit,
+            multiplier: unitInfo.multiplier,
+            category: "华为云 MaaS",
+            tier: [tier, priceTier].filter(Boolean).join(" · ") || undefined,
+            tierOrder,
+          }),
+        ];
+      });
     }),
   );
 }

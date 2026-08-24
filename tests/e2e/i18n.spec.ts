@@ -244,6 +244,40 @@ test("keeps public assets, document anchors, and privacy copy localized", async 
   await expect(page.getByText(/subscription locale/i)).toBeVisible();
 });
 
+test("opens native privacy preferences only when Zaraz exposes the CMP API", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      zaraz: {
+        track: () => undefined,
+        showConsentModal: () => {
+          Object.assign(window, { zarazConsentModalOpened: true });
+        },
+      },
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Manage privacy preferences" })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean(
+          (window as Window & { zarazConsentModalOpened?: boolean })
+            .zarazConsentModalOpened,
+        ),
+      ),
+    )
+    .toBe(true);
+
+  await page.goto("/en/privacy");
+  await expect(
+    page.getByRole("button", { name: "Manage privacy preferences" }),
+  ).toBeVisible();
+});
+
 test("hides the model catalog background while the subscription dialog is open", async ({
   page,
 }) => {

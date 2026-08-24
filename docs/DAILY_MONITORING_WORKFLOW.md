@@ -76,8 +76,10 @@ https://ai.lowpriceradar.com/
 
 每天必须输出：
 
+- 数据源可用性与新鲜度表：来源、权威性、数据窗口、最后成功读取时间、当前失败原因和是否可用于趋势判断；
 - Sitemap URL 总数；
 - Search Console 已收录、未收录、发现未收录、抓取未收录、重复页数量；
+- 相较上一次 GSC 网页索引更新时间的分类差异；只比较同一报告口径，不用 Sitemap 总数推导；
 - 最近完整 7 天与前 7 天的点击、展示、CTR、平均排名；
 - 最近完整 28 天与前 28 天的同口径数据；
 - 点击/展示最高的 10 个查询和 10 个页面；
@@ -89,6 +91,19 @@ https://ai.lowpriceradar.com/
 CTR 和排名”，并把接通 Search Console 列为首要测量任务；不得把这些字段写成 0。
 
 ### D. SEO 技术检查
+
+先执行内部轻量审计；它只校验公开技术信号，不能替代 Search Console、Bing 或 Ahrefs：
+
+```powershell
+npm run audit:public-seo -- `
+  --base-url=https://lowpriceradar.com `
+  --output=reports/monitoring/YYYY-MM-DD-seo-audit.json `
+  --markdown=reports/monitoring/YYYY-MM-DD-seo-audit.md
+```
+
+默认并发为 3、单 URL 超时为 10 秒。`timeout` 只能标为“尚在处理”，不得归为
+4xx/5xx 或 SEO 失败；`http`、`parse`、`seo` 和 `network` 必须分别报告。产物不含
+响应正文、cookie、查询参数或任何生产密钥。
 
 对 Sitemap 中所有公共页面检查：
 
@@ -141,8 +156,8 @@ Cloudflare Zaraz 可用时，读取以下匿名 Track 事件并报告事件数�
 报告失败率；分母为 0 时写“无可计算样本”，不得写 0%。属性只允许页面模式、供应商
 ID、订阅类型、套餐范围、排序方向和枚举结果，禁止出现邮箱、token、自由文本错误、
 URL 或查询参数。Web Analytics/RUM 继续用于访问和 CWV，不能把它冒充 Zaraz 自定义
-事件数据。Zaraz 未启用、Monitoring API 无权限、登录失效和窗口内真实 0 次事件必须
-分别标记。
+事件数据。同时读取 Zaraz 的 Loads、Events、Triggers、Actions 与 CMP/同意状态。Zaraz
+未启用、CMP 未配置、Monitoring API 无权限、登录失效和窗口内真实 0 次事件必须分别标记。
 失败原因只允许 `http`、`network`、`invalid_response` 和 `fallback_available`；
 `fallback_available` 表示原订阅失败但用户仍可改订排行榜，若之后成功应同时记录一次
 成功事件。
@@ -248,6 +263,11 @@ log 核对实际 URL，不能只凭截图判断首页故障。
 - 生产提交：
 - 结论：一句话说明是否需要人工处理
 
+## 数据源可用性与新鲜度
+
+| 来源 | 权威性 | 窗口 | 最后成功读取 | 当前状态/失败原因 | 可用于趋势 |
+| ---- | ------ | ---- | ------------ | ----------------- | ---------- |
+
 ## 告警与建议
 
 按优先级列出；没有则写“无”。
@@ -290,6 +310,8 @@ Sitemap、已收录/未收录、索引异常和爬虫情况。
 - 不因一次请求失败直接判定宕机；核心页面至少复核三次。
 - 不把爬虫扫描产生的随机 404 当作应用故障。
 - 所有趋势结论注明比较窗口；没有对照数据时不推断改善或恶化。
+- Ahrefs 当前 crawl credits 耗尽时，只能引用最近完成 crawl 的日期和快照，不能把历史
+  Health Score、Errors 或 IndexNow 候选写成当前值。
 - 每个数字注明来源和时间窗口；估算值必须标“估算”。
 - 报告至少包含收录、搜索、访问、Cloudflare、技术健康和数据缺口六部分。
 - 即使数据源不可用，也要展示可验证的替代证据，但不得把替代证据冒充权威指标。

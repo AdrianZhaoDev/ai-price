@@ -64,9 +64,9 @@ describe("SEO routes", () => {
     );
     expect(metadataForMode("api").alternates?.canonical).toBe("/api-pricing");
     expect(metadataForMode("api").title).toEqual({
-      absolute: "AI 模型 API 价格与规格排行榜",
+      absolute: "AI 模型 API 价格表：每百万 Token 成本与规格",
     });
-    expect(metadataForMode("api").description).toContain("API 价格与规格");
+    expect(metadataForMode("api").description).toContain("每百万 Token");
     for (const locale of ["zh-CN", "en"] as const) {
       for (const mode of ["global", "china-subscription", "api"] as const) {
         const metadata = metadataForMode(mode, locale);
@@ -246,6 +246,7 @@ describe("SEO routes", () => {
       labId: "lab",
       labName: "Lab",
       description: "A served model with useful pricing and specification data.",
+      minInputPrice: 0.25,
       inputModalities: ["text"],
       releaseDate: "2025-01-01",
       updatedDate: "2026-07-01",
@@ -273,6 +274,45 @@ describe("SEO routes", () => {
         entries.find((entry) => entry.url === absoluteUrl(path))?.lastModified,
       ).toEqual(new Date("2026-08-11T00:00:00.000Z"));
     }
+  });
+
+  it("keeps directory-only model pages out of the sitemap and search results", () => {
+    const model = {
+      id: "lab/directory-only",
+      name: "Directory only",
+      labId: "lab",
+      labName: "Lab",
+      description: "A catalog entry without any current price signal.",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      releaseDate: "2026-01-01",
+      updatedDate: "2026-08-11",
+      providerCount: 1,
+      providerIds: ["provider"],
+      providerNames: ["Provider"],
+      active: true,
+      origin: "models.dev",
+      openWeights: false,
+      capabilities: {},
+      providers: [],
+      catalogVersion: "a".repeat(40),
+      sourceUrl: "https://example.com/model.toml",
+    } satisfies ModelDetail;
+    const urls = buildSitemap(
+      {
+        global: providersForMode("global"),
+        "china-subscription": providersForMode("china-subscription"),
+        api: providersForMode("api"),
+      },
+      new Date("2026-08-11T12:00:00.000Z"),
+      [model],
+    ).map((entry) => entry.url);
+
+    expect(urls).not.toContain(absoluteUrl("/models/lab/directory-only"));
+    expect(metadataForModel(model).robots).toEqual({
+      index: false,
+      follow: true,
+    });
   });
 
   it("defines stable metadata for every SEO landing page", () => {

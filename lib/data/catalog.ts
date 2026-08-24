@@ -347,7 +347,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
     description: "官方会员四档计划",
     mode: "china-subscription",
     rank: 3,
-    sourceUrl: "https://www.kimi.com/zh-cn/help/membership/membership-pricing",
+    sourceUrl: "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
     sourceLabel: "Kimi 帮助中心",
     sourceType: "official_web",
     color: "#1B6EF3",

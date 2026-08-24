@@ -24,6 +24,7 @@ declare global {
         event: TrafficEvent,
         properties?: TrafficEventProperties,
       ) => unknown;
+      showConsentModal?: () => void;
     };
   }
 }

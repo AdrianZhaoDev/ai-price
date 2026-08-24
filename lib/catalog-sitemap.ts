@@ -6,7 +6,7 @@ import {
 } from "@/lib/landing-page-data";
 import { landingPages, landingPagePath } from "@/lib/landing-pages";
 import { loadCachedModelCatalogSummaries } from "@/lib/model-catalog/cache";
-import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
+import { isSearchEligibleModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import type { ModelCatalogSummary } from "@/lib/model-catalog/types";
 import {
@@ -70,7 +70,7 @@ export function buildSitemap(
       })),
     ),
     ...INDEXABLE_LOCALES.flatMap((locale) =>
-      models.filter(isIndexableModelSummary).map((model) => ({
+      models.filter(isSearchEligibleModelSummary).map((model) => ({
         url: absoluteUrl(modelDetailPath(model.id, locale)),
         lastModified: modelLastModified(model),
       })),

@@ -22,6 +22,7 @@
     "sync:data": "tsx scripts/sync-data.ts",
     "sync:models": "tsx scripts/sync-model-catalog.ts",
     "warm:models": "tsx scripts/warm-model-pages.ts",
+    "audit:public-seo": "tsx scripts/audit-public-seo.ts",
     "seed": "tsx scripts/seed.ts",
     "local:db:up": "docker compose -f compose.local.yml up -d --wait",
     "local:db:down": "docker compose -f compose.local.yml down",

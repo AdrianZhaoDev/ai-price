@@ -12,9 +12,72 @@ import {
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { getMessages, type Locale } from "@/lib/i18n";
 import { absoluteUrl, modeSeoByLocale } from "@/lib/seo";
+import Link from "next/link";
 
 export const revalidate = false;
 export const MODEL_CATALOG_PAGE_SIZE = 60;
+
+function apiFaq(locale: Locale) {
+  const isEnglish = locale === "en";
+  return [
+    {
+      question: isEnglish
+        ? "How are API prices compared?"
+        : "API 价格如何比较？",
+      answer: isEnglish
+        ? "The table keeps each provider's published billing unit visible and compares input, cached-input, and output prices per million tokens when the source provides them."
+        : "目录保留各 Provider 的官方计费单位；官方提供时，按每百万 Token 展示输入、缓存输入和输出价格，避免混淆不同计费口径。",
+    },
+    {
+      question: isEnglish
+        ? "Are these prices official and current?"
+        : "这些价格是否官方且及时？",
+      answer: isEnglish
+        ? "Each model record keeps its source and update context. Prices can change, so confirm availability and the final amount on the cited official page before purchase or production use."
+        : "每条模型记录保留来源和更新时间。价格可能变化，在购买或用于生产前，请继续以引用的官方页面确认可用性和最终金额。",
+    },
+    {
+      question: isEnglish
+        ? "Why do filtered catalog URLs not appear in search?"
+        : "为什么带筛选条件的目录链接不会出现在搜索中？",
+      answer: isEnglish
+        ? "Provider, model, and pagination filters are useful for browsing but canonicalize to this directory and are marked noindex, so search engines focus on stable content pages."
+        : "Provider、模型和分页筛选适合浏览，但会规范化到本目录并标记为 noindex，使搜索引擎聚焦稳定的内容页。",
+    },
+  ];
+}
+
+function ApiPricingFaq({ locale }: { locale: Locale }) {
+  const isEnglish = locale === "en";
+  const geminiPath =
+    locale === "en" ? "/en/gemini-pro-price" : "/gemini-pro-price";
+  return (
+    <section
+      className="model-catalog-faq"
+      aria-labelledby="api-pricing-faq-title"
+    >
+      <div>
+        <p className="eyebrow">{isEnglish ? "Pricing context" : "价格口径"}</p>
+        <h2 id="api-pricing-faq-title">
+          {isEnglish ? "API pricing FAQ" : "API 价格常见问题"}
+        </h2>
+      </div>
+      <div>
+        {apiFaq(locale).map((item) => (
+          <article key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+        <Link href={geminiPath} className="model-release-watch-link">
+          {isEnglish
+            ? "Compare Google AI Pro regional subscription prices"
+            : "查看 Google AI Pro 全球订阅价格"}
+        </Link>
+      </div>
+    </section>
+  );
+}
 
 function requestedPage(
   value: string | string[] | undefined,
@@ -49,6 +112,7 @@ export async function ApiPricingPage({
   const models = filteredModels.slice(start, start + MODEL_CATALOG_PAGE_SIZE);
   const messages = getMessages(locale);
   const seo = modeSeoByLocale[locale].api;
+  const faq = apiFaq(locale);
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -77,6 +141,15 @@ export async function ApiPricingPage({
         url: absoluteUrl(modelDetailPath(model.id, locale)),
       })),
     },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faq.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: { "@type": "Answer", text: item.answer },
+      })),
+    },
   ];
 
   return (
@@ -97,6 +170,7 @@ export async function ApiPricingPage({
         pageCount={pageCount}
       >
         <ModelDirectory locale={locale} models={indexableModels} />
+        <ApiPricingFaq locale={locale} />
       </ModelCatalogExplorer>
     </>
   );

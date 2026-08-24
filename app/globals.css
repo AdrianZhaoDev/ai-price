@@ -1643,14 +1643,24 @@ input:focus-visible {
   align-items: center;
 }
 
-.footer-links a {
+.footer-links a,
+.footer-preferences-button {
   min-height: 44px;
   color: var(--ink-secondary);
   font-size: 12px;
   line-height: 44px;
 }
 
-.footer-links a:hover {
+.footer-preferences-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.footer-links a:hover,
+.footer-preferences-button:hover {
   color: var(--tint);
 }
 
@@ -1892,6 +1902,48 @@ input:focus-visible {
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.model-catalog-faq,
+.landing-faq {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+  gap: clamp(28px, 6vw, 86px);
+  padding: 46px 0;
+  border-top: 1px solid var(--separator);
+}
+
+.model-catalog-faq h2,
+.landing-faq h2 {
+  margin: 6px 0 0;
+  font-size: clamp(25px, 3.2vw, 38px);
+  letter-spacing: -0.05em;
+}
+
+.model-catalog-faq article,
+.landing-faq article {
+  padding: 16px 0;
+  border-top: 1px solid var(--separator);
+}
+
+.model-catalog-faq article:first-child,
+.landing-faq article:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.model-catalog-faq h3,
+.landing-faq h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.model-catalog-faq p,
+.landing-faq p {
+  margin: 8px 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 .model-clear {
   display: inline-flex;
@@ -4335,6 +4387,8 @@ input:focus-visible {
 
   .landing-summary,
   .landing-related,
+  .landing-faq,
+  .model-catalog-faq,
   .price-index {
     grid-template-columns: 1fr;
     gap: 24px;
@@ -4380,6 +4434,11 @@ input:focus-visible {
   }
 
   .landing-summary {
+    padding: 34px 0;
+  }
+
+  .landing-faq,
+  .model-catalog-faq {
     padding: 34px 0;
   }
 

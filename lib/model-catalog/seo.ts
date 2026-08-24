@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { Locale } from "@/lib/i18n";
 import type { ModelDetail } from "@/lib/model-catalog/types";
-import { isIndexableModelSummary } from "@/lib/model-catalog/discovery";
+import { isSearchEligibleModelSummary } from "@/lib/model-catalog/discovery";
 import { modelDetailPath } from "@/lib/model-catalog/paths";
 import { absoluteUrl, normalizeSeoDescription, SITE_NAME } from "@/lib/seo";
 
@@ -126,7 +126,7 @@ export function metadataForModel(
         "x-default": modelDetailPath(model.id, "zh-CN"),
       },
     },
-    robots: isIndexableModelSummary(model)
+    robots: isSearchEligibleModelSummary(model)
       ? undefined
       : { index: false, follow: true },
     openGraph: {

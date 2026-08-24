@@ -32,6 +32,7 @@ export type LocaleMessages = {
     themeDark: string;
     methodology: string;
     privacy: string;
+    managePrivacyPreferences: string;
     viewOfficialSource: string;
     officialPage: string;
     officialSource: string;

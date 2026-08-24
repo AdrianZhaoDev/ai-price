@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildModelCatalogFacets,
   isIndexableModelSummary,
+  isSearchEligibleModelSummary,
   relatedModelsFor,
 } from "@/lib/model-catalog/discovery";
 import type {
@@ -82,6 +83,20 @@ describe("model catalog discovery", () => {
     expect(
       isIndexableModelSummary(summary("lab/archived", { active: false })),
     ).toBe(false);
+  });
+
+  it("keeps directory eligibility broader than search eligibility", () => {
+    const directoryOnly = summary("lab/directory-only", {
+      description: "Useful catalog context without published prices.",
+    });
+    const searchEligible = summary("lab/search-eligible", {
+      description: "Useful catalog context with a published API price.",
+      minInputPrice: 0.25,
+    });
+
+    expect(isIndexableModelSummary(directoryOnly)).toBe(true);
+    expect(isSearchEligibleModelSummary(directoryOnly)).toBe(false);
+    expect(isSearchEligibleModelSummary(searchEligible)).toBe(true);
   });
 
   it("builds deduplicated facets from indexable summaries", () => {

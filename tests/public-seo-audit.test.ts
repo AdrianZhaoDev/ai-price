@@ -1,0 +1,126 @@
+import {
+  auditPublicSeo,
+  inspectPublicSeoHtml,
+  parseSitemapDocument,
+  renderPublicSeoAuditMarkdown,
+} from "@/lib/public-seo-audit";
+import { describe, expect, it, vi } from "vitest";
+
+const validPage = (
+  canonical: string,
+  title = "Unique title",
+  description = "Unique description",
+) =>
+  `<!doctype html><html><head><title>${title}</title><meta name="description" content="${description}"><link rel="canonical" href="${canonical}"><script type="application/ld+json">{"@type":"Dataset"}</script></head><body></body></html>`;
+
+function response(body: string, status = 200) {
+  return new Response(body, {
+    status,
+    headers: { "content-type": "text/html" },
+  });
+}
+
+describe("public SEO audit", () => {
+  it("parses URL sets and sitemap indexes", () => {
+    expect(
+      parseSitemapDocument(
+        "<urlset><url><loc>https://example.test/a</loc></url></urlset>",
+      ),
+    ).toEqual({ kind: "urlset", locations: ["https://example.test/a"] });
+    expect(
+      parseSitemapDocument(
+        "<sitemapindex><sitemap><loc>https://example.test/sitemaps/1.xml</loc></sitemap></sitemapindex>",
+      ),
+    ).toEqual({
+      kind: "index",
+      locations: ["https://example.test/sitemaps/1.xml"],
+    });
+    expect(() => parseSitemapDocument("<html></html>")).toThrow("neither");
+  });
+
+  it("classifies visible SEO failures without treating the body as data", () => {
+    const inspected = inspectPublicSeoHtml(
+      '<html><head><title></title><meta name="robots" content="noindex"><link rel="canonical" href="https://example.test/other"></head></html>',
+      "https://example.test/model",
+    );
+    expect(inspected.issues).toEqual([
+      "missing_title",
+      "missing_description",
+      "canonical_mismatch",
+      "noindex",
+      "missing_json_ld",
+    ]);
+  });
+
+  it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<sitemapindex><sitemap><loc>https://example.test/sitemaps/1.xml</loc></sitemap></sitemapindex>",
+        );
+      }
+      if (url.endsWith("/sitemaps/1.xml")) {
+        return response(
+          "<urlset><url><loc>https://example.test/model</loc></url><url><loc>https://example.test/second</loc></url><url><loc>https://example.test/model</loc></url></urlset>",
+        );
+      }
+      return response(validPage(url, "Shared", "Shared description"));
+    });
+
+    const summary = await auditPublicSeo({
+      baseUrl: "https://example.test",
+      fetcher,
+      concurrency: 1,
+    });
+
+    expect(summary.sitemapUrls).toBe(2);
+    expect(summary.sitemapDocuments).toBe(2);
+    expect(summary.failed).toBe(2);
+    expect(
+      summary.entries.every((entry) =>
+        entry.issues.includes("duplicate_title"),
+      ),
+    ).toBe(true);
+    expect(renderPublicSeoAuditMarkdown(summary)).toContain(
+      "duplicate_description",
+    );
+  });
+
+  it("keeps timeouts incomplete and classifies HTTP failures separately", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<urlset><url><loc>https://example.test/timeout</loc></url><url><loc>https://example.test/missing</loc></url></urlset>",
+        );
+      }
+      if (url.endsWith("/timeout"))
+        throw new DOMException("Timed out", "TimeoutError");
+      return response("not found", 404);
+    });
+
+    const summary = await auditPublicSeo({
+      baseUrl: "https://example.test",
+      fetcher,
+    });
+
+    expect(summary.incomplete).toBe(1);
+    expect(summary.failed).toBe(1);
+    expect(summary.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.test/timeout",
+          state: "incomplete",
+          failureKind: "timeout",
+        }),
+        expect.objectContaining({
+          url: "https://example.test/missing",
+          state: "failed",
+          failureKind: "http",
+          status: 404,
+        }),
+      ]),
+    );
+  });
+});

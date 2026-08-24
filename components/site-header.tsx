@@ -4,6 +4,7 @@ import { DEFAULT_LOCALE, getMessages, type Locale } from "@/lib/i18n";
 import type { PriceMode } from "@/lib/pricing/types";
 import { modeHref } from "@/lib/seo";
 import { LanguageSwitcher } from "./language-switcher";
+import { PrivacyPreferencesButton } from "./privacy-preferences-button";
 import { ThemeToggle } from "./theme-toggle";
 
 type SiteHeaderProps = {
@@ -122,6 +123,9 @@ export function SiteFooter({
       <div className="footer-links">
         <Link href={methodologyHref}>{messages.common.methodology}</Link>
         <Link href={privacyHref}>{messages.common.privacy}</Link>
+        <PrivacyPreferencesButton
+          label={messages.common.managePrivacyPreferences}
+        />
         {includeModelSource ? (
           <a
             href="https://github.com/anomalyco/models.dev"
