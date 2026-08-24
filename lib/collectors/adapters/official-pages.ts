@@ -1289,6 +1289,7 @@ export function officialPageHealthCheck(
 }
 
 const minimumOffersByAdapterId: Record<string, number> = {
+  "kimi-membership-official": 4,
   "stepfun-membership-official": 5,
   "comate-pricing-official": 7,
   "qoder-pricing-official": 3,

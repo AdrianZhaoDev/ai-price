@@ -88,6 +88,20 @@ describe("public SEO audit", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("does not follow redirects outside the audited origin", async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://127.0.0.1:5432/private" },
+        }),
+    );
+    await expect(
+      auditPublicSeo({ baseUrl: "https://example.test", fetcher }),
+    ).rejects.toThrow("outside the audited origin");
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);

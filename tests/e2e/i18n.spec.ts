@@ -5,7 +5,7 @@ test.use({ locale: "en-US" });
 test("redirects an English browser to /en when there is no manual preference", async ({
   page,
 }) => {
-  await page.goto("/en");
+  await page.goto("/");
 
   await expect(page).toHaveURL(/\/en$/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -41,7 +41,7 @@ test("switches only the locale prefix and preserves filters and model query", as
 test("manual Chinese selection overrides a later English browser header", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/en");
   await expect(page).toHaveURL(/\/en$/);
   await page.getByRole("button", { name: "Switch to Chinese" }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -257,7 +257,7 @@ test("opens native privacy preferences only when Zaraz exposes the CMP API", asy
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/en");
   await page
     .getByRole("button", { name: "Manage privacy preferences" })
     .click();

@@ -80,6 +80,13 @@ describe("official table adapters", () => {
     expect(
       offers.every((offer) => offer.parserVersion === "kimi-membership-v2"),
     ).toBe(true);
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    );
+    expect(adapter?.healthCheck(offers.slice(0, 3))).toMatchObject({
+      ok: false,
+      code: "MISSING_PRICE",
+    });
     expect(
       parseKimiMembership(raw("<table><tr><th>方案</th></tr></table>")),
     ).toEqual([]);

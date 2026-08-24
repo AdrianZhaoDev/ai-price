@@ -202,8 +202,31 @@ async function fetchText(
 ): Promise<Response> {
   return fetcher(url, {
     cache: "no-store",
+    redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
   });
+}
+
+async function fetchAuditResponse(
+  initialUrl: string,
+  auditedBaseUrl: string,
+  timeoutMs: number,
+  fetcher: typeof fetch,
+): Promise<{ response: Response; finalUrl: string }> {
+  let currentUrl = auditUrl(initialUrl, auditedBaseUrl);
+  const visited = new Set<string>();
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    if (visited.has(currentUrl)) throw new Error("Redirect loop detected.");
+    visited.add(currentUrl);
+    const response = await fetchText(currentUrl, timeoutMs, fetcher);
+    if (response.status < 300 || response.status >= 400) {
+      return { response, finalUrl: currentUrl };
+    }
+    const location = response.headers.get("location");
+    if (!location) return { response, finalUrl: currentUrl };
+    currentUrl = auditUrl(location, currentUrl);
+  }
+  throw new Error("Too many redirects.");
 }
 
 async function mapConcurrent<T>(
@@ -274,11 +297,17 @@ export async function auditPublicSeo(
     sitemapDocuments.add(sitemapUrl);
     let response: Response;
     try {
-      response = await fetchText(sitemapUrl, timeoutMs, fetcher);
+      response = (
+        await fetchAuditResponse(
+          sitemapUrl,
+          options.baseUrl,
+          timeoutMs,
+          fetcher,
+        )
+      ).response;
     } catch (error) {
-      throw new Error(
-        `Unable to fetch sitemap ${sitemapUrl}: ${classifyFailure(error)}`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Unable to fetch sitemap ${sitemapUrl}: ${message}`);
     }
     if (!response.ok) {
       throw new Error(
@@ -303,12 +332,17 @@ export async function auditPublicSeo(
   await mapConcurrent([...pageUrls].sort(), concurrency, async (url) => {
     const startedAt = performance.now();
     try {
-      const response = await fetchText(url, timeoutMs, fetcher);
+      const { response, finalUrl } = await fetchAuditResponse(
+        url,
+        options.baseUrl,
+        timeoutMs,
+        fetcher,
+      );
       const elapsedMs = Math.round(performance.now() - startedAt);
       if (!response.ok) {
         entries.push({
           url: reportUrl(url),
-          finalUrl: reportUrl(response.url || url),
+          finalUrl: reportUrl(finalUrl),
           status: response.status,
           elapsedMs,
           state: "failed",
@@ -327,7 +361,7 @@ export async function auditPublicSeo(
       } catch {
         entries.push({
           url: reportUrl(url),
-          finalUrl: reportUrl(response.url || url),
+          finalUrl: reportUrl(finalUrl),
           status: response.status,
           elapsedMs,
           state: "failed",
@@ -338,7 +372,7 @@ export async function auditPublicSeo(
       }
       entries.push({
         ...inspected,
-        finalUrl: reportUrl(response.url || url),
+        finalUrl: reportUrl(finalUrl),
         status: response.status,
         elapsedMs,
         state: inspected.issues.length > 0 ? "failed" : "ok",
