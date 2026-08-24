@@ -278,6 +278,19 @@ test("opens native privacy preferences only when Zaraz exposes the CMP API", asy
   ).toBeVisible();
 });
 
+test("hides privacy preferences when Zaraz is unavailable", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ baseURL, locale: "en-US" });
+  const page = await context.newPage();
+  await page.goto("/en");
+  await expect(
+    page.getByRole("button", { name: "Manage privacy preferences" }),
+  ).toHaveCount(0);
+  await context.close();
+});
+
 test("hides the model catalog background while the subscription dialog is open", async ({
   page,
 }) => {

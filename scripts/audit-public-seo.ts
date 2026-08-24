@@ -16,6 +16,14 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function nonNegativeInteger(
+  value: string | undefined,
+  fallback: number,
+): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 async function writeOutput(
   path: string | undefined,
   body: string,
@@ -30,6 +38,7 @@ async function main() {
     baseUrl: argument("base-url") ?? "https://lowpriceradar.com",
     concurrency: positiveInteger(argument("concurrency"), 3),
     timeoutMs: positiveInteger(argument("timeout-ms"), 10_000),
+    minimumUrls: nonNegativeInteger(argument("minimum-urls"), 700),
   });
   await writeOutput(
     argument("output"),
@@ -43,6 +52,8 @@ async function main() {
     JSON.stringify({
       sitemapUrls: summary.sitemapUrls,
       sitemapDocuments: summary.sitemapDocuments,
+      minimumUrls: summary.minimumUrls,
+      siteIssues: summary.siteIssues,
       ok: summary.ok,
       failed: summary.failed,
       incomplete: summary.incomplete,

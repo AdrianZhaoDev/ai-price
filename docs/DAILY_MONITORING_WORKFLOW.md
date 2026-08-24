@@ -97,13 +97,16 @@ CTR 和排名”，并把接通 Search Console 列为首要测量任务；不得
 ```powershell
 npm run audit:public-seo -- `
   --base-url=https://lowpriceradar.com `
+  --minimum-urls=700 `
   --output=reports/monitoring/YYYY-MM-DD-seo-audit.json `
   --markdown=reports/monitoring/YYYY-MM-DD-seo-audit.md
 ```
 
 默认并发为 3、单 URL 超时为 10 秒。`timeout` 只能标为“尚在处理”，不得归为
 4xx/5xx 或 SEO 失败；`http`、`parse`、`seo` 和 `network` 必须分别报告。产物不含
-响应正文、cookie、查询参数或任何生产密钥。
+响应正文、cookie、查询参数或任何生产密钥。审计先校验 robots.txt 未以 `/api` 前缀
+误伤 `/api-pricing`，并拒绝跨源 Sitemap 或重定向；Sitemap 少于 700 条时必须报告
+`sitemap_count_collapse`。仅在已批准的目录规模变化后才能调整这个下限。
 
 对 Sitemap 中所有公共页面检查：
 

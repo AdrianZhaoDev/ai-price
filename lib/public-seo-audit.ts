@@ -10,7 +10,9 @@ export type PublicSeoAuditIssue =
   | "noindex"
   | "missing_json_ld"
   | "duplicate_title"
-  | "duplicate_description";
+  | "duplicate_description"
+  | "robots_api_pricing_blocked"
+  | "sitemap_count_collapse";
 
 export type PublicSeoAuditEntry = {
   url: string;
@@ -28,6 +30,8 @@ export type PublicSeoAuditEntry = {
 export type PublicSeoAuditSummary = {
   sitemapUrls: number;
   sitemapDocuments: number;
+  minimumUrls: number;
+  siteIssues: PublicSeoAuditIssue[];
   ok: number;
   failed: number;
   incomplete: number;
@@ -38,6 +42,7 @@ export type PublicSeoAuditOptions = {
   baseUrl: string;
   concurrency?: number;
   timeoutMs?: number;
+  minimumUrls?: number;
   fetcher?: typeof fetch;
 };
 
@@ -105,6 +110,29 @@ function auditUrl(location: string, base: string): string {
     );
   }
   return url.toString();
+}
+
+function robotsBlockApiPricing(robots: string): boolean {
+  let appliesToAll = false;
+  for (const rawLine of robots.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*/, "").trim();
+    const separator = line.indexOf(":");
+    if (separator < 0) continue;
+    const directive = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (directive === "user-agent") {
+      appliesToAll = value === "*";
+      continue;
+    }
+    if (
+      appliesToAll &&
+      directive === "disallow" &&
+      (value === "/api" || value === "/api*" || value.startsWith("/api?"))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function structuredTypes(value: unknown): string[] {
@@ -286,10 +314,31 @@ export async function auditPublicSeo(
   const fetcher = options.fetcher ?? fetch;
   const timeoutMs = options.timeoutMs ?? 10_000;
   const concurrency = Math.max(1, options.concurrency ?? 3);
+  const minimumUrls = Math.max(0, options.minimumUrls ?? 700);
   const rootSitemap = new URL("/sitemap.xml", options.baseUrl).toString();
+  const robotsUrl = new URL("/robots.txt", options.baseUrl).toString();
   const sitemapDocuments = new Set<string>();
   const pendingSitemaps = [rootSitemap];
   const pageUrls = new Set<string>();
+  const siteIssues: PublicSeoAuditIssue[] = [];
+
+  try {
+    const { response } = await fetchAuditResponse(
+      robotsUrl,
+      options.baseUrl,
+      timeoutMs,
+      fetcher,
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (robotsBlockApiPricing(await response.text())) {
+      siteIssues.push("robots_api_pricing_blocked");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Unable to audit robots ${reportUrl(robotsUrl)}: ${message}`,
+    );
+  }
 
   while (pendingSitemaps.length > 0) {
     const sitemapUrl = pendingSitemaps.shift()!;
@@ -307,7 +356,9 @@ export async function auditPublicSeo(
       ).response;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Unable to fetch sitemap ${sitemapUrl}: ${message}`);
+      throw new Error(
+        `Unable to fetch sitemap ${reportUrl(sitemapUrl)}: ${message}`,
+      );
     }
     if (!response.ok) {
       throw new Error(
@@ -326,6 +377,10 @@ export async function auditPublicSeo(
       if (sitemap.kind === "index") pendingSitemaps.push(url);
       else pageUrls.add(url);
     }
+  }
+
+  if (pageUrls.size < minimumUrls) {
+    siteIssues.push("sitemap_count_collapse");
   }
 
   const entries: PublicSeoAuditEntry[] = [];
@@ -397,8 +452,12 @@ export async function auditPublicSeo(
   return {
     sitemapUrls: pageUrls.size,
     sitemapDocuments: sitemapDocuments.size,
+    minimumUrls,
+    siteIssues,
     ok: orderedEntries.filter((entry) => entry.state === "ok").length,
-    failed: orderedEntries.filter((entry) => entry.state === "failed").length,
+    failed:
+      orderedEntries.filter((entry) => entry.state === "failed").length +
+      siteIssues.length,
     incomplete: orderedEntries.filter((entry) => entry.state === "incomplete")
       .length,
     entries: orderedEntries,
@@ -417,5 +476,8 @@ export function renderPublicSeoAuditMarkdown(
         )
         .join("\n")
     : "| 无 | — | — | — | — | — |";
-  return `# Public SEO audit\n\n| Sitemap URLs | Sitemap documents | OK | Failed | Incomplete |\n| ---: | ---: | ---: | ---: | ---: |\n| ${summary.sitemapUrls} | ${summary.sitemapDocuments} | ${summary.ok} | ${summary.failed} | ${summary.incomplete} |\n\n超时表示尚未完成，不等同于 HTTP 或 SEO 失败。\n\n| URL | 状态 | 分类 | HTTP | 问题 | 耗时 ms |\n| --- | --- | --- | ---: | --- | ---: |\n${rows}\n`;
+  const siteIssues = summary.siteIssues.length
+    ? summary.siteIssues.join(", ")
+    : "无";
+  return `# Public SEO audit\n\n| Sitemap URLs | Minimum URLs | Sitemap documents | OK | Failed | Incomplete |\n| ---: | ---: | ---: | ---: | ---: | ---: |\n| ${summary.sitemapUrls} | ${summary.minimumUrls} | ${summary.sitemapDocuments} | ${summary.ok} | ${summary.failed} | ${summary.incomplete} |\n\n站点级问题：${siteIssues}\n\n超时表示尚未完成，不等同于 HTTP 或 SEO 失败。\n\n| URL | 状态 | 分类 | HTTP | 问题 | 耗时 ms |\n| --- | --- | --- | ---: | --- | ---: |\n${rows}\n`;
 }

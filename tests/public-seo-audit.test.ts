@@ -77,29 +77,59 @@ describe("public SEO audit", () => {
   });
 
   it("rejects off-origin sitemap locations before fetching them", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      response(
-        "<urlset><url><loc>http://127.0.0.1:5432/private</loc></url></urlset>",
-      ),
+    const fetcher = vi.fn<typeof fetch>(async (input) =>
+      String(input).endsWith("/robots.txt")
+        ? response("User-agent: *\nAllow: /")
+        : response(
+            "<urlset><url><loc>http://127.0.0.1:5432/private</loc></url></urlset>",
+          ),
     );
     await expect(
       auditPublicSeo({ baseUrl: "https://example.test", fetcher }),
     ).rejects.toThrow("outside the audited origin");
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("does not follow redirects outside the audited origin", async () => {
-    const fetcher = vi.fn<typeof fetch>(
-      async () =>
-        new Response(null, {
-          status: 302,
-          headers: { location: "http://127.0.0.1:5432/private" },
-        }),
+    const fetcher = vi.fn<typeof fetch>(async (input) =>
+      String(input).endsWith("/robots.txt")
+        ? response("User-agent: *\nAllow: /")
+        : new Response(null, {
+            status: 302,
+            headers: { location: "http://127.0.0.1:5432/private" },
+          }),
     );
     await expect(
       auditPublicSeo({ baseUrl: "https://example.test", fetcher }),
     ).rejects.toThrow("outside the audited origin");
-    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports robots regressions and sitemap count collapse as site issues", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) {
+        return response("User-agent: *\nDisallow: /api");
+      }
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<urlset><url><loc>https://example.test/api-pricing</loc></url></urlset>",
+        );
+      }
+      return response(validPage(url));
+    });
+
+    const summary = await auditPublicSeo({
+      baseUrl: "https://example.test",
+      fetcher,
+      minimumUrls: 2,
+    });
+
+    expect(summary.siteIssues).toEqual([
+      "robots_api_pricing_blocked",
+      "sitemap_count_collapse",
+    ]);
+    expect(summary.failed).toBe(2);
   });
 
   it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {
@@ -130,6 +160,7 @@ describe("public SEO audit", () => {
       baseUrl: "https://example.test",
       fetcher,
       concurrency: 1,
+      minimumUrls: 0,
     });
 
     expect(summary.sitemapUrls).toBe(2);
@@ -165,6 +196,7 @@ describe("public SEO audit", () => {
     const summary = await auditPublicSeo({
       baseUrl: "https://example.test",
       fetcher,
+      minimumUrls: 0,
     });
 
     expect(summary.incomplete).toBe(1);
