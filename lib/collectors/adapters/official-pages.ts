@@ -1849,7 +1849,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v6",
+    "huawei-maas-api-v7",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

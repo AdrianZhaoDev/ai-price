@@ -80,6 +80,13 @@ function canonicalUrl(value: string, base: string): string {
   return url.toString();
 }
 
+function reportUrl(value: string): string {
+  const url = new URL(value);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 function structuredTypes(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(structuredTypes);
   if (typeof value !== "object" || value === null) return [];
@@ -128,10 +135,20 @@ export function inspectPublicSeoHtml(
     issues.push("canonical_mismatch");
   }
   if (/\bnoindex\b/i.test(robots)) issues.push("noindex");
-  if (!jsonLdTypes.some((type) => type === "Dataset" || type === "ItemList")) {
+  if (
+    !jsonLdTypes.some((type) =>
+      ["Dataset", "ItemList", "Article", "WebPage"].includes(type),
+    )
+  ) {
     issues.push("missing_json_ld");
   }
-  return { url: requestedUrl, issues, title, description, canonical };
+  return {
+    url: reportUrl(requestedUrl),
+    issues,
+    title,
+    description,
+    canonical,
+  };
 }
 
 function classifyFailure(error: unknown): PublicSeoAuditFailureKind {
@@ -175,7 +192,12 @@ function addDuplicateIssues(entries: PublicSeoAuditEntry[]): void {
   const byTitle = new Map<string, PublicSeoAuditEntry[]>();
   const byDescription = new Map<string, PublicSeoAuditEntry[]>();
   for (const entry of entries) {
-    if (entry.state !== "ok") continue;
+    if (
+      entry.state === "incomplete" ||
+      ["http", "network", "parse"].includes(entry.failureKind ?? "")
+    ) {
+      continue;
+    }
     if (entry.title)
       byTitle.set(entry.title, [...(byTitle.get(entry.title) ?? []), entry]);
     if (entry.description) {
@@ -251,8 +273,8 @@ export async function auditPublicSeo(
       const elapsedMs = Math.round(performance.now() - startedAt);
       if (!response.ok) {
         entries.push({
-          url,
-          finalUrl: response.url || url,
+          url: reportUrl(url),
+          finalUrl: reportUrl(response.url || url),
           status: response.status,
           elapsedMs,
           state: "failed",
@@ -266,8 +288,8 @@ export async function auditPublicSeo(
         inspected = inspectPublicSeoHtml(await response.text(), url);
       } catch {
         entries.push({
-          url,
-          finalUrl: response.url || url,
+          url: reportUrl(url),
+          finalUrl: reportUrl(response.url || url),
           status: response.status,
           elapsedMs,
           state: "failed",
@@ -278,7 +300,7 @@ export async function auditPublicSeo(
       }
       entries.push({
         ...inspected,
-        finalUrl: response.url || url,
+        finalUrl: reportUrl(response.url || url),
         status: response.status,
         elapsedMs,
         state: inspected.issues.length > 0 ? "failed" : "ok",
@@ -287,7 +309,7 @@ export async function auditPublicSeo(
     } catch (error) {
       const failureKind = classifyFailure(error);
       entries.push({
-        url,
+        url: reportUrl(url),
         elapsedMs: Math.round(performance.now() - startedAt),
         state: failureKind === "timeout" ? "incomplete" : "failed",
         failureKind,

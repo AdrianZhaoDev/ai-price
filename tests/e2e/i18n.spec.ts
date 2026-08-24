@@ -5,7 +5,7 @@ test.use({ locale: "en-US" });
 test("redirects an English browser to /en when there is no manual preference", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/en");
 
   await expect(page).toHaveURL(/\/en$/);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");

@@ -110,7 +110,7 @@ npm run audit:public-seo -- `
 - title、description 非空且各自唯一；
 - canonical 为自身规范 URL；
 - 不包含 noindex；
-- JSON-LD 至少包含预期的 Dataset/ItemList；
+- JSON-LD 至少包含页面适用的 Dataset/ItemList 或 Article/WebPage；
 - 页面在 Sitemap 中，Sitemap 返回的 URL 数量与预期一致；
 - robots 不得用 `/api` 误伤 `/api-pricing`。
 

@@ -380,7 +380,7 @@ describe("maintainable API pricing rules", () => {
       ]),
     );
     expect(
-      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v6"),
+      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v7"),
     ).toBe(true);
   });
 

@@ -52,6 +52,14 @@ describe("public SEO audit", () => {
     ]);
   });
 
+  it("accepts the structured-data types used by document pages", () => {
+    const inspected = inspectPublicSeoHtml(
+      `<!doctype html><html><head><title>Methodology</title><meta name="description" content="How the public price references are collected."><link rel="canonical" href="https://example.test/methodology"><script type="application/ld+json">{"@type":"WebPage"}</script></head></html>`,
+      "https://example.test/methodology",
+    );
+    expect(inspected.issues).toEqual([]);
+  });
+
   it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
@@ -65,7 +73,15 @@ describe("public SEO audit", () => {
           "<urlset><url><loc>https://example.test/model</loc></url><url><loc>https://example.test/second</loc></url><url><loc>https://example.test/model</loc></url></urlset>",
         );
       }
-      return response(validPage(url, "Shared", "Shared description"));
+      const html = validPage(url, "Shared", "Shared description");
+      return response(
+        url.endsWith("/second")
+          ? html.replace(
+              "</head>",
+              '<meta name="robots" content="noindex"></head>',
+            )
+          : html,
+      );
     });
 
     const summary = await auditPublicSeo({
@@ -82,6 +98,9 @@ describe("public SEO audit", () => {
         entry.issues.includes("duplicate_title"),
       ),
     ).toBe(true);
+    expect(
+      summary.entries.find((entry) => entry.url.endsWith("/second"))?.issues,
+    ).toContain("noindex");
     expect(renderPublicSeoAuditMarkdown(summary)).toContain(
       "duplicate_description",
     );
@@ -92,12 +111,13 @@ describe("public SEO audit", () => {
       const url = String(input);
       if (url.endsWith("/sitemap.xml")) {
         return response(
-          "<urlset><url><loc>https://example.test/timeout</loc></url><url><loc>https://example.test/missing</loc></url></urlset>",
+          "<urlset><url><loc>https://example.test/timeout</loc></url><url><loc>https://example.test/missing</loc></url><url><loc>https://example.test/query?token=secret</loc></url></urlset>",
         );
       }
       if (url.endsWith("/timeout"))
         throw new DOMException("Timed out", "TimeoutError");
-      return response("not found", 404);
+      if (url.endsWith("/missing")) return response("not found", 404);
+      return response(validPage(url));
     });
 
     const summary = await auditPublicSeo({
@@ -107,6 +127,10 @@ describe("public SEO audit", () => {
 
     expect(summary.incomplete).toBe(1);
     expect(summary.failed).toBe(1);
+    expect(summary.ok).toBe(1);
+    expect(summary.entries.map((entry) => entry.url).join("\n")).not.toContain(
+      "?token=secret",
+    );
     expect(summary.entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
