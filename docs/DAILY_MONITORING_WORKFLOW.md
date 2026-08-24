@@ -106,7 +106,8 @@ npm run audit:public-seo -- `
 4xx/5xx 或 SEO 失败；`http`、`parse`、`seo` 和 `network` 必须分别报告。产物不含
 响应正文、cookie、查询参数或任何生产密钥。审计先校验 robots.txt 未以 `/api` 前缀
 误伤 `/api-pricing`，并拒绝跨源 Sitemap 或重定向；Sitemap 少于 700 条时必须报告
-`sitemap_count_collapse`。仅在已批准的目录规模变化后才能调整这个下限。
+`sitemap_count_collapse`。仅在已批准的目录规模变化后才能调整这个下限。出现超时会保留
+“尚在处理”分类，但命令以非零退出提示监控任务需要复核。
 
 对 Sitemap 中所有公共页面检查：
 

@@ -59,7 +59,7 @@ async function main() {
       incomplete: summary.incomplete,
     }),
   );
-  if (summary.failed > 0) process.exitCode = 1;
+  if (summary.failed > 0 || summary.incomplete > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {

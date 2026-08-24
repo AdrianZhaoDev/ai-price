@@ -12,7 +12,8 @@ export type PublicSeoAuditIssue =
   | "duplicate_title"
   | "duplicate_description"
   | "robots_api_pricing_blocked"
-  | "sitemap_count_collapse";
+  | "sitemap_count_collapse"
+  | "redirected_sitemap_url";
 
 export type PublicSeoAuditEntry = {
   url: string;
@@ -86,6 +87,8 @@ function canonicalUrl(value: string, base: string): string {
 
 function reportUrl(value: string): string {
   const url = new URL(value);
+  url.username = "";
+  url.password = "";
   url.search = "";
   url.hash = "";
   return url.toString();
@@ -103,7 +106,12 @@ function expectedStructuredTypes(requestedUrl: string): string[] {
 function auditUrl(location: string, base: string): string {
   const url = new URL(location, base);
   const origin = new URL(base).origin;
-  if (!/^https?:$/.test(url.protocol) || url.origin !== origin) {
+  if (
+    !/^https?:$/.test(url.protocol) ||
+    url.origin !== origin ||
+    url.username ||
+    url.password
+  ) {
     throw new Error(
       `Sitemap location is outside the audited origin: ${reportUrl(url.toString())}`,
     );
@@ -112,7 +120,7 @@ function auditUrl(location: string, base: string): string {
 }
 
 function robotsBlockApiPricing(robots: string): boolean {
-  let appliesToAll = false;
+  let appliesToGooglebot = false;
   let hasDirectives = false;
   for (const rawLine of robots.split(/\r?\n/)) {
     const line = rawLine.replace(/#.*/, "").trim();
@@ -122,15 +130,16 @@ function robotsBlockApiPricing(robots: string): boolean {
     const value = line.slice(separator + 1).trim();
     if (directive === "user-agent") {
       if (hasDirectives) {
-        appliesToAll = false;
+        appliesToGooglebot = false;
         hasDirectives = false;
       }
-      appliesToAll ||= value === "*";
+      const agent = value.toLowerCase();
+      appliesToGooglebot ||= agent === "*" || agent.startsWith("googlebot");
       continue;
     }
     hasDirectives = true;
     if (
-      appliesToAll &&
+      appliesToGooglebot &&
       directive === "disallow" &&
       (value === "/api" || value === "/api*" || value.startsWith("/api?"))
     ) {
@@ -169,7 +178,9 @@ export function inspectPublicSeoHtml(
     ?.trim();
   const canonical = $("link[rel='canonical' i]").first().attr("href")?.trim();
   const robots = [
-    $("meta[name='robots' i]").first().attr("content") ?? "",
+    ...$("meta[name='robots' i], meta[name='googlebot' i]")
+      .toArray()
+      .map((element) => $(element).attr("content") ?? ""),
     xRobotsTag,
   ].join(",");
   const jsonLdTypes = $("script[type='application/ld+json' i]")
@@ -431,6 +442,9 @@ export async function auditPublicSeo(
           issues: [],
         });
         return;
+      }
+      if (finalUrl !== url) {
+        inspected.issues.push("redirected_sitemap_url");
       }
       entries.push({
         ...inspected,

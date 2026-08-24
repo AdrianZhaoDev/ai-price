@@ -77,6 +77,14 @@ describe("public SEO audit", () => {
     expect(inspected.issues).toContain("canonical_mismatch");
   });
 
+  it("honors Googlebot-specific noindex directives", () => {
+    const inspected = inspectPublicSeoHtml(
+      `<!doctype html><html><head><title>Model</title><meta name="description" content="Model pricing."><meta name="googlebot" content="noindex"><link rel="canonical" href="https://example.test/model"><script type="application/ld+json">{"@type":"Dataset"}</script></head></html>`,
+      "https://example.test/model",
+    );
+    expect(inspected.issues).toContain("noindex");
+  });
+
   it("rejects off-origin sitemap locations before fetching them", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) =>
       String(input).endsWith("/robots.txt")
@@ -106,6 +114,19 @@ describe("public SEO audit", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects credential-bearing sitemap locations without logging credentials", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) =>
+      String(input).endsWith("/robots.txt")
+        ? response("User-agent: *\nAllow: /")
+        : response(
+            "<urlset><url><loc>https://user:secret@example.test/private</loc></url></urlset>",
+          ),
+    );
+    await expect(
+      auditPublicSeo({ baseUrl: "https://example.test", fetcher }),
+    ).rejects.not.toThrow("secret");
+  });
+
   it("reports robots regressions and sitemap count collapse as site issues", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
@@ -131,6 +152,34 @@ describe("public SEO audit", () => {
       "sitemap_count_collapse",
     ]);
     expect(summary.failed).toBe(2);
+  });
+
+  it("flags sitemap entries that need a redirect before inspection", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/robots.txt")) return response("User-agent: *");
+      if (url.endsWith("/sitemap.xml")) {
+        return response(
+          "<urlset><url><loc>https://example.test/model/</loc></url></urlset>",
+        );
+      }
+      if (url.endsWith("/model/")) {
+        return new Response(null, {
+          status: 301,
+          headers: { location: "/model" },
+        });
+      }
+      return response(validPage(url));
+    });
+
+    const summary = await auditPublicSeo({
+      baseUrl: "https://example.test",
+      fetcher,
+      minimumUrls: 0,
+    });
+
+    expect(summary.failed).toBe(1);
+    expect(summary.entries[0]?.issues).toContain("redirected_sitemap_url");
   });
 
   it("redacts nested sitemap URLs from HTTP and parse failures", async () => {
