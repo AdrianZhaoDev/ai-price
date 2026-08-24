@@ -41,7 +41,7 @@ test("switches only the locale prefix and preserves filters and model query", as
 test("manual Chinese selection overrides a later English browser header", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/en");
   await expect(page).toHaveURL(/\/en$/);
   await page.getByRole("button", { name: "Switch to Chinese" }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -242,6 +242,53 @@ test("keeps public assets, document anchors, and privacy copy localized", async 
     page.getByText(/ai-price-locale cookie for one year/i),
   ).toBeVisible();
   await expect(page.getByText(/subscription locale/i)).toBeVisible();
+});
+
+test("opens native privacy preferences only when Zaraz exposes the CMP API", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      zaraz: {
+        track: () => undefined,
+        showConsentModal: () => {
+          Object.assign(window, { zarazConsentModalOpened: true });
+        },
+      },
+    });
+  });
+  await page.goto("/en");
+  await page
+    .getByRole("button", { name: "Manage privacy preferences" })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean(
+          (window as Window & { zarazConsentModalOpened?: boolean })
+            .zarazConsentModalOpened,
+        ),
+      ),
+    )
+    .toBe(true);
+
+  await page.goto("/en/privacy");
+  await expect(
+    page.getByRole("button", { name: "Manage privacy preferences" }),
+  ).toBeVisible();
+});
+
+test("hides privacy preferences when Zaraz is unavailable", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ baseURL, locale: "en-US" });
+  const page = await context.newPage();
+  await page.goto("/en");
+  await expect(
+    page.getByRole("button", { name: "Manage privacy preferences" }),
+  ).toHaveCount(0);
+  await context.close();
 });
 
 test("hides the model catalog background while the subscription dialog is open", async ({

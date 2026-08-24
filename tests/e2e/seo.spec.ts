@@ -15,7 +15,7 @@ const publicPages = [
   },
   {
     path: "/api-pricing",
-    title: "AI 模型 API 价格与规格排行榜",
+    title: "AI 模型 API 价格表：每百万 Token 成本与规格",
     canonical: "https://lowpriceradar.com/api-pricing",
     sitemapUrl: "https://lowpriceradar.com/api-pricing",
   },
@@ -114,6 +114,10 @@ test("publishes distinct indexable pricing pages and structured data", async ({
     if (entry.path === "/api-pricing") {
       await expect(page.locator(".model-catalog-table")).toBeVisible();
       await expect(page.locator('a[href="/deepseek-price"]')).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "API 价格常见问题" }),
+      ).toBeVisible();
+      await expect(page.locator('a[href="/gemini-pro-price"]')).toBeVisible();
     } else {
       await expect(page.locator(".price-index")).toBeVisible();
       await expect(
@@ -126,6 +130,38 @@ test("publishes distinct indexable pricing pages and structured data", async ({
       }
     }
   }
+});
+
+test("connects the API directory and Google AI Pro guide with visible FAQ content", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "SEO output is device-independent.");
+
+  await page.goto("/en/api-pricing");
+  await expect(page).toHaveTitle(/API Prices per 1M Tokens/);
+  await expect(
+    page.getByRole("heading", { name: "API pricing FAQ" }),
+  ).toBeVisible();
+  await expect(page.locator('a[href="/en/gemini-pro-price"]')).toBeVisible();
+
+  await page.goto("/en/gemini-pro-price");
+  await expect(
+    page.getByRole("heading", { name: "Google AI Pro FAQ" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Compare model API prices" }),
+  ).toBeVisible();
+  const structuredData = (
+    await page.locator('script[type="application/ld+json"]').allTextContents()
+  ).flatMap((value) => {
+    const parsed = JSON.parse(value) as
+      Record<string, unknown> | Record<string, unknown>[];
+    return Array.isArray(parsed) ? parsed : [parsed];
+  });
+  expect(structuredData).toEqual(
+    expect.arrayContaining([expect.objectContaining({ "@type": "FAQPage" })]),
+  );
 });
 
 test("publishes the bilingual hot model release watch page", async ({

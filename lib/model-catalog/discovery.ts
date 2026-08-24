@@ -28,6 +28,26 @@ export function isIndexableModelSummary(model: ModelCatalogSummary): boolean {
   );
 }
 
+export function isSearchEligibleModelSummary(
+  model: ModelCatalogSummary,
+): boolean {
+  const hasPriceSignal = Boolean(
+    model.minInputPrice !== undefined ||
+    model.minOutputPrice !== undefined ||
+    model.hasZeroInputPrice ||
+    model.hasZeroOutputPrice,
+  );
+  const hasSearchableDetail = Boolean(
+    model.description?.trim() ||
+    (model.context !== undefined &&
+      model.output !== undefined &&
+      model.inputModalities.length > 0),
+  );
+  return (
+    isIndexableModelSummary(model) && hasPriceSignal && hasSearchableDetail
+  );
+}
+
 export function buildModelCatalogFacets(
   models: ModelCatalogSummary[],
 ): ModelCatalogFacets {

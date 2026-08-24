@@ -60,6 +60,38 @@ describe("official table adapters", () => {
     expect(offers.map((offer) => offer.amountMinor)).toEqual([4900, 69900]);
   });
 
+  it("finds Kimi's monthly column across localized public tables", () => {
+    const offers = parseKimiMembership(
+      raw(`<table><tr><th>功能</th><th>Moderato ($19/月)</th></tr>
+        <tr><td>Agent 额度</td><td>60</td></tr></table>
+        <table><tr><th>方案</th><th>月付</th><th>年付（折合每月）</th></tr>
+          <tr><td>Moderato</td><td>$19/月</td><td>$15/月</td></tr>
+          <tr><td>Allegretto</td><td>$39/月</td><td>$31/月</td></tr>
+          <tr><td>Allegro</td><td>$99/月</td><td>$79/月</td></tr>
+          <tr><td>Vivace</td><td>$199/月</td><td>$159/月</td></tr></table>`),
+    );
+
+    expect(offers).toHaveLength(4);
+    expect(offers.map((offer) => offer.amountMinor)).toEqual([
+      1900, 3900, 9900, 19900,
+    ]);
+    expect(offers.every((offer) => offer.currency === "USD")).toBe(true);
+    expect(offers.every((offer) => offer.region === "全球")).toBe(true);
+    expect(
+      offers.every((offer) => offer.parserVersion === "kimi-membership-v2"),
+    ).toBe(true);
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    );
+    expect(adapter?.healthCheck(offers.slice(0, 3))).toMatchObject({
+      ok: false,
+      code: "MISSING_PRICE",
+    });
+    expect(
+      parseKimiMembership(raw("<table><tr><th>方案</th></tr></table>")),
+    ).toEqual([]);
+  });
+
   it("parses MiniMax horizontal plans", () => {
     const offers = parseMiniMaxTokenPlan(
       raw(`<table><tr><th></th><th>Plus</th><th>Max</th></tr>
@@ -225,7 +257,7 @@ describe("official table adapters", () => {
     );
     const traePayload = [
       { id: "free", title: "免费", price: "¥0" },
-      { id: "pro", title: "速通 Pro", price: "¥59", priceSuffix: "/月" },
+      { id: "pro", title: "速通 Pro", price: "¥59/月" },
       {
         id: "pro-plus",
         title: "速通 Pro+",
@@ -247,7 +279,9 @@ describe("official table adapters", () => {
       },
       { id: "future-plan", title: "未来套餐", price: "¥9999" },
     ];
-    const trae = parseTraePricing(raw(JSON.stringify(traePayload)));
+    const trae = parseTraePricing(
+      raw(JSON.stringify({ data: { plans: traePayload } })),
+    );
 
     expect(stepfun.map((offer) => offer.amountMinor)).toEqual([
       990, 3900, 9900, 19900, 49900,
@@ -271,20 +305,28 @@ describe("official table adapters", () => {
       trae.length,
     );
     expect(
-      parseTraePricing(raw(JSON.stringify(traePayload.slice(0, 4)))),
+      parseTraePricing(raw(JSON.stringify({ plans: traePayload.slice(0, 4) }))),
     ).toHaveLength(4);
     expect(
       parseTraePricing(
         raw(
-          JSON.stringify(
-            traePayload.map((plan) =>
+          JSON.stringify({
+            data: traePayload.map((plan) =>
               plan.id === "ultra" ? { ...plan, price: "联系销售" } : plan,
             ),
-          ),
+          }),
         ),
       ),
     ).toHaveLength(4);
     expect(parseTraePricing(raw("<html>not json</html>"))).toEqual([]);
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "trae-pricing-official",
+    );
+    expect(adapter?.sourceUrl).toBe("https://www.trae.cn/pricing");
+    expect(adapter?.healthCheck([])).toMatchObject({
+      ok: false,
+      code: "ACCESS_BLOCKED",
+    });
   });
 
   it("parses coding plans from dynamic official JavaScript payloads", () => {
@@ -392,18 +434,29 @@ describe("official table adapters", () => {
     expect(loadChunk).toHaveBeenNthCalledWith(2, "second.js");
   });
 
-  it("requires Huawei MaaS's verified full model and price-type baseline", () => {
+  it("requires Huawei MaaS's current model and price-type baseline", () => {
     const sample = parseGlmCodingPlan(
       raw(
         '{type:"lite",unitKey:"month",productId:"lite",salePrice:118,renewAmount:118}',
       ),
     )[0]!;
+    const modelNames = [
+      "openPangu-2.0-Pro",
+      "openPangu-2.0-Flash",
+      "GLM-5.2",
+      "GLM-5.1",
+      "Kimi-K2.6",
+      "DeepSeek-V4-Pro",
+      "DeepSeek-V4-Flash",
+      "Qwen3-30B-A3B",
+      "Qwen3-32B",
+    ];
     const priceTypes = ["cached_input", "input", "output"] as const;
-    const baseline = Array.from({ length: 35 }, (_, index) => ({
+    const baseline = Array.from({ length: 27 }, (_, index) => ({
       ...sample,
       canonicalPlanSlug: `huawei-model-${index}`,
-      rawPlanName: `Huawei Model ${index}`,
-      modelName: `Huawei Model ${index % 13}`,
+      rawPlanName: `${modelNames[index % modelNames.length]} · Price ${index}`,
+      modelName: modelNames[index % modelNames.length],
       priceType: priceTypes[index % priceTypes.length],
     }));
     const adapter = officialPageAdapters.find(
@@ -421,6 +474,15 @@ describe("official table adapters", () => {
         baseline.map((offer) => ({ ...offer, priceType: "input" })),
       ),
     ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+    expect(
+      adapter!.healthCheck(
+        baseline.map((offer) => ({ ...offer, modelName: "GLM-5.2" })),
+      ),
+    ).toMatchObject({
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      details: { missingModels: expect.any(Array) },
+    });
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {

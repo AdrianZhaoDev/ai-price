@@ -79,9 +79,9 @@ export const modeSeoByLocale: Record<Locale, Record<PriceMode, ModeSeo>> = {
     },
     api: {
       path: "/api-pricing",
-      title: "AI 模型 API 价格与规格排行榜",
+      title: "AI 模型 API 价格表：每百万 Token 成本与规格",
       description:
-        "比较 models.dev 收录的 AI 模型 API 价格与规格，查看实验室、上下文、最大输出、输入模态、各提供商最低非零输入和输出价格、发布日期、更新时间及来源说明，快速评估不同模型与渠道的调用成本。",
+        "比较 AI 模型每百万 Token 的输入、缓存输入与输出 API 价格，查看上下文、最大输出、Provider、发布日期、更新时间和来源说明，快速核对 GPT、Claude、Gemini、DeepSeek 等模型的调用成本。",
       keywords: [
         "AI API 价格",
         "大模型 API 价格",
@@ -121,9 +121,9 @@ export const modeSeoByLocale: Record<Locale, Record<PriceMode, ModeSeo>> = {
     },
     api: {
       path: "/en/api-pricing",
-      title: "AI Model API Prices and Specifications | Low Price Radar",
+      title: "AI Model API Prices per 1M Tokens | Low Price Radar",
       description:
-        "Compare AI model API prices and specifications from models.dev, including context, output limits, modalities, providers, release dates, and update times.",
+        "Compare AI model API prices per million tokens, including input, cached input, output, context, provider, release dates, update times, and traceable source information.",
       keywords: [
         "AI API prices",
         "LLM API price comparison",

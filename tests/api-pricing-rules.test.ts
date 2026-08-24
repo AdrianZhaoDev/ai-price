@@ -340,10 +340,11 @@ describe("maintainable API pricing rules", () => {
         <tr><td rowspan="2">openPangu-2.0-Pro</td><td>0≤Token&lt;32K</td><td>0.8</td><td>3.2</td><td>14.5</td></tr>
         <tr><td>Token≥32K</td><td>1.2</td><td>4.8</td><td>17.6</td></tr>
         <tr><td>GLM-5.2</td><td>-</td><td>-</td><td>8</td><td>28</td></tr>
+        <tr><td>Qwen3-30B-A3B</td><td>-</td><td>-</td><td>0.75</td><td>思考模式：7.5 非思考模式：3</td></tr>
       </table>`),
     );
 
-    expect(huawei).toHaveLength(8);
+    expect(huawei).toHaveLength(11);
     expect(huawei).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -364,10 +365,22 @@ describe("maintainable API pricing rules", () => {
           priceType: "input",
           amountMinor: 800,
         }),
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 750,
+          priceTier: expect.stringContaining("思考模式"),
+        }),
+        expect.objectContaining({
+          modelName: "Qwen3-30B-A3B",
+          priceType: "output",
+          amountMinor: 300,
+          priceTier: expect.stringContaining("非思考模式"),
+        }),
       ]),
     );
     expect(
-      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v6"),
+      huawei.every((offer) => offer.parserVersion === "huawei-maas-api-v7"),
     ).toBe(true);
   });
 

@@ -69,7 +69,7 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 | ---: | -------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
 |    1 | 智谱 GLM 资源包            | 限量 Token 资源包             | `https://bigmodel.cn/activity`                                         |
 |    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付 | `https://www.bigmodel.cn/claude-code`                                  |
-|    3 | Kimi                       | Andante 等会员套餐            | `https://www.kimi.com/zh-cn/help/membership/membership-pricing`        |
+|    3 | Kimi                       | Andante 等会员套餐            | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
 |    4 | 阶跃星辰                   | 周卡与四档月卡                | `https://chat.stepfun.com/subscription`                                |
 |    5 | MiniMax                    | Token Plan                    | `https://platform.minimaxi.com/docs/guides/pricing-token-plan`         |
 |    6 | 通义千问                   | 个人 Token Plan               | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
@@ -85,6 +85,14 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 
 智谱 GLM 资源包固定置顶。所有来源均从无需登录的官方页面或页面公开加载的版本化
 JavaScript 中解析；登录后才能看到且没有公开价目表的会员不发布价格。
+
+Kimi 会员按公开表头定位月付列，兼容人民币地区页和 `kimi.ai` 中文国际页的 USD 月付；
+原币金额保持 USD，并沿用 FX 快照生成参考价。TRAE 只使用公开价格页暴露的免登录数据；
+若公开页不再提供可验证的价格载荷，采集报 `ACCESS_BLOCKED` 并保留最后有效报价。
+
+Huawei MaaS API 的健康检查要求至少 27 个报价、9 个已验证模型以及
+cached-input/input/output 三类价格信号；价格数量达到门槛但缺少模型或价格类型仍会报
+`STRUCTURE_CHANGED`，不会写入不完整结果。
 
 ## 保留的国内官方 API 采集（16）
 

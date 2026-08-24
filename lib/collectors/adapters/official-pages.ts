@@ -110,7 +110,7 @@ function usageOffers(input: {
   );
 }
 
-function cnyOffer(input: {
+type PricedOfferInput = {
   providerSlug: string;
   planSlug: string;
   planName: string;
@@ -124,7 +124,11 @@ function cnyOffer(input: {
   modelName?: string;
   modelSlug?: string;
   priceType?: NormalizedOffer["priceType"];
-}): NormalizedOffer {
+  currency: string;
+  region: string;
+};
+
+function pricedOffer(input: PricedOfferInput): NormalizedOffer {
   return {
     providerSlug: input.providerSlug,
     productSlug: input.providerSlug,
@@ -132,10 +136,10 @@ function cnyOffer(input: {
     rawPlanName: input.planName,
     mode: input.billingPeriod === "usage" ? "api" : "subscription",
     channel: input.channel,
-    region: "中国大陆",
+    region: input.region,
     storefront: null,
-    currency: "CNY",
-    amountMinor: parseLocalizedPrice(input.displayPrice, "CNY"),
+    currency: input.currency,
+    amountMinor: parseLocalizedPrice(input.displayPrice, input.currency),
     displayPrice: input.displayPrice,
     status: "verified",
     billingPeriod: input.billingPeriod,
@@ -150,25 +154,53 @@ function cnyOffer(input: {
   };
 }
 
+function cnyOffer(
+  input: Omit<PricedOfferInput, "currency" | "region">,
+): NormalizedOffer {
+  return pricedOffer({ ...input, currency: "CNY", region: "中国大陆" });
+}
+
+function usdOffer(
+  input: Omit<PricedOfferInput, "currency" | "region">,
+): NormalizedOffer {
+  return pricedOffer({ ...input, currency: "USD", region: "全球" });
+}
+
 export function parseKimiMembership(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
-  return tableRows(raw.body)
-    .slice(1)
-    .filter((cells) => cells.length >= 3 && /¥|￥/.test(cells[2] ?? ""))
-    .map((cells) =>
-      cnyOffer({
-        providerSlug: "kimi-membership",
-        planSlug: `kimi-${slugifyPlan(cells[0])}-monthly`,
-        planName: cells[0],
-        displayPrice: cells[2],
-        billingPeriod: "month",
-        channel: "official_web",
-        sourceUrl: raw.sourceUrl,
-        observedAt: raw.observedAt,
-        parserVersion: "kimi-membership-v1",
-      }),
+  const rows = allTableRows(raw.body).find((candidate) => {
+    const header = candidate[0]?.join(" ") ?? "";
+    return (
+      /套餐|方案|plan/i.test(header) && /连续包月|月付|monthly/i.test(header)
     );
+  });
+  if (!rows) return [];
+
+  const monthlyIndex = (rows[0] ?? []).findIndex((cell) =>
+    /连续包月|月付|monthly/i.test(cell),
+  );
+  if (monthlyIndex < 0) return [];
+
+  return rows.slice(1).flatMap((cells) => {
+    const planName = cells[0]?.trim();
+    const displayPrice = cells[monthlyIndex]?.trim();
+    if (!planName || !displayPrice) return [];
+    const offerInput = {
+      providerSlug: "kimi-membership",
+      planSlug: `kimi-${slugifyPlan(planName)}-monthly`,
+      planName,
+      displayPrice,
+      billingPeriod: "month" as const,
+      channel: "official_web" as const,
+      sourceUrl: raw.sourceUrl,
+      observedAt: raw.observedAt,
+      parserVersion: "kimi-membership-v2",
+    };
+    if (/¥|￥/.test(displayPrice)) return [cnyOffer(offerInput)];
+    if (/\$/.test(displayPrice)) return [usdOffer(offerInput)];
+    return [];
+  });
 }
 
 export function parseMiniMaxTokenPlan(
@@ -740,7 +772,14 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   } catch {
     return [];
   }
-  if (!Array.isArray(payload)) return [];
+  const candidates = Array.isArray(payload)
+    ? payload
+    : [
+        (payload as { data?: unknown }).data,
+        (payload as { data?: { plans?: unknown } }).data?.plans,
+        (payload as { plans?: unknown }).plans,
+      ].find(Array.isArray);
+  if (!Array.isArray(candidates)) return [];
 
   const plans = [
     { id: "free", name: "免费", slug: "trae-免费-monthly" },
@@ -767,14 +806,14 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   ];
 
   return plans.flatMap((plan) => {
-    const item = payload.find(
+    const item = candidates.find(
       (candidate): candidate is Record<string, unknown> =>
         typeof candidate === "object" &&
         candidate !== null &&
         candidate.id === plan.id,
     );
     const price = typeof item?.price === "string" ? item.price : "";
-    const value = Number(price.match(/^¥\s*([\d.]+)$/)?.[1]);
+    const value = Number(price.match(/[¥￥]\s*([\d.]+)/)?.[1]);
     if (!Number.isFinite(value) || value < 0) return [];
     return [
       cnyOffer({
@@ -786,7 +825,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "trae-pricing-v3",
+        parserVersion: "trae-pricing-v4",
       }),
     ];
   });
@@ -1250,6 +1289,7 @@ export function officialPageHealthCheck(
 }
 
 const minimumOffersByAdapterId: Record<string, number> = {
+  "kimi-membership-official": 4,
   "stepfun-membership-official": 5,
   "comate-pricing-official": 7,
   "qoder-pricing-official": 3,
@@ -1268,8 +1308,18 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "grok-api-pricing-official": 9,
 };
 
-const HUAWEI_MAAS_MINIMUM_OFFERS = 35;
-const HUAWEI_MAAS_MINIMUM_MODELS = 13;
+const HUAWEI_MAAS_MINIMUM_OFFERS = 27;
+const HUAWEI_MAAS_REQUIRED_MODELS = [
+  "openPangu-2.0-Pro",
+  "openPangu-2.0-Flash",
+  "GLM-5.2",
+  "GLM-5.1",
+  "Kimi-K2.6",
+  "DeepSeek-V4-Pro",
+  "DeepSeek-V4-Flash",
+  "Qwen3-30B-A3B",
+  "Qwen3-32B",
+] as const;
 const HUAWEI_MAAS_REQUIRED_PRICE_TYPES = [
   "cached_input",
   "input",
@@ -1294,10 +1344,10 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const missingPriceTypes = HUAWEI_MAAS_REQUIRED_PRICE_TYPES.filter(
     (priceType) => !priceTypes.has(priceType),
   );
-  if (
-    modelNames.size < HUAWEI_MAAS_MINIMUM_MODELS ||
-    missingPriceTypes.length > 0
-  ) {
+  const missingModels = HUAWEI_MAAS_REQUIRED_MODELS.filter(
+    (modelName) => !modelNames.has(modelName),
+  );
+  if (missingModels.length > 0 || missingPriceTypes.length > 0) {
     return {
       ok: false,
       code: "STRUCTURE_CHANGED",
@@ -1305,7 +1355,8 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         "Huawei MaaS price table did not include its verified model and price-type baseline.",
       details: {
         modelCount: modelNames.size,
-        minimumModelCount: HUAWEI_MAAS_MINIMUM_MODELS,
+        requiredModels: [...HUAWEI_MAAS_REQUIRED_MODELS],
+        missingModels,
         priceTypes: [...priceTypes].sort(),
         missingPriceTypes,
       },
@@ -1573,13 +1624,45 @@ class CodeBuddyPricingAdapter implements PriceSourceAdapter {
   }
 }
 
+class TraePricingAdapter implements PriceSourceAdapter {
+  readonly id = "trae-pricing-official";
+  readonly providerSlug = "trae-subscription";
+  readonly sourceUrl = "https://www.trae.cn/pricing";
+  readonly parserVersion = "trae-pricing-v4";
+
+  async collect(context: CollectionContext): Promise<RawCollectionResult> {
+    return fetchPage(this.sourceUrl, {
+      observedAt: context.observedAt,
+      signal: context.signal,
+    });
+  }
+
+  async parse(raw: RawCollectionResult): Promise<NormalizedOffer[]> {
+    return parseTraePricing(raw);
+  }
+
+  healthCheck(offers: NormalizedOffer[]): SourceHealth {
+    if (offers.length === 0) {
+      return {
+        ok: false,
+        code: "ACCESS_BLOCKED",
+        message:
+          "TRAE pricing page did not expose a public, unauthenticated price payload.",
+      };
+    }
+    return officialPageHealthCheck(offers, 5);
+  }
+}
+
 export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "kimi-membership-official",
     "kimi-membership",
-    "https://www.kimi.com/zh-cn/help/membership/membership-pricing",
-    "kimi-membership-v1",
+    "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
+    "kimi-membership-v2",
     parseKimiMembership,
+    undefined,
+    ["USD"],
   ),
   new OfficialPageAdapter(
     "stepfun-membership-official",
@@ -1704,14 +1787,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "qoder-pricing-v1",
     parseQoderPricing,
   ),
-  new OfficialPageAdapter(
-    "trae-pricing-official",
-    "trae-subscription",
-    "https://www.trae.cn/pricing",
-    "trae-pricing-v3",
-    parseTraePricing,
-    "https://www.trae.cn/api/tcc/commerce?key=tocPlansConfig",
-  ),
+  new TraePricingAdapter(),
   new CodeBuddyPricingAdapter(),
   new OfficialPageAdapter(
     "mimo-token-plan-official",
@@ -1774,7 +1850,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v6",
+    "huawei-maas-api-v7",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

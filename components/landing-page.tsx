@@ -461,6 +461,65 @@ function RelatedPricePages({
   );
 }
 
+function geminiProFaq(locale: Locale) {
+  const isEnglish = locale === "en";
+  return [
+    {
+      question: isEnglish
+        ? "Is Google AI Pro the same plan as Gemini Pro?"
+        : "Google AI Pro 与 Gemini Pro 是同一个订阅吗？",
+      answer: isEnglish
+        ? "This page follows the current Google AI Pro App Store naming while keeping Gemini Pro as a search alias. Plan availability and included features can differ by storefront."
+        : "本页以当前 App Store 中的 Google AI Pro 名称展示，同时保留 Gemini Pro 作为搜索别名。不同 storefront 的套餐可用性和包含功能可能不同。",
+    },
+    {
+      question: isEnglish
+        ? "Which Google AI Pro variants are compared?"
+        : "页面比较哪些 Google AI Pro 变体？",
+      answer: isEnglish
+        ? "The comparison covers the published monthly and storage-linked variants shown in the official storefront data. It is not a promise that every plan can be purchased in every region."
+        : "对比覆盖官方 storefront 数据中公开的月付和存储关联变体，不代表每个地区都可购买全部套餐。",
+    },
+    {
+      question: isEnglish
+        ? "How should regional prices be interpreted?"
+        : "应如何理解不同地区价格？",
+      answer: isEnglish
+        ? "Original storefront amounts are shown beside CNY references for comparison. The official source and the latest check time remain the final reference for taxes, availability, and billing terms."
+        : "页面同时展示 storefront 原币金额和人民币参考价。税费、可用性和计费条款仍应以官方来源及最近核验时间为最终依据。",
+    },
+  ];
+}
+
+function LandingFaq({ locale }: { locale: Locale }) {
+  const isEnglish = locale === "en";
+  const apiPath = locale === "en" ? "/en/api-pricing" : "/api-pricing";
+  return (
+    <section className="landing-faq" aria-labelledby="gemini-pro-faq-title">
+      <div>
+        <p className="landing-kicker">
+          {isEnglish ? "Subscription context" : "订阅说明"}
+        </p>
+        <h2 id="gemini-pro-faq-title">
+          {isEnglish ? "Google AI Pro FAQ" : "Google AI Pro 常见问题"}
+        </h2>
+      </div>
+      <div>
+        {geminiProFaq(locale).map((item) => (
+          <article key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+        <Link href={apiPath} className="landing-inline-link">
+          {isEnglish ? "Compare model API prices" : "查看模型 API 价格"}
+          <ArrowUpRight size={14} aria-hidden="true" />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export async function LandingPage({
   data,
   locale = "zh-CN",
@@ -485,6 +544,8 @@ export async function LandingPage({
   const parent = page.parentSlug
     ? landingPageBySlug.get(page.parentSlug)
     : undefined;
+  const faq =
+    page.slug === "gemini-pro-price" ? geminiProFaq(locale) : undefined;
   const breadcrumbItems = [
     {
       "@type": "ListItem",
@@ -530,6 +591,22 @@ export async function LandingPage({
       "@type": "BreadcrumbList",
       itemListElement: breadcrumbItems,
     },
+    ...(faq
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faq.map((item) => ({
+              "@type": "Question",
+              name: item.question,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: item.answer,
+              },
+            })),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -604,6 +681,7 @@ export async function LandingPage({
           </section>
 
           <LandingSummary data={data} locale={locale} />
+          {faq ? <LandingFaq locale={locale} /> : null}
 
           <div className="landing-data-stack">
             {page.type === "global"
