@@ -87,6 +87,26 @@ function reportUrl(value: string): string {
   return url.toString();
 }
 
+function expectedStructuredTypes(requestedUrl: string): string[] {
+  const path = new URL(requestedUrl).pathname.replace(/\/+$/, "") || "/";
+  if (path.endsWith("/ai-model-release-watch")) return ["Article"];
+  if (path.endsWith("/privacy") || path.endsWith("/methodology")) {
+    return ["WebPage"];
+  }
+  return ["Dataset", "ItemList"];
+}
+
+function auditUrl(location: string, base: string): string {
+  const url = new URL(location, base);
+  const origin = new URL(base).origin;
+  if (!/^https?:$/.test(url.protocol) || url.origin !== origin) {
+    throw new Error(
+      `Sitemap location is outside the audited origin: ${reportUrl(url.toString())}`,
+    );
+  }
+  return url.toString();
+}
+
 function structuredTypes(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(structuredTypes);
   if (typeof value !== "object" || value === null) return [];
@@ -103,6 +123,7 @@ function structuredTypes(value: unknown): string[] {
 export function inspectPublicSeoHtml(
   html: string,
   requestedUrl: string,
+  xRobotsTag = "",
 ): Omit<
   PublicSeoAuditEntry,
   "elapsedMs" | "state" | "failureKind" | "status" | "finalUrl"
@@ -114,7 +135,10 @@ export function inspectPublicSeoHtml(
     .attr("content")
     ?.trim();
   const canonical = $("link[rel='canonical' i]").first().attr("href")?.trim();
-  const robots = $("meta[name='robots' i]").first().attr("content") ?? "";
+  const robots = [
+    $("meta[name='robots' i]").first().attr("content") ?? "",
+    xRobotsTag,
+  ].join(",");
   const jsonLdTypes = $("script[type='application/ld+json' i]")
     .toArray()
     .flatMap((element) => {
@@ -127,17 +151,27 @@ export function inspectPublicSeoHtml(
   const issues: PublicSeoAuditIssue[] = [];
   if (!title) issues.push("missing_title");
   if (!description) issues.push("missing_description");
-  if (
-    !canonical ||
-    canonicalUrl(canonical, requestedUrl) !==
-      canonicalUrl(requestedUrl, requestedUrl)
-  ) {
+  let reportedCanonical: string | undefined;
+  let canonicalMatches = false;
+  if (canonical) {
+    try {
+      canonicalMatches =
+        canonicalUrl(canonical, requestedUrl) ===
+        canonicalUrl(requestedUrl, requestedUrl);
+      reportedCanonical = reportUrl(
+        new URL(canonical, requestedUrl).toString(),
+      );
+    } catch {
+      canonicalMatches = false;
+    }
+  }
+  if (!canonicalMatches) {
     issues.push("canonical_mismatch");
   }
   if (/\bnoindex\b/i.test(robots)) issues.push("noindex");
   if (
     !jsonLdTypes.some((type) =>
-      ["Dataset", "ItemList", "Article", "WebPage"].includes(type),
+      expectedStructuredTypes(requestedUrl).includes(type),
     )
   ) {
     issues.push("missing_json_ld");
@@ -147,7 +181,7 @@ export function inspectPublicSeoHtml(
     issues,
     title,
     description,
-    canonical,
+    canonical: reportedCanonical,
   };
 }
 
@@ -259,7 +293,7 @@ export async function auditPublicSeo(
       throw new Error(`Unable to parse sitemap ${sitemapUrl}: ${message}`);
     }
     for (const location of sitemap.locations) {
-      const url = new URL(location, sitemapUrl).toString();
+      const url = auditUrl(location, sitemapUrl);
       if (sitemap.kind === "index") pendingSitemaps.push(url);
       else pageUrls.add(url);
     }
@@ -285,7 +319,11 @@ export async function auditPublicSeo(
       }
       let inspected: ReturnType<typeof inspectPublicSeoHtml>;
       try {
-        inspected = inspectPublicSeoHtml(await response.text(), url);
+        inspected = inspectPublicSeoHtml(
+          await response.text(),
+          url,
+          response.headers.get("x-robots-tag") ?? "",
+        );
       } catch {
         entries.push({
           url: reportUrl(url),

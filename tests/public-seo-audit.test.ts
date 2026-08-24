@@ -58,6 +58,34 @@ describe("public SEO audit", () => {
       "https://example.test/methodology",
     );
     expect(inspected.issues).toEqual([]);
+    expect(
+      inspectPublicSeoHtml(
+        `<!doctype html><html><head><title>API prices</title><meta name="description" content="Model pricing."><link rel="canonical" href="https://example.test/api-pricing"><script type="application/ld+json">{"@type":"WebPage"}</script></head></html>`,
+        "https://example.test/api-pricing",
+      ).issues,
+    ).toContain("missing_json_ld");
+  });
+
+  it("redacts canonical query strings and respects X-Robots-Tag", () => {
+    const inspected = inspectPublicSeoHtml(
+      `<!doctype html><html><head><title>Model</title><meta name="description" content="Model pricing."><link rel="canonical" href="https://example.test/model?token=secret"><script type="application/ld+json">{"@type":"Dataset"}</script></head></html>`,
+      "https://example.test/model",
+      "noindex",
+    );
+    expect(inspected.canonical).toBe("https://example.test/model");
+    expect(inspected.issues).toContain("noindex");
+  });
+
+  it("rejects off-origin sitemap locations before fetching them", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      response(
+        "<urlset><url><loc>http://127.0.0.1:5432/private</loc></url></urlset>",
+      ),
+    );
+    await expect(
+      auditPublicSeo({ baseUrl: "https://example.test", fetcher }),
+    ).rejects.toThrow("outside the audited origin");
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it("audits a paginated sitemap, deduplicates URLs, and detects duplicate metadata", async () => {

@@ -21,13 +21,13 @@ export const SITEMAP_PAGE_SIZE = 45_000;
 export const SITEMAP_CACHE_TAG = "catalog-sitemap";
 export const SITEMAP_CACHE_REVALIDATE_SECONDS = 60 * 60;
 export const MODEL_PAGE_TEMPLATE_UPDATED_AT = new Date(
-  "2026-08-11T00:00:00.000Z",
+  "2026-08-24T00:00:00.000Z",
 );
 
 const CORE_PAGE_UPDATED_AT = {
   "/": new Date("2026-08-11T00:00:00.000Z"),
   "/china-ai-subscriptions": new Date("2026-08-11T00:00:00.000Z"),
-  "/api-pricing": new Date("2026-08-11T00:00:00.000Z"),
+  "/api-pricing": new Date("2026-08-24T00:00:00.000Z"),
   "/methodology": new Date("2026-07-31T00:00:00.000Z"),
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
   [MODEL_RELEASE_WATCH_PATH]: new Date(MODEL_RELEASE_WATCH_UPDATED_AT),

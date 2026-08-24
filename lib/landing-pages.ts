@@ -55,6 +55,7 @@ const globalPlan = (
   providerId: string,
   planIds: string[],
   parentSlug: string,
+  contentUpdatedAt = LANDING_CONTENT_UPDATED_AT,
 ): LandingPageDefinition => ({
   slug,
   type: "global",
@@ -67,7 +68,7 @@ const globalPlan = (
   providerIds: { global: [providerId] },
   planIds,
   parentSlug,
-  contentUpdatedAt: LANDING_CONTENT_UPDATED_AT,
+  contentUpdatedAt,
 });
 
 const domesticBrand = (
@@ -196,6 +197,7 @@ export const landingPages: LandingPageDefinition[] = [
       "google-ai-pro-10tb-monthly",
     ],
     "gemini-price",
+    "2026-08-24T00:00:00.000Z",
   ),
   domesticBrand(
     "glm-price",

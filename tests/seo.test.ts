@@ -272,7 +272,7 @@ describe("SEO routes", () => {
     ]) {
       expect(
         entries.find((entry) => entry.url === absoluteUrl(path))?.lastModified,
-      ).toEqual(new Date("2026-08-11T00:00:00.000Z"));
+      ).toEqual(new Date("2026-08-24T00:00:00.000Z"));
     }
   });
 
