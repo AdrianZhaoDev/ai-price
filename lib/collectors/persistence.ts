@@ -274,6 +274,19 @@ export async function recordSuccessfulCollection(input: {
           and(
             eq(priceObservations.planId, plan.id),
             eq(priceObservations.sourceId, input.source.id),
+            eq(priceObservations.currency, offer.currency),
+            storefrontCondition,
+          ),
+        )
+        .orderBy(desc(priceObservations.observedAt))
+        .limit(1);
+      const [latestOverall] = await tx
+        .select({ currency: priceObservations.currency })
+        .from(priceObservations)
+        .where(
+          and(
+            eq(priceObservations.planId, plan.id),
+            eq(priceObservations.sourceId, input.source.id),
             storefrontCondition,
           ),
         )
@@ -318,7 +331,7 @@ export async function recordSuccessfulCollection(input: {
         return current;
       };
 
-      if (!previous) {
+      if (!previous || latestOverall?.currency !== offer.currency) {
         await tx.delete(priceChangeCandidates).where(candidateCondition);
         await insertObservation();
         return null;

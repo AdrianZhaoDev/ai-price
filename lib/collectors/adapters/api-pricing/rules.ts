@@ -280,19 +280,31 @@ export function parseHunyuanApi(raw: RawCollectionResult): NormalizedOffer[] {
     for (const row of table.rows.slice(headerIndex + 1)) {
       const modelName = compactLabel(row[modelIndex] ?? "");
       if (!modelName) continue;
-      const alignedPriceCells =
-        row.length > headers.length
-          ? row.slice(-columns.length)
-          : columns.map((column) => row[column.index]);
-      const tierEnd =
-        row.length > headers.length
-          ? row.length - columns.length
-          : Math.min(...columns.map((item) => item.index));
+      const trailingPriceStart = row.length - columns.length;
+      const alignedPrices = columns.map((column, columnOrder) => {
+        if (column.type !== "other" && row.length > headers.length) {
+          const index = trailingPriceStart + columnOrder;
+          return { cell: row[index] ?? "", index };
+        }
+
+        const directCell = row[column.index] ?? "";
+        if (/[元¥￥]/.test(directCell)) {
+          return { cell: directCell, index: column.index };
+        }
+        const forwardIndex = row.findIndex(
+          (cell, index) => index > column.index && /[元¥￥]/.test(cell),
+        );
+        const index = forwardIndex >= 0 ? forwardIndex : column.index;
+        return { cell: row[index] ?? "", index };
+      });
+      const tierEnd = Math.min(...alignedPrices.map((item) => item.index));
       for (const [columnOrder, column] of columns.entries()) {
-        const value = numberFrom(alignedPriceCells[columnOrder]);
+        const priceCell = alignedPrices[columnOrder].cell;
+        const value = numberFrom(priceCell);
         if (!validPrice(value)) continue;
+        const explicitUnit = priceCell.match(/[元¥￥]\s*(\/[^，,；;]+)/)?.[1];
         const parsedUnit = normalizeTokenUnit(
-          `${column.label} ${table.context}`,
+          explicitUnit ?? `${column.label} ${priceCell} ${table.context}`,
         );
         const unitInfo =
           column.type !== "other" && parsedUnit.unit === "按官方单位"
@@ -302,7 +314,7 @@ export function parseHunyuanApi(raw: RawCollectionResult): NormalizedOffer[] {
           apiOffer({
             raw,
             providerSlug: "hunyuan-api",
-            parserVersion: "hunyuan-api-v4",
+            parserVersion: "hunyuan-api-v5",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel: compactLabel(column.label),

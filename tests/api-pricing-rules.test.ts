@@ -152,6 +152,22 @@ describe("maintainable API pricing rules", () => {
     expect(minimax[0].priceTier).toContain("高速档");
   });
 
+  it("aligns Hunyuan service prices without treating token counts as prices", () => {
+    const offers = parseHunyuanApi(
+      raw(`<table>
+        <tr><th>模型名称</th><th>生成功能</th><th>Token 单价</th><th>Token 用量</th><th>折合参考费用</th></tr>
+        <tr><td>HY-World-2.1-scene</td><td>文 / 图生3D 场景</td><td>10元/百万 tokens</td><td></td><td>8,000,000 tokens/个</td><td>80 元/个</td></tr>
+      </table>`),
+    );
+
+    expect(offers).toHaveLength(2);
+    expect(offers.map((offer) => offer.amountMinor)).toEqual([1000, 8000]);
+    expect(offers.map((offer) => offer.unit)).toEqual(["/百万 tokens", "/个"]);
+    expect(
+      offers.every((offer) => offer.parserVersion === "hunyuan-api-v5"),
+    ).toBe(true);
+  });
+
   it("reads every Kimi model row in the official data block", () => {
     const offers = parseKimiApi(
       raw(`rows={[

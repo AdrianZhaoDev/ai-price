@@ -65,29 +65,31 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 
 ## 国内订阅来源（15）
 
-| 排名 | 产品                       | 已采集价格                    | 官方入口                                                               |
-| ---: | -------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
-|    1 | 智谱 GLM 资源包            | 限量 Token 资源包             | `https://bigmodel.cn/activity`                                         |
-|    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付 | `https://www.bigmodel.cn/claude-code`                                  |
-|    3 | Kimi                       | Andante 等会员套餐            | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
-|    4 | 阶跃星辰                   | 周卡与四档月卡                | `https://chat.stepfun.com/subscription`                                |
-|    5 | MiniMax                    | Token Plan                    | `https://platform.minimaxi.com/docs/guides/pricing-token-plan`         |
-|    6 | 通义千问                   | 个人 Token Plan               | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
-|    7 | 百度千帆                   | Token 福利包                  | `https://cloud.baidu.com/doc/qianfan/s/Smoghsq3g`                      |
-|    8 | 讯飞星火                   | Token Plan                    | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                        |
-|    9 | 百度文心快码 Comate        | 免费、专业、旗舰版            | `https://cloud.baidu.com/doc/COMATE/s/rlnvnio4a`                       |
-|   10 | 阿里 Qoder CN              | Free / Pro / Pro+             | `https://help.aliyun.com/zh/lingma/billing-description`                |
-|   11 | TRAE                       | 免费及四档速通套餐            | `https://www.trae.cn/pricing`                                          |
-|   12 | 腾讯 CodeBuddy / WorkBuddy | 体验、青春及三档连续包月      | `https://www.codebuddy.cn/pricing/`                                    |
-|   13 | Xiaomi MiMo Token Plan     | 四档月付与年付                | `https://mimo.mi.com/docs/zh-CN/price/token-plan`                      |
-|   14 | 华为云 MaaS Token Plan     | 四档月付                      | `https://support.huaweicloud.com/price-maas/price-maas-0035.html`      |
-|   15 | 商汤 SenseNova Token Plan  | Free 公测；付费档未发布       | `https://www.sensenova.cn/token-plan`                                  |
+| 排名 | 产品                       | 已采集价格                                 | 官方入口                                                               |
+| ---: | -------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+|    1 | 智谱 GLM 资源包            | 限量 Token 资源包                          | `https://bigmodel.cn/activity`                                         |
+|    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付              | `https://www.bigmodel.cn/claude-code`                                  |
+|    3 | Kimi                       | Andante 等会员套餐                         | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
+|    4 | 阶跃星辰                   | 周卡与四档月卡                             | `https://chat.stepfun.com/subscription`                                |
+|    5 | MiniMax                    | Token Plan                                 | `https://platform.minimaxi.com/docs/guides/pricing-token-plan`         |
+|    6 | 通义千问                   | 个人 Token Plan                            | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
+|    7 | 百度千帆                   | Token 福利包                               | `https://cloud.baidu.com/doc/qianfan/s/Smoghsq3g`                      |
+|    8 | 讯飞星火                   | Token Plan                                 | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                        |
+|    9 | 百度文心快码 Comate        | 免费、专业、旗舰版                         | `https://cloud.baidu.com/doc/COMATE/s/rlnvnio4a`                       |
+|   10 | 阿里 Qoder CN              | Free / Pro / Pro+                          | `https://help.aliyun.com/zh/lingma/billing-description`                |
+|   11 | TRAE                       | 全球 Free / Lite / Pro / Pro+ / Ultra 月付 | `https://www.trae.ai/pricing`                                          |
+|   12 | 腾讯 CodeBuddy / WorkBuddy | 体验、青春及三档连续包月                   | `https://www.codebuddy.cn/pricing/`                                    |
+|   13 | Xiaomi MiMo Token Plan     | 四档月付与年付                             | `https://mimo.mi.com/docs/zh-CN/price/token-plan`                      |
+|   14 | 华为云 MaaS Token Plan     | 四档月付                                   | `https://support.huaweicloud.com/price-maas/price-maas-0035.html`      |
+|   15 | 商汤 SenseNova Token Plan  | Free 公测；付费档未发布                    | `https://www.sensenova.cn/token-plan`                                  |
 
 智谱 GLM 资源包固定置顶。所有来源均从无需登录的官方页面或页面公开加载的版本化
 JavaScript 中解析；登录后才能看到且没有公开价目表的会员不发布价格。
 
 Kimi 会员按公开表头定位月付列，兼容人民币地区页和 `kimi.ai` 中文国际页的 USD 月付；
-原币金额保持 USD，并沿用 FX 快照生成参考价。TRAE 只使用公开价格页暴露的免登录数据；
+原币金额保持 USD，并沿用 FX 快照生成参考价；价格变化只与同币种历史基线比较，地区页
+从 CNY 迁移到 USD 时不会产生伪降价事件。TRAE 只使用公开价格页暴露的免登录数据；
+当前读取 `trae.ai` 全球官网公开路由数据中的月付 USD 套餐，不使用受区域限制的中国站；
 若公开页不再提供可验证的价格载荷，采集报 `ACCESS_BLOCKED` 并保留最后有效报价。
 
 Huawei MaaS API 的健康检查要求至少 27 个报价、9 个已验证模型以及

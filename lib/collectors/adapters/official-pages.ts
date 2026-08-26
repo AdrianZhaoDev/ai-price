@@ -768,40 +768,56 @@ export function parseQoderPricing(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   let payload: unknown;
   try {
-    payload = JSON.parse(raw.body);
+    const embedded = load(raw.body)("#__MODERN_ROUTER_DATA__").text().trim();
+    payload = JSON.parse(embedded || raw.body);
   } catch {
     return [];
   }
-  const candidates = Array.isArray(payload)
-    ? payload
-    : [
-        (payload as { data?: unknown }).data,
-        (payload as { data?: { plans?: unknown } }).data?.plans,
-        (payload as { plans?: unknown }).plans,
-      ].find(Array.isArray);
+  const root = payload as Record<string, unknown>;
+  const loaderData = root?.loaderData as Record<string, unknown> | undefined;
+  const pricingPage = loaderData?.["__header-footer-layout/pricing/page"] as
+    Record<string, unknown> | undefined;
+  const liteProducts = pricingPage?.liteProducts as
+    Record<string, unknown> | undefined;
+  const globalProducts = Array.isArray(liteProducts?.products)
+    ? liteProducts.products.filter((item): item is Record<string, unknown> => {
+        if (typeof item !== "object" || item === null) return false;
+        const product = item as Record<string, unknown>;
+        const extra = product.product_extra as
+          Record<string, unknown> | undefined;
+        const subscription = extra?.subscription_extra as
+          Record<string, unknown> | undefined;
+        return Number(product.period_type ?? subscription?.period_type) === 0;
+      })
+    : undefined;
+  const candidates =
+    globalProducts ??
+    (Array.isArray(payload)
+      ? payload
+      : [
+          (payload as { data?: unknown }).data,
+          (payload as { data?: { plans?: unknown } }).data?.plans,
+          (payload as { plans?: unknown }).plans,
+        ].find(Array.isArray));
   if (!Array.isArray(candidates)) return [];
 
   const plans = [
-    { id: "free", name: "免费", slug: "trae-免费-monthly" },
+    { ids: ["free", "1", 1], name: "Free", slug: "trae-免费-monthly" },
+    { ids: ["lite", "37", 37], name: "Lite", slug: "trae-lite-monthly" },
     {
-      id: "pro",
-      name: "速通 Pro",
+      ids: ["pro", "2", 2],
+      name: "Pro",
       slug: "trae-速通-pro-monthly",
     },
     {
-      id: "pro-plus",
-      name: "速通 Pro+",
+      ids: ["pro-plus", "30", 30],
+      name: "Pro+",
       slug: "trae-速通-pro-monthly-plus",
     },
     {
-      id: "ultra",
-      name: "速通 Ultra",
+      ids: ["ultra", "32", 32],
+      name: "Ultra",
       slug: "trae-速通-ultra-monthly",
-    },
-    {
-      id: "express",
-      name: "优速通 Express",
-      slug: "trae-优速通-express-monthly",
     },
   ];
 
@@ -810,24 +826,29 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
       (candidate): candidate is Record<string, unknown> =>
         typeof candidate === "object" &&
         candidate !== null &&
-        candidate.id === plan.id,
+        plan.ids.some((id) => candidate.id === id),
     );
-    const price = typeof item?.price === "string" ? item.price : "";
-    const value = Number(price.match(/[¥￥]\s*([\d.]+)/)?.[1]);
+    const globalPrice =
+      typeof item?.display_price === "string" ? item.display_price : "";
+    const legacyPrice = typeof item?.price === "string" ? item.price : "";
+    const price = globalPrice || legacyPrice;
+    const isGlobal = Boolean(globalPrice);
+    const value = Number(
+      price.match(isGlobal ? /\$\s*([\d.]+)/ : /[¥￥]\s*([\d.]+)/)?.[1],
+    );
     if (!Number.isFinite(value) || value < 0) return [];
-    return [
-      cnyOffer({
-        providerSlug: "trae-subscription",
-        planSlug: plan.slug,
-        planName: plan.name,
-        displayPrice: `¥${value}`,
-        billingPeriod: "month",
-        channel: "official_web",
-        sourceUrl: raw.sourceUrl,
-        observedAt: raw.observedAt,
-        parserVersion: "trae-pricing-v4",
-      }),
-    ];
+    const offer = {
+      providerSlug: "trae-subscription",
+      planSlug: plan.slug,
+      planName: plan.name,
+      displayPrice: `${isGlobal ? "$" : "¥"}${value}`,
+      billingPeriod: "month",
+      channel: "official_web",
+      sourceUrl: raw.sourceUrl,
+      observedAt: raw.observedAt,
+      parserVersion: "trae-pricing-v5",
+    } as const;
+    return [isGlobal ? usdOffer(offer) : cnyOffer(offer)];
   });
 }
 
@@ -1627,8 +1648,9 @@ class CodeBuddyPricingAdapter implements PriceSourceAdapter {
 class TraePricingAdapter implements PriceSourceAdapter {
   readonly id = "trae-pricing-official";
   readonly providerSlug = "trae-subscription";
-  readonly sourceUrl = "https://www.trae.cn/pricing";
-  readonly parserVersion = "trae-pricing-v4";
+  readonly sourceUrl = "https://www.trae.ai/pricing";
+  readonly parserVersion = "trae-pricing-v5";
+  readonly quoteCurrencies = ["USD"];
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
     return fetchPage(this.sourceUrl, {
@@ -1647,7 +1669,7 @@ class TraePricingAdapter implements PriceSourceAdapter {
         ok: false,
         code: "ACCESS_BLOCKED",
         message:
-          "TRAE pricing page did not expose a public, unauthenticated price payload.",
+          "TRAE global pricing page did not expose a public, unauthenticated monthly price payload.",
       };
     }
     return officialPageHealthCheck(offers, 5);
@@ -1738,7 +1760,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "hunyuan-pricing-official",
     "hunyuan-api",
     "https://cloud.tencent.com/document/product/1823/130055",
-    "hunyuan-api-v4",
+    "hunyuan-api-v5",
     parseHunyuanApi,
   ),
   new OfficialPageAdapter(
