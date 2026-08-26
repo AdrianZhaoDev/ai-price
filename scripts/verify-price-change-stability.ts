@@ -200,6 +200,17 @@ async function main(): Promise<void> {
     "cross-currency migration state",
   );
 
+  assertEqual(
+    (await collect(source, 7, 23900, "CNY")).length,
+    0,
+    "returning currency changes",
+  );
+  assertEqual(
+    JSON.stringify(await countsForSource(source.id)),
+    JSON.stringify({ observations: 4, candidates: 0, events: 1 }),
+    "returning currency creates a current baseline",
+  );
+
   console.log("Price change stability integration verification passed.");
 }
 
