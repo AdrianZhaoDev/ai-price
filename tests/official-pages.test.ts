@@ -281,7 +281,26 @@ describe("official table adapters", () => {
       { id: "future-plan", title: "未来套餐", price: "¥9999" },
     ];
     const trae = parseTraePricing(
-      raw(JSON.stringify({ data: { plans: traePayload } })),
+      raw(
+        `<script id="__MODERN_ROUTER_DATA__" type="application/json">${JSON.stringify(
+          {
+            loaderData: {
+              "__header-footer-layout/pricing/page": {
+                liteProducts: {
+                  products: [
+                    { id: 1, period_type: 0, display_price: "$0" },
+                    { id: 37, period_type: 0, display_price: "$3" },
+                    { id: 2, period_type: 0, display_price: "$0" },
+                    { id: 30, period_type: 0, display_price: "$30" },
+                    { id: 32, period_type: 0, display_price: "$100" },
+                    { id: 31, period_type: 1, display_price: "$22.5" },
+                  ],
+                },
+              },
+            },
+          },
+        )}</script>`,
+      ),
     );
 
     expect(stepfun.map((offer) => offer.amountMinor)).toEqual([
@@ -293,14 +312,15 @@ describe("official table adapters", () => {
     ]);
     expect(qoder.map((offer) => offer.amountMinor)).toEqual([0, 5900, 16900]);
     expect(trae.map((offer) => offer.amountMinor)).toEqual([
-      0, 5900, 23900, 69900, 199900,
+      0, 300, 0, 3000, 10000,
     ]);
+    expect(trae.every((offer) => offer.currency === "USD")).toBe(true);
     expect(trae.map((offer) => offer.canonicalPlanSlug)).toEqual([
       "trae-免费-monthly",
+      "trae-lite-monthly",
       "trae-速通-pro-monthly",
       "trae-速通-pro-monthly-plus",
       "trae-速通-ultra-monthly",
-      "trae-优速通-express-monthly",
     ]);
     expect(new Set(trae.map((offer) => offer.canonicalPlanSlug)).size).toBe(
       trae.length,
@@ -318,12 +338,12 @@ describe("official table adapters", () => {
           }),
         ),
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(3);
     expect(parseTraePricing(raw("<html>not json</html>"))).toEqual([]);
     const adapter = officialPageAdapters.find(
       (candidate) => candidate.id === "trae-pricing-official",
     );
-    expect(adapter?.sourceUrl).toBe("https://www.trae.cn/pricing");
+    expect(adapter?.sourceUrl).toBe("https://www.trae.ai/pricing");
     expect(adapter?.healthCheck([])).toMatchObject({
       ok: false,
       code: "ACCESS_BLOCKED",
