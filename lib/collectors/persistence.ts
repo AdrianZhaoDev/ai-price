@@ -274,6 +274,7 @@ export async function recordSuccessfulCollection(input: {
           and(
             eq(priceObservations.planId, plan.id),
             eq(priceObservations.sourceId, input.source.id),
+            eq(priceObservations.currency, offer.currency),
             storefrontCondition,
           ),
         )

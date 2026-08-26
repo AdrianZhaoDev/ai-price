@@ -79,17 +79,20 @@ async function collect(
   source: Awaited<ReturnType<typeof ensureSource>>,
   sequence: number,
   amountMinor: number,
+  currency = "CNY",
 ) {
   const runId = await startCollectionRun("price-stability-test", 1);
+  const symbol = currency === "USD" ? "$" : "¥";
   const changes = await recordSuccessfulCollection({
     runId,
     source,
-    contentHash: `fixture-${sequence}-${amountMinor}`,
+    contentHash: `fixture-${sequence}-${currency}-${amountMinor}`,
     offers: [
       {
         ...baseOffer,
+        currency,
         amountMinor,
-        displayPrice: `¥${amountMinor / 100}`,
+        displayPrice: `${symbol}${amountMinor / 100}`,
         observedAt: new Date(
           Date.parse(baseOffer.observedAt) + sequence * 60_000,
         ).toISOString(),
@@ -101,6 +104,16 @@ async function collect(
         {
           currency: "CNY",
           cnyPerUnit: 1,
+          rateDate: "2026-07-29",
+          observedAt: new Date("2026-07-29T00:00:00.000Z"),
+          sourceUrl: "https://official.example/fx",
+        },
+      ],
+      [
+        "USD",
+        {
+          currency: "USD",
+          cnyPerUnit: 7.2,
           rateDate: "2026-07-29",
           observedAt: new Date("2026-07-29T00:00:00.000Z"),
           sourceUrl: "https://official.example/fx",
@@ -174,6 +187,17 @@ async function main(): Promise<void> {
     JSON.stringify(await countsForSource(source.id)),
     JSON.stringify({ observations: 2, candidates: 1, events: 1 }),
     "B to C candidate state",
+  );
+
+  assertEqual(
+    (await collect(source, 6, 1900, "USD")).length,
+    0,
+    "cross-currency migration changes",
+  );
+  assertEqual(
+    JSON.stringify(await countsForSource(source.id)),
+    JSON.stringify({ observations: 3, candidates: 0, events: 1 }),
+    "cross-currency migration state",
   );
 
   console.log("Price change stability integration verification passed.");
