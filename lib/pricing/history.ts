@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, exists, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { getReadDatabase, isReadDatabaseConfigured } from "@/lib/db/client";
@@ -13,11 +13,6 @@ import { PRICING_PAGE_CACHE_TAG } from "./page-cache";
 import type { SubscriptionHistory } from "./history-types";
 
 export const SUBSCRIPTION_HISTORY_LIMIT = 100;
-// App Store can list monthly and annual prices under the same unqualified name.
-// Cover localized non-default periods recognized by inferBillingPeriod, while
-// avoiding English marketing compounds such as "year-round".
-const EXPLICIT_BILLING_PERIOD =
-  "(^|[^a-z])(weekly|monthly|quarterly|yearly|annually|annual|lifetime|one[^a-z]?time)([^a-z]|$)|(^|[^a-z])(week|quarter|year)([^a-z-]|$)|(/[[:space:]]*|(^|[^a-z])per[[:space:]-]+|[0-9]+[ -]+)(week|month|quarter|year)s?([^a-z]|$)|(^|[^a-z])(week|month|quarter|year)[ -]+(plan|subscription|membership)([^a-z]|$)|(按|每|包)月|月(付|费|卡|度|期|間|額)|[0-9]+[[:space:]]*(个|個|か|ヶ)?月|周|週|季|年|一次|永久";
 
 export const loadSubscriptionHistory = unstable_cache(
   async (providerId = ""): Promise<SubscriptionHistory> => {
@@ -29,6 +24,23 @@ export const loadSubscriptionHistory = unstable_cache(
       };
     const previous = alias(priceObservations, "previous_price");
     const current = alias(priceObservations, "current_price");
+    const alternate = alias(priceObservations, "alternate_period");
+    const alternateSource = alias(sources, "alternate_source");
+    // A label used for multiple periods in this product's App Store records
+    // is demonstrably ambiguous. Evidence can come from another storefront;
+    // a single response is not guaranteed to include all available purchases.
+    const recordedPeriodAmbiguity = getReadDatabase()
+      .select({ id: alternate.id })
+      .from(alternate)
+      .innerJoin(alternateSource, eq(alternateSource.id, alternate.sourceId))
+      .where(
+        and(
+          eq(alternateSource.productId, products.id),
+          eq(alternateSource.type, "app_store"),
+          sql`${alternate.rawPlanName} in (${previous.rawPlanName}, ${current.rawPlanName})`,
+          ne(alternate.billingPeriod, current.billingPeriod),
+        ),
+      );
     const rows = await getReadDatabase()
       .select({
         id: priceChangeEvents.id,
@@ -79,10 +91,7 @@ export const loadSubscriptionHistory = unstable_cache(
             and ${previous.amountMinor} > 0 and ${current.amountMinor} > 0
             and greatest(${previous.amountMinor}, ${current.amountMinor}) >=
               least(${previous.amountMinor}, ${current.amountMinor}) * 6
-            and (
-              ${previous.rawPlanName} !~* ${EXPLICIT_BILLING_PERIOD}
-              or ${current.rawPlanName} !~* ${EXPLICIT_BILLING_PERIOD}
-            )
+            and ${exists(recordedPeriodAmbiguity)}
           )`,
         ),
       )
@@ -99,6 +108,6 @@ export const loadSubscriptionHistory = unstable_cache(
       })),
     };
   },
-  ["subscription-price-history-v2"],
+  ["subscription-price-history-v3"],
   { tags: [PRICING_PAGE_CACHE_TAG], revalidate: 900 },
 );

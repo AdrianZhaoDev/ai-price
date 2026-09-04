@@ -140,8 +140,8 @@ export async function PriceChangesPage({ locale }: { locale: Locale }) {
           </p>
           <p>
             {en
-              ? "An App Store price moving sixfold or more in either direction is withheld when either original plan label does not state a billing period. Monthly and annual purchases can share a name. These observations remain stored for review; their omission does not mean the price stayed unchanged."
-              : "App Store 的月付和年付项目可能同名。如果原始套餐名称未明确账期，且前后正价相差六倍或以上，该变化暂不公开，保留原始记录待复核；未展示不代表价格没有变化。"}
+              ? "An App Store price moving sixfold or more in either direction is withheld if either original plan name has also been recorded with another billing period for the same product, including other storefronts. Such names can refer to monthly or annual purchases. These observations remain stored for review; an omitted change may still be real, and no recorded ambiguity does not guarantee the period is correct."
+              : "如果同一产品的 App Store 原始套餐名称曾记录过不同账期（含其他地区），且前后正价相差六倍或以上，该变化暂不公开，保留原始记录待复核。同名可能对应月付或年付；被暂缓的变化仍可能是真实调价，未发现歧义记录也不保证账期完全正确。"}
           </p>
           <p>
             {en
