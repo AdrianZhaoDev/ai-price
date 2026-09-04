@@ -140,6 +140,11 @@ export async function PriceChangesPage({ locale }: { locale: Locale }) {
           </p>
           <p>
             {en
+              ? "An App Store price moving sixfold or more in either direction is withheld when either original plan label does not state a billing period. Monthly and annual purchases can share a name. These observations remain stored for review; their omission does not mean the price stayed unchanged."
+              : "App Store 的月付和年付项目可能同名。如果原始套餐名称未明确账期，且前后正价相差六倍或以上，该变化暂不公开，保留原始记录待复核；未展示不代表价格没有变化。"}
+          </p>
+          <p>
+            {en
               ? "CSV and JSON contain observed prices and source links, not copies of official pages. Credit Low Price Radar and the original sources when referencing these observations. Source rights remain with their owners; this does not relicense third-party content. Data is provided as observed, without a price or availability guarantee."
               : "CSV 和 JSON 提供观测到的价格事实与来源链接，不包含官方页面全文。引用时请注明 Low Price Radar 和原始来源；来源内容权利归原权利人所有，此处不对第三方内容重新授权。数据按观测结果提供，不保证持续价格或可购买性。"}
           </p>

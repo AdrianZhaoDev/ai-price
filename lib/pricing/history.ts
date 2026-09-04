@@ -13,6 +13,10 @@ import { PRICING_PAGE_CACHE_TAG } from "./page-cache";
 import type { SubscriptionHistory } from "./history-types";
 
 export const SUBSCRIPTION_HISTORY_LIMIT = 100;
+// App Store can list monthly and annual prices under the same unqualified name.
+// Match billing language, not bare words such as "year" in "year-round".
+const EXPLICIT_BILLING_PERIOD =
+  "(^|[^a-z])(weekly|monthly|quarterly|yearly|annually|annual|lifetime|one[ -]?time)([^a-z]|$)|(/[[:space:]]*|(^|[^a-z])per[[:space:]]+|[0-9]+[ -]+)(week|month|quarter|year)s?([^a-z]|$)|(^|[^a-z])(week|month|quarter|year)[ -]+(plan|subscription|membership)([^a-z]|$)|(按|每|包)[周月季年]|[周月季年](付|费|卡|度|期)|一次性|永久";
 
 export const loadSubscriptionHistory = unstable_cache(
   async (providerId = ""): Promise<SubscriptionHistory> => {
@@ -66,6 +70,19 @@ export const loadSubscriptionHistory = unstable_cache(
           sql`${previous.storefront} is not distinct from ${current.storefront}`,
           sql`${previous.amountMinor} >= 0 and ${current.amountMinor} >= 0`,
           ne(previous.amountMinor, current.amountMinor),
+          // The collector uses the same 6x threshold to infer annual prices
+          // when both prices occur in one response. Across responses the period
+          // can remain ambiguous, even after two matching price observations.
+          sql`not (
+            ${sources.type} = 'app_store'
+            and ${previous.amountMinor} > 0 and ${current.amountMinor} > 0
+            and greatest(${previous.amountMinor}, ${current.amountMinor}) >=
+              least(${previous.amountMinor}, ${current.amountMinor}) * 6
+            and (
+              ${previous.rawPlanName} !~* ${EXPLICIT_BILLING_PERIOD}
+              or ${current.rawPlanName} !~* ${EXPLICIT_BILLING_PERIOD}
+            )
+          )`,
         ),
       )
       .orderBy(desc(priceChangeEvents.createdAt), priceChangeEvents.id)
@@ -81,6 +98,6 @@ export const loadSubscriptionHistory = unstable_cache(
       })),
     };
   },
-  ["subscription-price-history-v1"],
+  ["subscription-price-history-v2"],
   { tags: [PRICING_PAGE_CACHE_TAG], revalidate: 900 },
 );

@@ -117,5 +117,120 @@ describe.skipIf(!connection)(
         }),
       ).rejects.toBe(rollback);
     });
+
+    it("withholds ambiguous App Store period jumps without hiding explicit or non-App-Store changes", async () => {
+      const rollback = new Error("test rollback");
+      await expect(
+        connection!.database.transaction(async (tx) => {
+          transactionDatabase = tx as unknown as Database;
+          const targets = [];
+          for (const appStore of [true, false]) {
+            const [target] = await tx
+              .select({ planId: plans.id, sourceId: sources.id })
+              .from(plans)
+              .innerJoin(products, eq(products.id, plans.productId))
+              .innerJoin(sources, eq(sources.productId, products.id))
+              .where(
+                and(
+                  ne(products.mode, "api"),
+                  eq(products.enabled, true),
+                  eq(sources.enabled, true),
+                  appStore
+                    ? eq(sources.type, "app_store")
+                    : ne(sources.type, "app_store"),
+                ),
+              )
+              .limit(1);
+            expect(target).toBeDefined();
+            targets.push(target);
+          }
+          const cases = [
+            { before: 1000, after: 10000, keep: false },
+            { before: 10000, after: 1000, keep: false },
+            { before: 1000, after: 6000, keep: false },
+            { before: 6000, after: 1000, keep: false },
+            { before: 1000, after: 5999, keep: true },
+            { before: 0, after: 10000, keep: true },
+            { before: 10000, after: 0, keep: true },
+            { before: 1000, after: 10000, name: "Plus Monthly", keep: true },
+            { before: 10000, after: 1000, name: "Plus per month", keep: true },
+            { before: 1000, after: 6000, name: "Plus/month", keep: true },
+            { before: 1000, after: 10000, name: "Plus 月付", keep: true },
+            { before: 1000, after: 10000, name: "Plus 1 month", keep: true },
+            { before: 1000, after: 10000, name: "Plus month plan", keep: true },
+            { before: 1000, after: 10000, name: "Plus 月卡", keep: true },
+            { before: 1000, after: 10000, name: "Plus 季度", keep: true },
+            {
+              before: 1000,
+              after: 10000,
+              name: "Plus year-round",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              previousName: "Plus Monthly",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              currentName: "Plus Monthly",
+              keep: false,
+            },
+            { before: 1000, after: 10000, nonAppStore: true, keep: true },
+          ];
+          const ids: string[] = [];
+          const expected: string[] = [];
+          for (const testCase of cases) {
+            const target = targets[testCase.nonAppStore ? 1 : 0];
+            const base = {
+              ...target,
+              storefront: "US",
+              currency: "USD",
+              billingPeriod: "month",
+              rawHash: "history-period-rollback",
+              displayPrice: "$10.00",
+            };
+            const [previous] = await tx
+              .insert(priceObservations)
+              .values({
+                ...base,
+                rawPlanName: testCase.previousName ?? testCase.name ?? "Plus",
+                amountMinor: testCase.before,
+              })
+              .returning();
+            const [current] = await tx
+              .insert(priceObservations)
+              .values({
+                ...base,
+                rawPlanName: testCase.currentName ?? testCase.name ?? "Plus",
+                amountMinor: testCase.after,
+              })
+              .returning();
+            const [event] = await tx
+              .insert(priceChangeEvents)
+              .values({
+                planId: target.planId,
+                storefront: "US",
+                previousObservationId: previous.id,
+                currentObservationId: current.id,
+              })
+              .returning();
+            ids.push(event.id);
+            if (testCase.keep) expected.push(event.id);
+          }
+          const history = await loadSubscriptionHistory();
+          expect(
+            new Set(
+              history.events
+                .filter((event) => ids.includes(event.id))
+                .map((event) => event.id),
+            ),
+          ).toEqual(new Set(expected));
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
+    });
   },
 );

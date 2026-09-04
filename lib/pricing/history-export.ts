@@ -60,7 +60,7 @@ export function renderPriceChangesRss(events: SubscriptionPriceChange[]) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>
 <title>Low Price Radar · Subscription price changes</title><link>${xml(url)}</link>
-<description>Confirmed original-currency subscription price changes. FX-only changes are excluded. Confirmation dates are not official effective dates.</description>
+<description>Confirmed original-currency subscription price changes. FX-only changes and large App Store changes with unclear billing periods are excluded. Confirmation dates are not official effective dates. See the feed page for methodology.</description>
 <atom:link href="${xml(absoluteUrl("/pricing-data/changes/feed.xml"))}" rel="self" type="application/rss+xml"/>
 ${events.map((event) => `<item><guid isPermaLink="true">${xml(`${url}#change-${event.id}`)}</guid><link>${xml(`${url}#change-${event.id}`)}</link><title>${xml(`${event.providerName} · ${event.planName} · ${event.regionCode ?? event.regionName ?? ""}: ${event.previousDisplayPrice} → ${event.currentDisplayPrice} ${event.currency}`)}</title><description>${xml(`Confirmed ${event.confirmedAt}. Official source: ${event.sourceUrl}`)}</description><pubDate>${new Date(event.confirmedAt).toUTCString()}</pubDate></item>`).join("\n")}
 </channel></rss>`;
