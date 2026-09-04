@@ -14,9 +14,10 @@ import type { SubscriptionHistory } from "./history-types";
 
 export const SUBSCRIPTION_HISTORY_LIMIT = 100;
 // App Store can list monthly and annual prices under the same unqualified name.
-// Match billing language, not bare words such as "year" in "year-round".
+// Cover localized non-default periods recognized by inferBillingPeriod, while
+// avoiding English marketing compounds such as "year-round".
 const EXPLICIT_BILLING_PERIOD =
-  "(^|[^a-z])(weekly|monthly|quarterly|yearly|annually|annual|lifetime|one[ -]?time)([^a-z]|$)|(/[[:space:]]*|(^|[^a-z])per[[:space:]]+|[0-9]+[ -]+)(week|month|quarter|year)s?([^a-z]|$)|(^|[^a-z])(week|month|quarter|year)[ -]+(plan|subscription|membership)([^a-z]|$)|(按|每|包)[周月季年]|[周月季年](付|费|卡|度|期)|一次性|永久";
+  "(^|[^a-z])(weekly|monthly|quarterly|yearly|annually|annual|lifetime|one[^a-z]?time)([^a-z]|$)|(^|[^a-z])(week|quarter|year)([^a-z-]|$)|(/[[:space:]]*|(^|[^a-z])per[[:space:]-]+|[0-9]+[ -]+)(week|month|quarter|year)s?([^a-z]|$)|(^|[^a-z])(week|month|quarter|year)[ -]+(plan|subscription|membership)([^a-z]|$)|(按|每|包)月|月(付|费|卡|度|期|間|額)|[0-9]+[[:space:]]*(个|個|か|ヶ)?月|周|週|季|年|一次|永久";
 
 export const loadSubscriptionHistory = unstable_cache(
   async (providerId = ""): Promise<SubscriptionHistory> => {

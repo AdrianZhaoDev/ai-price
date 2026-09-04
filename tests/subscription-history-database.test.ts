@@ -144,7 +144,16 @@ describe.skipIf(!connection)(
             expect(target).toBeDefined();
             targets.push(target);
           }
-          const cases = [
+          const cases: {
+            before: number;
+            after: number;
+            keep: boolean;
+            name?: string;
+            previousName?: string;
+            currentName?: string;
+            nonAppStore?: boolean;
+            billingPeriod?: string;
+          }[] = [
             { before: 1000, after: 10000, keep: false },
             { before: 10000, after: 1000, keep: false },
             { before: 1000, after: 6000, keep: false },
@@ -160,6 +169,21 @@ describe.skipIf(!connection)(
             { before: 1000, after: 10000, name: "Plus month plan", keep: true },
             { before: 1000, after: 10000, name: "Plus 月卡", keep: true },
             { before: 1000, after: 10000, name: "Plus 季度", keep: true },
+            { before: 1000, after: 10000, name: "Plus per-month", keep: true },
+            { before: 1000, after: 10000, name: "Plus 1个月", keep: true },
+            ...[
+              { name: "プラス 年間", billingPeriod: "year" },
+              { name: "Plus 1年", billingPeriod: "year" },
+              { name: "Plus year", billingPeriod: "year" },
+              { name: "Plus week", billingPeriod: "week" },
+              { name: "Plus quarter", billingPeriod: "quarter" },
+              { name: "Plus one_time", billingPeriod: "one_time" },
+            ].map((period) => ({
+              before: 1000,
+              after: 10000,
+              keep: true,
+              ...period,
+            })),
             {
               before: 1000,
               after: 10000,
@@ -188,7 +212,7 @@ describe.skipIf(!connection)(
               ...target,
               storefront: "US",
               currency: "USD",
-              billingPeriod: "month",
+              billingPeriod: testCase.billingPeriod ?? "month",
               rawHash: "history-period-rollback",
               displayPrice: "$10.00",
             };
