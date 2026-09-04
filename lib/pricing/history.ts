@@ -37,7 +37,9 @@ export const loadSubscriptionHistory = unstable_cache(
         and(
           eq(alternateSource.productId, products.id),
           eq(alternateSource.type, "app_store"),
-          sql`${alternate.rawPlanName} in (${previous.rawPlanName}, ${current.rawPlanName})`,
+          sql`lower(btrim(${alternate.rawPlanName})) in (
+            lower(btrim(${previous.rawPlanName})), lower(btrim(${current.rawPlanName}))
+          )`,
           ne(alternate.billingPeriod, current.billingPeriod),
         ),
       );

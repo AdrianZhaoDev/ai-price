@@ -200,6 +200,8 @@ describe.skipIf(!connection)(
           type Evidence =
             | "same-source"
             | "other-storefront"
+            | "case-variant"
+            | "space-variant"
             | "other-product"
             | "other-channel"
             | "other-name"
@@ -239,6 +241,18 @@ describe.skipIf(!connection)(
               before: 1000,
               after: 10000,
               evidence: "other-storefront",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "case-variant",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "space-variant",
               keep: false,
             },
             {
@@ -347,7 +361,11 @@ describe.skipIf(!connection)(
               })
               .returning();
             if (testCase.evidence) {
-              const otherRegion = testCase.evidence === "other-storefront";
+              const otherRegion = [
+                "other-storefront",
+                "case-variant",
+                "space-variant",
+              ].includes(testCase.evidence);
               const unrelated = testCase.evidence === "other-product";
               const samePeriod = testCase.evidence === "same-period";
               await tx.insert(priceObservations).values({
@@ -369,7 +387,11 @@ describe.skipIf(!connection)(
                 rawPlanName:
                   testCase.evidence === "other-name"
                     ? `${label} different`
-                    : label,
+                    : testCase.evidence === "case-variant"
+                      ? label.toUpperCase()
+                      : testCase.evidence === "space-variant"
+                        ? `  ${label}  `
+                        : label,
                 billingPeriod:
                   testCase.evidence === "unknown-period"
                     ? null
