@@ -85,7 +85,7 @@ const zh: LocaleMessages = {
     shownCount: (count) => `当前显示 ${count} 个`,
     referenceNote:
       "价格仅作参考；原币金额来自官方来源，人民币为汇率换算结果。失效数据不会覆盖最后一次有效记录。",
-    priceIndexTitle: "可收录价格页面",
+    priceIndexTitle: "按产品比较",
     compareProducts: "按产品继续比较",
     compareBrands: "按品牌查看价格",
     compareProductsDescription:
@@ -408,7 +408,7 @@ const zh: LocaleMessages = {
       },
     ],
     privacyEyebrow: "隐私说明",
-    privacyTitle: "只保存发送价格通知所必需的信息",
+    privacyTitle: "价格通知与访问数据的使用",
     privacyLead:
       "邮箱用于发送订阅成功通知、价格变化通知和处理退订，不出售，也不用于营销邮件。",
     privacyDescription:
@@ -444,6 +444,7 @@ const zh: LocaleMessages = {
         title: "访问数据与 Cookie",
         paragraphs: [
           "网站可以使用 Cloudflare 的安全、流量统计和真实用户性能数据来了解可用性、来源趋势及 Core Web Vitals。统计用于改进页面速度和发现异常访问，不用于建立广告画像。",
+          "启用后，Google Analytics 4 通过 Cloudflare Zaraz 在你同意可选统计后记录访问和工具操作（如比价、复制、查看来源及历史）。你可随时通过页脚“隐私偏好”拒绝或撤回；拒绝不影响比价与订阅功能。统计不接收邮箱、表单内容或订阅令牌，不与邮件订阅记录合并；不启用 Google 信号、广告个性化或广告用途。",
           "语言偏好通过 ai-price-locale Cookie 保存一年，浏览器的主题偏好可以保存在本地存储中。是否设置安全或分析 Cookie 取决于基础设施服务的实际功能；我们不会使用第三方广告 Cookie。",
           "性能监测的汇总范围包括 Page Views、LCP、INP、CLS、browser type、operating system 和 country or region。这些指标用于判断页面是否可用、加载是否变慢和哪些设备需要优化，不与邮箱订阅记录合并，也不用于识别个人或建立用户画像。",
         ],
@@ -566,7 +567,7 @@ const en: LocaleMessages = {
     shownCount: (count) => `${count} shown`,
     referenceNote:
       "Prices are references only. Original amounts come from official sources; CNY values are FX conversions. Invalid data never replaces the last valid record.",
-    priceIndexTitle: "Indexable pricing pages",
+    priceIndexTitle: "Compare by product",
     compareProducts: "Compare by product",
     compareBrands: "Browse prices by brand",
     compareProductsDescription:
@@ -911,7 +912,7 @@ const en: LocaleMessages = {
       },
     ],
     privacyEyebrow: "Privacy",
-    privacyTitle: "We keep only what price alerts need",
+    privacyTitle: "How we use subscription and visit data",
     privacyLead:
       "Email is used for subscription confirmations, price change alerts, and unsubscribing. It is not sold or used for marketing email.",
     privacyDescription:
@@ -947,6 +948,7 @@ const en: LocaleMessages = {
         title: "Access data and cookies",
         paragraphs: [
           "The website may use Cloudflare security, traffic analytics, and real-user performance data to understand availability, referral trends, and Core Web Vitals. This helps improve speed and spot abnormal traffic; it is not used to build advertising profiles.",
+          "When enabled, Google Analytics 4 through Cloudflare Zaraz records visits and tool actions, such as comparisons, copies, source visits and history views, only after you accept optional analytics. Decline or withdraw through the footer privacy preferences; pricing and subscriptions still work. Analytics does not receive email addresses, form contents or subscription tokens and is not joined with email subscriptions. Google signals, advertising personalization and advertising uses are disabled.",
           "Language preference is stored in the ai-price-locale cookie for one year. The browser's theme preference can be saved in local storage. Security or analytics cookies depend on the actual infrastructure features; we do not use third-party advertising cookies.",
           "Aggregated performance fields may include Page Views, LCP, INP, CLS, browser type, operating system, and country or region. They help identify availability, slow loads, and devices needing optimization. They are not joined with email subscriptions or used to identify people or build profiles.",
         ],

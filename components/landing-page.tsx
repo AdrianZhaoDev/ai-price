@@ -1,6 +1,7 @@
 import { ProviderMark } from "@/components/icons/provider-mark";
 import { StructuredData } from "@/components/structured-data";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
+import { SubscriptionComparison } from "@/components/subscription-comparison";
 import {
   apiModelsForLandingPage,
   offersForLandingPage,
@@ -681,6 +682,18 @@ export async function LandingPage({
           </section>
 
           <LandingSummary data={data} locale={locale} />
+          {page.type === "global"
+            ? data.globalProviders.map((provider) => (
+                <SubscriptionComparison
+                  key={provider.id}
+                  provider={{
+                    ...provider,
+                    offers: offersForLandingPage(page, provider),
+                  }}
+                  locale={locale}
+                />
+              ))
+            : null}
           {faq ? <LandingFaq locale={locale} /> : null}
 
           <div className="landing-data-stack">

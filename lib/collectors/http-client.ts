@@ -122,7 +122,9 @@ export async function fetchPage(
         const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
         if (
           body.length < 100_000 &&
-          /captcha|访问验证|人机验证|verify you are human/i.test(title)
+          (/captcha|访问验证|人机验证|verify you are human/i.test(title) ||
+            (!/<table\b/i.test(body) &&
+              /window\._waf_is_mobile\s*=/.test(body)))
         ) {
           throw new CollectionError(
             "ACCESS_BLOCKED",

@@ -43,6 +43,11 @@
 https://lowpriceradar.com/
 https://lowpriceradar.com/china-ai-subscriptions
 https://lowpriceradar.com/api-pricing
+https://lowpriceradar.com/price-changes
+https://lowpriceradar.com/en/price-changes
+https://lowpriceradar.com/pricing-data/changes/feed.xml
+https://lowpriceradar.com/pricing-data/changes/prices.csv
+https://lowpriceradar.com/pricing-data/changes/prices.json
 https://lowpriceradar.com/robots.txt
 https://lowpriceradar.com/sitemap.xml
 https://lowpriceradar.com/admin
@@ -54,6 +59,7 @@ https://ai.lowpriceradar.com/
 验收：
 
 - 三个核心公共页面为 200；
+- 价格变化中英文页和公开数据端点为 200；JSON `available=true` 才能解释事件数量。空列表是暂无符合范围的历史，503 是故障，不混为 0 条变化。最多 100 条不能作为事件总量；只比较相同范围的记录，并检查异常密集涨跌。抽查比价链接恢复同一套餐和地区。
 - HTTP、`www`、`ai` 一跳 301 到规范主域；
 - `/admin` 未登录时重定向，并包含 noindex/no-store；
 - robots 和 Sitemap 为 200；

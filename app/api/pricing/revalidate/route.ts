@@ -3,7 +3,6 @@ import {
   PRICING_PAGE_CACHE_TAG,
   warmPricingPageData,
 } from "@/lib/pricing/page-cache";
-import { loadLandingCatalogSnapshot } from "@/lib/landing-page-data";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
@@ -12,7 +11,7 @@ import {
   MODEL_CATALOG_CACHE_TAG,
   modelCacheTag,
 } from "@/lib/model-catalog/cache";
-import { SITEMAP_CACHE_TAG } from "@/lib/catalog-sitemap";
+import { loadSitemapEntries, SITEMAP_CACHE_TAG } from "@/lib/catalog-sitemap";
 import { isSafeModelId, modelDetailPath } from "@/lib/model-catalog/paths";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +61,7 @@ export async function POST(request: Request) {
   }
 
   revalidateTag(PRICING_PAGE_CACHE_TAG, { expire: 0 });
-  revalidateTag(SITEMAP_CACHE_TAG, "max");
+  revalidateTag(SITEMAP_CACHE_TAG, { expire: 0 });
   if (parsed.data.catalogChanged || parsed.data.changedModelIds.length > 0) {
     revalidateTag(MODEL_CATALOG_CACHE_TAG, { expire: 0 });
     revalidatePath("/api-pricing");
@@ -75,13 +74,16 @@ export async function POST(request: Request) {
   revalidatePath("/[landingSlug]", "page");
   revalidatePath("/en/[landingSlug]", "page");
   revalidatePath("/sitemap.xml");
+  revalidatePath("/price-changes");
+  revalidatePath("/en/price-changes");
   for (const modelId of parsed.data.changedModelIds) {
     revalidateTag(modelCacheTag(modelId), { expire: 0 });
     revalidatePath(modelDetailPath(modelId));
     revalidatePath(modelDetailPath(modelId, "en"));
   }
 
-  await Promise.all([warmPricingPageData(), loadLandingCatalogSnapshot()]);
+  await warmPricingPageData();
+  await loadSitemapEntries();
   const versions = await Promise.all(
     (["global", "china-subscription", "api"] as const).map(async (mode) => ({
       mode,

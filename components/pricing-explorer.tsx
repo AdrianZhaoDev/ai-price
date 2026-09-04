@@ -2,6 +2,7 @@
 
 import { ProviderMark } from "@/components/icons/provider-mark";
 import { ChangeBadge } from "@/components/change-badge";
+import { SubscriptionComparison } from "@/components/subscription-comparison";
 import {
   ApiPriceRanking,
   type ApiRankingFocusRequest,
@@ -323,11 +324,15 @@ export function PricingExplorer({
     return plansByMinimumPrice(eligibleOffers, "asc");
   }, [eligibleOffers]);
 
-  const sortedOffers = sortOffersByCny(
-    activeMode === "global" && selectedPlanId
-      ? eligibleOffers.filter((offer) => offer.planId === selectedPlanId)
-      : eligibleOffers,
-    sortDirection,
+  const sortedOffers = useMemo(
+    () =>
+      sortOffersByCny(
+        activeMode === "global" && selectedPlanId
+          ? eligibleOffers.filter((offer) => offer.planId === selectedPlanId)
+          : eligibleOffers,
+        sortDirection,
+      ),
+    [activeMode, selectedPlanId, eligibleOffers, sortDirection],
   );
   const initialVisibleCount =
     activeMode === "api"
@@ -341,8 +346,14 @@ export function PricingExplorer({
       ? visibleApiOffers(sortedOffers, false)
       : sortedOffers.slice(0, initialVisibleCount);
 
-  const lowestOffer = lowestComparableOffer(sortedOffers);
-  const topThreeRanks = lowestThreeRanks(sortedOffers);
+  const lowestOffer = useMemo(
+    () => lowestComparableOffer(sortedOffers),
+    [sortedOffers],
+  );
+  const topThreeRanks = useMemo(
+    () => lowestThreeRanks(sortedOffers),
+    [sortedOffers],
+  );
   const lastCheckedAt = selectedProvider.lastCheckedAt
     ? new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", {
         month: "numeric",
@@ -703,7 +714,7 @@ export function PricingExplorer({
         className="main-content"
         aria-hidden={sheetOpen ? true : undefined}
       >
-        <h1 className="sr-only" id="workspace-title">
+        <h1 className="workspace-title" id="workspace-title">
           {messages.pricing.titles[activeMode]}
         </h1>
 
@@ -880,6 +891,16 @@ export function PricingExplorer({
                       </button>
                     ))}
                   </div>
+                ) : null}
+
+                {activeMode === "global" ? (
+                  <SubscriptionComparison
+                    key={`${selectedProvider.id}-${selectedPlanId}`}
+                    provider={selectedProvider}
+                    locale={locale}
+                    planId={selectedPlanId}
+                    onFollow={() => openSubscriptionSheet("price")}
+                  />
                 ) : null}
 
                 <div className="price-summary">

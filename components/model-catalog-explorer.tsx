@@ -239,7 +239,9 @@ export function ModelCatalogExplorer({
           aria-labelledby="model-catalog-title"
         >
           <div>
-            <p className="eyebrow">MODELS.DEV CATALOG</p>
+            <p className="eyebrow">
+              {locale === "en" ? "Compare model costs" : "比较模型调用价格"}
+            </p>
             <h1 id="model-catalog-title">
               {locale === "en" ? "API price ranking" : "API 价格排行榜"}
             </h1>

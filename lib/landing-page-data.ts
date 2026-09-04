@@ -1,6 +1,9 @@
-import { landingPages, type LandingPageDefinition } from "@/lib/landing-pages";
+import type { LandingPageDefinition } from "@/lib/landing-pages";
 import { displayableOffers } from "@/lib/pricing/format";
-import { loadCachedProviderCatalog } from "@/lib/pricing/page-cache";
+import {
+  loadCachedPricingPageData,
+  loadCachedProviderCatalog,
+} from "@/lib/pricing/page-cache";
 import type {
   ApiPriceType,
   BillingPeriod,
@@ -486,35 +489,18 @@ async function loadCachedLandingProvider(mode: PriceMode, providerId: string) {
 }
 
 export async function loadLandingCatalogSnapshot(): Promise<LandingCatalogSnapshot> {
-  const providersByMode = new Map<PriceMode, Set<string>>(
-    (["global", "china-subscription", "api"] as const).map((mode) => [
-      mode,
-      new Set<string>(),
-    ]),
-  );
-  for (const page of landingPages) {
-    for (const mode of ["global", "china-subscription", "api"] as const) {
-      for (const providerId of page.providerIds[mode] ?? []) {
-        providersByMode.get(mode)?.add(providerId);
-      }
-    }
-  }
-
-  const entries = await Promise.all(
-    [...providersByMode].flatMap(([mode, providerIds]) =>
-      [...providerIds].map(async (providerId) => ({
-        mode,
-        providers: await loadCachedLandingProvider(mode, providerId),
-      })),
+  // A sitemap needs the whole catalog. Reuse the three mode snapshots already
+  // used by the public pages instead of issuing one cold query per provider.
+  const [global, subscriptions, api] = await Promise.all(
+    (["global", "china-subscription", "api"] as const).map((mode) =>
+      loadCachedPricingPageData(mode),
     ),
   );
-  return entries.reduce<LandingCatalogSnapshot>(
-    (snapshot, { mode, providers }) => {
-      snapshot[mode].push(...providers);
-      return snapshot;
-    },
-    { global: [], "china-subscription": [], api: [] },
-  );
+  return {
+    global: global.providers,
+    "china-subscription": subscriptions.providers,
+    api: api.providers,
+  };
 }
 
 export async function loadLandingPageData(

@@ -72,7 +72,9 @@ export async function loadCachedProviderCatalog(
 
 async function loadPricingPageData(mode: PriceMode): Promise<PricingPageData> {
   const [modeProviders, rankingChanges] = await Promise.all([
-    loadProviderCatalog(mode),
+    loadProviderCatalog(mode, undefined, {
+      fallbackOnError: process.env.NODE_ENV !== "production",
+    }),
     mode === "api" ? loadLatestApiRankingChanges() : Promise.resolve([]),
   ]);
   modeProviders.sort(
@@ -106,7 +108,7 @@ async function loadPricingPageData(mode: PriceMode): Promise<PricingPageData> {
 const loadCompressedPricingPageData = unstable_cache(
   async (mode: PriceMode) =>
     compressPricingPageDataForCache(await loadPricingPageData(mode)),
-  ["pricing-page-data-v4"],
+  ["pricing-page-data-v5"],
   {
     revalidate: PRICING_PAGE_REVALIDATE_SECONDS,
     tags: [PRICING_PAGE_CACHE_TAG],

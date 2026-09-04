@@ -71,7 +71,7 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 |    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付              | `https://www.bigmodel.cn/claude-code`                                  |
 |    3 | Kimi                       | Andante 等会员套餐                         | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
 |    4 | 阶跃星辰                   | 周卡与四档月卡                             | `https://chat.stepfun.com/subscription`                                |
-|    5 | MiniMax                    | Token Plan                                 | `https://platform.minimaxi.com/docs/guides/pricing-token-plan`         |
+|    5 | MiniMax                    | Token Plan                                 | `https://platform.minimax.cn/docs/guides/pricing-token-plan`           |
 |    6 | 通义千问                   | 个人 Token Plan                            | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
 |    7 | 百度千帆                   | Token 福利包                               | `https://cloud.baidu.com/doc/qianfan/s/Smoghsq3g`                      |
 |    8 | 讯飞星火                   | Token Plan                                 | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                        |
@@ -107,7 +107,7 @@ cached-input/input/output 三类价格信号；价格数量达到门槛但缺少
 |    5 | 腾讯混元             | 语言、多模态、图片、视频、向量及批量任务表 | `https://cloud.tencent.com/document/product/1823/130055`          |
 |    6 | 文心 / 百度千帆      | 各模型、服务、子项与在线推理价             | `https://cloud.baidu.com/doc/qianfan-docs/s/Jm8r1826a`            |
 |    7 | 智谱 / BigModel      | 公开 JavaScript 中全部 GLM 模型价格组      | `https://bigmodel.cn/pricing`                                     |
-|    8 | MiniMax              | 语言、语音、视频、音乐等按量价目表         | `https://platform.minimaxi.com/docs/guides/pricing-paygo`         |
+|    8 | MiniMax              | 语言、语音、视频、音乐等按量价目表         | `https://platform.minimax.cn/docs/guides/pricing-paygo`           |
 |    9 | 阶跃星辰             | Step Plan 主套餐和加购项                   | `https://platform.stepfun.com/docs/zh/step-plan/overview`         |
 |   10 | 讯飞星火             | 全部模型积分消耗，按标准成员公开比例折算   | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                   |
 |   11 | Xiaomi MiMo          | 人民币区的文本、语音及联网服务表           | `https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go`              |
@@ -119,6 +119,10 @@ cached-input/input/output 三类价格信号；价格数量达到门槛但缺少
 
 讯飞未公开统一按量后付费价，因此页面明确展示“标准成员折算”，不描述为按量价。
 TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
+
+MiniMax 从 2026-09-04 起使用官方页面声明的 `platform.minimax.cn` canonical 文档域名。
+旧 `platform.minimaxi.com` 在 VPS 出站路径返回 HTTP 200 的 WAF 验证页，不能作为成功报价。
+来源 ID 保持不变；Token Plan 只接受明确标注人民币月付的公开价格，按量价继续保留各模型和计费档位。
 
 ## 保留的海外官方 API 采集（4）
 
