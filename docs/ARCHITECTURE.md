@@ -94,6 +94,10 @@
 `converted_cny`、`fx_rate` 与汇率观察时间；原币价未变时只刷新人民币换算，不生成
 价格变化事件。
 
+订阅历史通过 `lib/pricing/history.ts` 读取正式事件，排除 API、停用产品/来源、币种、账期、来源或 storefront 不同的记录，以及原币金额未变的记录。每个产品或全站最多返回最近 100 条；返回时间为本站确认时间，不表示官方生效日。公开字段不包含邮箱、通知或采集错误数据。
+
+`/price-changes` 和 `/en/price-changes` 是可索引 HTML 页，进入 sitemap。`/pricing-data/history/{providerId}` 及 `/pricing-data/changes/{feed.xml,prices.csv,prices.json}` 是公开只读数据端点，沿用 robots 对 `/pricing-data/` 的限制并返回 noindex；可用的空记录与数据库不可用（503/no-store）明确区分。数据读取缓存 15 分钟，采集再验证时失效。
+
 旧 `api_ranking_state` / `api_ranking_events` 作为历史审计保留，但新采集不再写入
 API 三榜事件。models.dev 导入以 canonical model 内容哈希识别变化；首次导入只建
 基线，后续新增 model 写入 `model_catalog_events`，详情元数据或 provider 价格变化只
@@ -191,6 +195,7 @@ interface PriceSourceAdapter {
 
 - Server Components 优先，交互组件最小化。
 - 首页只加载当前模式需要的数据。
+- sitemap 从三个模式的完整缓存快照构建，避免逐产品重复读取。采集完成后先预热价格数据，再预热实际 sitemap 缓存；生产数据库失败不能缓存示例目录作为真实结果。
 - 价格表客户端按持久化人民币值切换高到低 / 低到高排序。
 - 同一轮同一来源、套餐和 storefront 只能有一个报价，冲突时拒绝整条来源写入。
 - 新价格先进入 `price_change_candidates`；下一次独立采集仍一致时才写入正式

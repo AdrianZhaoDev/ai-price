@@ -85,6 +85,10 @@ Digest: C250DDD4F1A0C15295631D355D938BDEE1AC8AB63D295F433DC584C5275E833A
 
 ## 3. 每次发布后的即时检查
 
+2026-09-04 实测：Cloudflare Web Analytics 已有访问数据，但 Zaraz 因没有启用的工具而关闭，Monitoring 事件为 0。这是测量未接通，不是用户没有操作。代码已预留比价选择、复制、来源点击、历史展开和数据入口点击事件；在接收端及同意配置完成并实测前，不报告这些转化率。`pricing_data_downloaded` 仅表示点击入口，不能解释成文件下载成功。自动化和本地验收事件不得并入真实使用基线。
+
+首轮工具页增加 `/price-changes`、`/en/price-changes`，检查 canonical、hreflang、WebPage 结构化数据和 sitemap。另检查 RSS、CSV、JSON 及产品历史端点：正常 200、数据故障 503/no-store；这些是 noindex 数据响应，不加入 HTML sitemap。两个地区的分享状态不另生成可索引 URL。
+
 ```bash
 curl -fsS -I https://lowpriceradar.com/
 curl -fsS -I https://lowpriceradar.com/china-ai-subscriptions

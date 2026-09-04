@@ -206,14 +206,21 @@ export function parseKimiMembership(
 export function parseMiniMaxTokenPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
-  const rows = tableRows(raw.body);
+  const rows =
+    allTableRows(raw.body).find((table) =>
+      table.some((cells) => cells[0] === "价格"),
+    ) ?? [];
   const names = rows[0]?.slice(1) ?? [];
   const prices = rows.find((cells) => cells[0] === "价格")?.slice(1) ?? [];
 
   return names
     .map((name, index) => ({ name, price: prices[index] }))
     .filter((item): item is { name: string; price: string } =>
-      Boolean(item.name && item.price && /¥|￥/.test(item.price)),
+      Boolean(
+        item.name &&
+        item.price &&
+        /^(?:¥|￥)\s*\d+(?:\.\d+)?\s*\/\s*月$/.test(item.price),
+      ),
     )
     .map(({ name, price }) =>
       cnyOffer({
@@ -225,7 +232,7 @@ export function parseMiniMaxTokenPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "minimax-token-plan-v1",
+        parserVersion: "minimax-token-plan-v2",
       }),
     );
 }
@@ -1696,8 +1703,8 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "minimax-token-plan-official",
     "minimax-token-plan",
-    "https://platform.minimaxi.com/docs/guides/pricing-token-plan",
-    "minimax-token-plan-v1",
+    "https://platform.minimax.cn/docs/guides/pricing-token-plan",
+    "minimax-token-plan-v2",
     parseMiniMaxTokenPlan,
   ),
   new OfficialPageAdapter(
@@ -1766,8 +1773,8 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "minimax-paygo-official",
     "minimax-api",
-    "https://platform.minimaxi.com/docs/guides/pricing-paygo",
-    "minimax-api-v5",
+    "https://platform.minimax.cn/docs/guides/pricing-paygo",
+    "minimax-api-v6",
     parseMiniMaxApi,
   ),
   new OfficialPageAdapter(

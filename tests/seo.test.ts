@@ -209,25 +209,25 @@ describe("SEO routes", () => {
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
     ]);
-    expect(urls.slice(0, 10)).toEqual([
+    expect(urls.slice(0, 14)).toEqual([
       absoluteUrl("/"),
       absoluteUrl("/china-ai-subscriptions"),
       absoluteUrl("/api-pricing"),
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
       absoluteUrl("/ai-model-release-watch"),
+      absoluteUrl("/price-changes"),
       absoluteUrl("/en"),
       absoluteUrl("/en/china-ai-subscriptions"),
       absoluteUrl("/en/api-pricing"),
       absoluteUrl("/en/methodology"),
-    ]);
-    expect(urls.slice(10, 12)).toEqual([
       absoluteUrl("/en/privacy"),
       absoluteUrl("/en/ai-model-release-watch"),
+      absoluteUrl("/en/price-changes"),
     ]);
     expect(
       urls
-        .slice(12)
+        .slice(14)
         .every((url) =>
           landingPages.some(
             (page) =>

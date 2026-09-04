@@ -9,6 +9,7 @@ import {
   SITE_POSITIONING,
 } from "@/lib/seo";
 import "./globals.css";
+import "./tools.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),

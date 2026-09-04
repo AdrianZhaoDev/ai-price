@@ -1,0 +1,167 @@
+.workspace-title {
+  margin: 0 0 28px;
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: -0.035em;
+}
+
+.subscription-comparison {
+  padding: 24px 0;
+  margin: 24px 0;
+  border-block: 1px solid var(--separator);
+  scroll-margin-top: 100px;
+}
+
+.comparison-heading,
+.comparison-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.comparison-heading h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.comparison-heading p,
+.comparison-region p,
+.comparison-region > small,
+.comparison-note,
+.comparison-result span {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-secondary);
+}
+
+.comparison-regions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  margin: 24px 0;
+}
+
+.subscription-comparison label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.subscription-comparison select {
+  min-height: 44px;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-small);
+  background: var(--surface-solid);
+  color: var(--ink);
+  padding: 8px 12px;
+  font: inherit;
+}
+
+.comparison-region > strong {
+  display: block;
+  margin-top: 16px;
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.comparison-region strong small {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.comparison-region > small {
+  display: block;
+}
+
+.comparison-region a,
+.comparison-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  color: var(--tint);
+  font-size: 13px;
+}
+
+.comparison-result {
+  padding: 20px 0;
+  border-block: 1px solid var(--separator);
+}
+
+.comparison-result p {
+  margin: 0 0 10px;
+}
+
+.comparison-result > strong {
+  display: block;
+  font-size: clamp(28px, 4vw, 38px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.comparison-actions {
+  justify-content: flex-start;
+  font-size: 13px;
+}
+
+.subscription-history {
+  margin-top: 20px;
+}
+.subscription-history ol,
+.price-change-feed {
+  list-style: none;
+  padding: 0;
+}
+.subscription-history li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--separator);
+}
+.subscription-history small {
+  color: var(--ink-secondary);
+}
+.price-change-feed > li {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 24px;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--separator);
+  scroll-margin-top: 100px;
+}
+.price-change-feed time {
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+.price-change-feed h2 {
+  font-size: 19px;
+  margin: 0;
+}
+.price-change-feed strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .comparison-regions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .comparison-heading {
+    display: block;
+  }
+  .comparison-heading > label {
+    margin-top: 16px;
+  }
+  .price-change-feed > li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}

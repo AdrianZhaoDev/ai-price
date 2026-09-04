@@ -31,6 +31,7 @@ const CORE_PAGE_UPDATED_AT = {
   "/methodology": new Date("2026-07-31T00:00:00.000Z"),
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
   [MODEL_RELEASE_WATCH_PATH]: new Date(MODEL_RELEASE_WATCH_UPDATED_AT),
+  "/price-changes": new Date("2026-09-04T00:00:00.000Z"),
 } as const;
 
 const INDEXABLE_LOCALES: Locale[] = ["zh-CN", "en"];
@@ -86,7 +87,7 @@ const loadCachedSitemapEntries = unstable_cache(
     ]);
     return buildSitemap(snapshot, new Date(), models);
   },
-  ["catalog-sitemap-entries-v1"],
+  ["catalog-sitemap-entries-v2"],
   {
     tags: [SITEMAP_CACHE_TAG],
     revalidate: SITEMAP_CACHE_REVALIDATE_SECONDS,

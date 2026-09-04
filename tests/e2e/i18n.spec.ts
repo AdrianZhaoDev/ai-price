@@ -251,8 +251,10 @@ test("opens native privacy preferences only when Zaraz exposes the CMP API", asy
     Object.assign(window, {
       zaraz: {
         track: () => undefined,
-        showConsentModal: () => {
-          Object.assign(window, { zarazConsentModalOpened: true });
+        consent: {
+          APIReady: true,
+          modal: false,
+          getAll: () => ({ analytics: false }),
         },
       },
     });
@@ -262,14 +264,7 @@ test("opens native privacy preferences only when Zaraz exposes the CMP API", asy
     .getByRole("button", { name: "Manage privacy preferences" })
     .click();
   await expect
-    .poll(() =>
-      page.evaluate(() =>
-        Boolean(
-          (window as Window & { zarazConsentModalOpened?: boolean })
-            .zarazConsentModalOpened,
-        ),
-      ),
-    )
+    .poll(() => page.evaluate(() => Boolean(window.zaraz?.consent?.modal)))
     .toBe(true);
 
   await page.goto("/en/privacy");

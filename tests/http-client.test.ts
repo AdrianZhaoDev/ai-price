@@ -120,6 +120,23 @@ describe("collector HTTP client", () => {
     );
   });
 
+  it("rejects the empty-title WAF shell instead of treating HTTP 200 as pricing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            "<!doctypehtml><title></title><script>window._waf_is_mobile=!1;</script>",
+            { status: 200 },
+          ),
+        ),
+    );
+    await expect(
+      fetchPage("https://example.com/pricing", { attempts: 1 }),
+    ).rejects.toMatchObject({ code: "ACCESS_BLOCKED" });
+  });
+
   it("uses the configured collector proxy and falls back to direct", async () => {
     vi.stubEnv("COLLECTOR_PROXY_URL", "http://127.0.0.1:40000");
     const mockedFetch = vi

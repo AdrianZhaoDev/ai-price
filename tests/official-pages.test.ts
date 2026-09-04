@@ -115,6 +115,36 @@ describe("official table adapters", () => {
     ]);
   });
 
+  it("finds MiniMax plans after unrelated tables and rejects ambiguous billing", () => {
+    const offers = parseMiniMaxTokenPlan(
+      raw(`<table><tr><th>购买价格</th><th>积分</th></tr><tr><td>¥30</td><td>4489</td></tr></table>
+      <table><tr><th></th><th>Plus</th><th>Max</th><th>Ultra</th><th>Unknown</th></tr>
+      <tr><td>价格</td><td>¥49 /月</td><td>￥119 /月</td><td>¥469 /月</td><td>¥99 /年</td></tr></table>`),
+    );
+    expect(offers.map((offer) => offer.amountMinor)).toEqual([
+      4900, 11900, 46900,
+    ]);
+    expect(
+      offers.every((offer) => offer.parserVersion === "minimax-token-plan-v2"),
+    ).toBe(true);
+    for (const price of ["", "¥-49 /月", "$49 /月", "¥49 起", "¥49 /年"]) {
+      expect(
+        parseMiniMaxTokenPlan(
+          raw(
+            `<table><tr><th></th><th>Plus</th></tr><tr><td>价格</td><td>${price}</td></tr></table>`,
+          ),
+        ),
+      ).toEqual([]);
+    }
+    const adapter = officialPageAdapters.find(
+      (item) => item.id === "minimax-token-plan-official",
+    )!;
+    expect(adapter.sourceUrl).toBe(
+      "https://platform.minimax.cn/docs/guides/pricing-token-plan",
+    );
+    expect(adapter.healthCheck(offers)).toMatchObject({ ok: true });
+  });
+
   it("preserves DeepSeek sub-cent API prices", () => {
     const offers = parseDeepSeekPricing(
       raw(`<table>

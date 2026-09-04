@@ -16,6 +16,11 @@ async function captureTrafficEvents(page: import("@playwright/test").Page) {
     };
     target.__trafficEvents = [];
     window.zaraz = {
+      consent: {
+        APIReady: true,
+        modal: false,
+        getAll: () => ({ analytics: true }),
+      },
       track: (event, properties) => {
         target.__trafficEvents?.push({ event, properties });
       },
@@ -36,7 +41,9 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   test.skip(isMobile, "Desktop navigation is covered separately.");
   await page.goto("/");
   await waitForPricingHydration(page);
-  await expect(page.locator("h1.sr-only")).toHaveText("AI订阅全球价格对比");
+  await expect(page.locator("h1.workspace-title")).toHaveText(
+    "AI订阅全球价格对比",
+  );
   await expect(page.locator(".workspace-heading")).toHaveCount(0);
   await expect(page.locator(".section-meta .freshness-block")).toBeVisible();
   await expect(page.locator(".official-source-count")).toContainText(
@@ -49,7 +56,7 @@ test("switches modes, providers and theme", async ({ page, isMobile }) => {
   ).toEqual(["ChatGPT", "Claude / Code", "Gemini", "Grok"]);
   await page.getByRole("link", { name: "国内订阅", exact: true }).click();
   await expect(page).toHaveURL(/\/china-ai-subscriptions$/);
-  await expect(page.locator("h1.sr-only")).toHaveText(
+  await expect(page.locator("h1.workspace-title")).toHaveText(
     "国内 AI 会员，直接看官方价",
   );
   await expect(

@@ -121,6 +121,9 @@ export function SiteFooter({
         <p>{footerDescription}</p>
       </div>
       <div className="footer-links">
+        <Link href={locale === "en" ? "/en/price-changes" : "/price-changes"}>
+          {locale === "en" ? "Price changes" : "价格变化"}
+        </Link>
         <Link href={methodologyHref}>{messages.common.methodology}</Link>
         <Link href={privacyHref}>{messages.common.privacy}</Link>
         <PrivacyPreferencesButton
