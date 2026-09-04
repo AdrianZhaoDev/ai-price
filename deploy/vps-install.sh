@@ -81,8 +81,9 @@ SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM="AI Price Atlas <price@example.com>"
 ADMIN_EMAIL=
-COLLECTOR_CONCURRENCY=3
+COLLECTOR_CONCURRENCY=2
 COLLECTOR_PROXY_URL=
+COLLECTOR_WARP_ON_DEMAND=true
 NEXT_TELEMETRY_DISABLED=1
 EOF
   NEW_ENVIRONMENT=1
@@ -92,6 +93,19 @@ fi
 
 chown root:"${SERVICE_USER}" "${ENV_FILE}"
 chmod 0640 "${ENV_FILE}"
+
+# Migrate the installer’s previous low-resource default without overwriting an
+# operator-selected value on an existing installation.
+if grep -q '^COLLECTOR_CONCURRENCY=3$' "${ENV_FILE}"; then
+  sed -i 's/^COLLECTOR_CONCURRENCY=3$/COLLECTOR_CONCURRENCY=2/' "${ENV_FILE}"
+fi
+
+# The wrapper starts WARP only for a collector run and stops it only when this
+# run started it. Keep it outside the release so every release uses the same
+# resource-safe service behavior.
+install -o root -g root -m 0755 \
+  "${RELEASE_DIR}/deploy/ai-price-collect-with-warp.sh" \
+  /usr/local/sbin/ai-price-collect-with-warp.sh
 
 set -a
 # shellcheck disable=SC1090
@@ -233,14 +247,14 @@ Requires=postgresql.service
 
 [Service]
 Type=oneshot
-User=ai-price
+User=root
 Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
 RuntimeDirectory=ai-price-collect
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/bin/npm run collect
+ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/local/sbin/ai-price-collect-with-warp.sh
 NoNewPrivileges=true
 PrivateTmp=true
 EOF
@@ -254,14 +268,14 @@ Requires=postgresql.service
 
 [Service]
 Type=oneshot
-User=ai-price
+User=root
 Group=ai-price
 WorkingDirectory=/opt/ai-price/current
 EnvironmentFile=/etc/ai-price.env
 Environment=NODE_ENV=production
 RuntimeDirectory=ai-price-collect
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/bin/npm run collect -- --trigger=scheduled
+ExecStart=/usr/bin/flock --exclusive /run/ai-price-collect/collector.lock /usr/local/sbin/ai-price-collect-with-warp.sh --trigger=scheduled
 NoNewPrivileges=true
 PrivateTmp=true
 EOF

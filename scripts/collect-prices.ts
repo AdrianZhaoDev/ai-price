@@ -86,7 +86,9 @@ async function main() {
       }
     : await runCollectors(adapters, {
         trigger,
-        concurrency: Number(process.env.COLLECTOR_CONCURRENCY ?? 5),
+        // Keep the default conservative for the 1 GB production VPS. Operators
+        // can raise this explicitly when running on a larger machine.
+        concurrency: Number(process.env.COLLECTOR_CONCURRENCY ?? 2),
         onProgress: console.log,
         acceptPlanCountChange,
       });

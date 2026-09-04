@@ -240,6 +240,17 @@ chmod 700 /tmp/ai-price-vps-install.sh
 
 ## 4. 采集任务
 
+为降低低配 VPS 的常驻内存，采集 unit 通过
+`/usr/local/sbin/ai-price-collect-with-warp.sh` 运行。生产环境默认
+`COLLECTOR_WARP_ON_DEMAND=true`：如果 `warp-svc` 未运行，采集开始时启动它并等待
+`127.0.0.1:40000` 监听；采集结束后只停止本轮启动的实例。如果 WARP 在采集前已经
+运行，采集器不会停止它。将该变量设为 `false`，或把 `COLLECTOR_PROXY_URL` 改为其他
+地址，可保留常驻 WARP 或使用采集器现有的直连回退。WARP 目前没有被其他 systemd
+服务依赖；启用按需模式前仍应确认没有手工脚本或其他用户进程使用该代理端口。
+
+默认采集并发为 2，适合 1 GB 内存的 VPS。较大服务器可在 `/etc/ai-price.env` 中显式
+设置 `COLLECTOR_CONCURRENCY`；并发越低，峰值内存越小，但单轮耗时可能增加。
+
 查看 timer：
 
 ```bash
