@@ -31,7 +31,7 @@ export async function GET(
           ...data,
           methodology: "https://lowpriceradar.com/price-changes#methodology",
           notice:
-            "Original-currency observations; source rights remain with their owners. Confirmed dates are not official effective dates. No price or FX forecasts.",
+            "Original-currency observations; source rights remain with their owners. Large App Store changes with unclear billing periods are excluded pending review. Confirmed dates are not official effective dates. No price or FX forecasts.",
         },
         { headers },
       );

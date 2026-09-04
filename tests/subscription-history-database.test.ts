@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { and, eq, ne } from "drizzle-orm";
 import { createDatabaseConnection, type Database } from "@/lib/db/client";
 import {
+  providers,
   plans,
   products,
   sources,
@@ -113,6 +114,322 @@ describe.skipIf(!connection)(
           expect(
             (await loadSubscriptionHistory("missing-history-product")).events,
           ).toEqual([]);
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
+    });
+
+    it("withholds large changes only when this product has recorded same-name App Store period ambiguity", async () => {
+      const rollback = new Error("test rollback");
+      await expect(
+        connection!.database.transaction(async (tx) => {
+          transactionDatabase = tx as unknown as Database;
+          const [provider] = await tx
+            .insert(providers)
+            .values({
+              slug: `history-period-${crypto.randomUUID()}`,
+              name: "History fixture",
+            })
+            .returning();
+          const [product, otherProduct] = await tx
+            .insert(products)
+            .values(
+              ["primary", "other"].map((slug) => ({
+                providerId: provider.id,
+                slug,
+                name: slug,
+                mode: "global" as const,
+              })),
+            )
+            .returning();
+          const [monthly, annual, otherAnnual] = await tx
+            .insert(plans)
+            .values([
+              {
+                productId: product.id,
+                canonicalSlug: "month",
+                name: "Monthly",
+                billingPeriod: "month",
+              },
+              {
+                productId: product.id,
+                canonicalSlug: "year",
+                name: "Annual",
+                billingPeriod: "year",
+              },
+              {
+                productId: otherProduct.id,
+                canonicalSlug: "year",
+                name: "Annual",
+                billingPeriod: "year",
+              },
+            ])
+            .returning();
+          const [appStore, otherStorefront, officialWeb, unrelatedAppStore] =
+            await tx
+              .insert(sources)
+              .values(
+                [
+                  {
+                    productId: product.id,
+                    slug: "us",
+                    type: "app_store" as const,
+                  },
+                  {
+                    productId: product.id,
+                    slug: "jp",
+                    type: "app_store" as const,
+                  },
+                  {
+                    productId: product.id,
+                    slug: "web",
+                    type: "official_web" as const,
+                  },
+                  {
+                    productId: otherProduct.id,
+                    slug: "us",
+                    type: "app_store" as const,
+                  },
+                ].map((source) => ({
+                  ...source,
+                  url: "https://example.test/history",
+                  parserVersion: "test",
+                })),
+              )
+              .returning();
+          type Evidence =
+            | "same-source"
+            | "other-storefront"
+            | "case-variant"
+            | "space-variant"
+            | "other-product"
+            | "other-channel"
+            | "other-name"
+            | "same-period"
+            | "unknown-period"
+            | "previous-name"
+            | "current-name";
+          const cases: {
+            before: number;
+            after: number;
+            keep: boolean;
+            name?: string;
+            evidence?: Evidence;
+            nonAppStore?: boolean;
+            billingPeriod?: string;
+          }[] = [
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "same-source",
+              keep: false,
+            },
+            {
+              before: 10000,
+              after: 1000,
+              evidence: "same-source",
+              keep: false,
+            },
+            { before: 1000, after: 6000, evidence: "same-source", keep: false },
+            { before: 6000, after: 1000, evidence: "same-source", keep: false },
+            { before: 1000, after: 5999, evidence: "same-source", keep: true },
+            { before: 5999, after: 1000, evidence: "same-source", keep: true },
+            { before: 0, after: 10000, evidence: "same-source", keep: true },
+            { before: 10000, after: 0, evidence: "same-source", keep: true },
+            { before: 1000, after: 10000, keep: true },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "other-storefront",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "case-variant",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "space-variant",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "other-product",
+              keep: true,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "other-channel",
+              keep: true,
+            },
+            { before: 1000, after: 10000, evidence: "other-name", keep: true },
+            { before: 1000, after: 10000, evidence: "same-period", keep: true },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "unknown-period",
+              keep: true,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "previous-name",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "current-name",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "same-source",
+              nonAppStore: true,
+              keep: true,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "same-source",
+              name: "周年纪念 Plus",
+              keep: false,
+            },
+            {
+              before: 1000,
+              after: 10000,
+              evidence: "same-source",
+              name: "Plus year-round",
+              keep: false,
+            },
+            ...[
+              "Plus Monthly",
+              "Plus month",
+              "毎月",
+              "매월",
+              "monatlich",
+              "mensuel",
+              "月卡",
+            ].map((name) => ({ before: 1000, after: 10000, name, keep: true })),
+            {
+              before: 1000,
+              after: 10000,
+              name: "プラス 年間",
+              billingPeriod: "year",
+              keep: true,
+            },
+          ];
+          const ids: string[] = [];
+          const expected: string[] = [];
+          for (const [index, testCase] of cases.entries()) {
+            // Distinct labels prevent one case's evidence affecting another.
+            const label = `${testCase.name ?? "History plan"} ${index}`;
+            const previousName =
+              testCase.evidence === "current-name" ? `${label} old` : label;
+            const currentName =
+              testCase.evidence === "previous-name" ? `${label} new` : label;
+            const base = {
+              planId:
+                testCase.billingPeriod === "year" ? annual.id : monthly.id,
+              sourceId: testCase.nonAppStore ? officialWeb.id : appStore.id,
+              storefront: "US",
+              currency: "USD",
+              billingPeriod: testCase.billingPeriod ?? "month",
+              rawHash: "history-period-rollback",
+              displayPrice: "$10.00",
+            };
+            const [previous] = await tx
+              .insert(priceObservations)
+              .values({
+                ...base,
+                rawPlanName: previousName,
+                amountMinor: testCase.before,
+              })
+              .returning();
+            const [current] = await tx
+              .insert(priceObservations)
+              .values({
+                ...base,
+                rawPlanName: currentName,
+                amountMinor: testCase.after,
+              })
+              .returning();
+            if (testCase.evidence) {
+              const otherRegion = [
+                "other-storefront",
+                "case-variant",
+                "space-variant",
+              ].includes(testCase.evidence);
+              const unrelated = testCase.evidence === "other-product";
+              const samePeriod = testCase.evidence === "same-period";
+              await tx.insert(priceObservations).values({
+                ...base,
+                planId: unrelated
+                  ? otherAnnual.id
+                  : samePeriod
+                    ? monthly.id
+                    : annual.id,
+                sourceId: unrelated
+                  ? unrelatedAppStore.id
+                  : otherRegion
+                    ? otherStorefront.id
+                    : testCase.evidence === "other-channel"
+                      ? officialWeb.id
+                      : appStore.id,
+                storefront: otherRegion ? "JP" : "US",
+                currency: otherRegion ? "JPY" : "USD",
+                rawPlanName:
+                  testCase.evidence === "other-name"
+                    ? `${label} different`
+                    : testCase.evidence === "case-variant"
+                      ? label.toUpperCase()
+                      : testCase.evidence === "space-variant"
+                        ? `  ${label}  `
+                        : label,
+                billingPeriod:
+                  testCase.evidence === "unknown-period"
+                    ? null
+                    : samePeriod
+                      ? "month"
+                      : "year",
+                amountMinor: 12000,
+              });
+            }
+            const [event] = await tx
+              .insert(priceChangeEvents)
+              .values({
+                planId: base.planId,
+                storefront: "US",
+                previousObservationId: previous.id,
+                currentObservationId: current.id,
+              })
+              .returning();
+            ids.push(event.id);
+            if (testCase.keep) expected.push(event.id);
+          }
+          const history = await loadSubscriptionHistory(product.slug);
+          expect(
+            new Set(
+              history.events
+                .filter((event) => ids.includes(event.id))
+                .map((event) => event.id),
+            ),
+          ).toEqual(new Set(expected));
+          // Filtering never mutates or removes the original confirmed events.
+          const stored = await tx
+            .select({ id: priceChangeEvents.id })
+            .from(priceChangeEvents)
+            .where(eq(priceChangeEvents.planId, monthly.id));
+          expect(stored.length).toBe(
+            cases.filter((testCase) => testCase.billingPeriod !== "year")
+              .length,
+          );
           throw rollback;
         }),
       ).rejects.toBe(rollback);

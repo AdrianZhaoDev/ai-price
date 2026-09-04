@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, exists, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { getReadDatabase, isReadDatabaseConfigured } from "@/lib/db/client";
@@ -24,6 +24,25 @@ export const loadSubscriptionHistory = unstable_cache(
       };
     const previous = alias(priceObservations, "previous_price");
     const current = alias(priceObservations, "current_price");
+    const alternate = alias(priceObservations, "alternate_period");
+    const alternateSource = alias(sources, "alternate_source");
+    // A label used for multiple periods in this product's App Store records
+    // is demonstrably ambiguous. Evidence can come from another storefront;
+    // a single response is not guaranteed to include all available purchases.
+    const recordedPeriodAmbiguity = getReadDatabase()
+      .select({ id: alternate.id })
+      .from(alternate)
+      .innerJoin(alternateSource, eq(alternateSource.id, alternate.sourceId))
+      .where(
+        and(
+          eq(alternateSource.productId, products.id),
+          eq(alternateSource.type, "app_store"),
+          sql`lower(btrim(${alternate.rawPlanName})) in (
+            lower(btrim(${previous.rawPlanName})), lower(btrim(${current.rawPlanName}))
+          )`,
+          ne(alternate.billingPeriod, current.billingPeriod),
+        ),
+      );
     const rows = await getReadDatabase()
       .select({
         id: priceChangeEvents.id,
@@ -66,6 +85,16 @@ export const loadSubscriptionHistory = unstable_cache(
           sql`${previous.storefront} is not distinct from ${current.storefront}`,
           sql`${previous.amountMinor} >= 0 and ${current.amountMinor} >= 0`,
           ne(previous.amountMinor, current.amountMinor),
+          // The collector uses the same 6x threshold to infer annual prices
+          // when both prices occur in one response. Across responses the period
+          // can remain ambiguous, even after two matching price observations.
+          sql`not (
+            ${sources.type} = 'app_store'
+            and ${previous.amountMinor} > 0 and ${current.amountMinor} > 0
+            and greatest(${previous.amountMinor}, ${current.amountMinor}) >=
+              least(${previous.amountMinor}, ${current.amountMinor}) * 6
+            and ${exists(recordedPeriodAmbiguity)}
+          )`,
         ),
       )
       .orderBy(desc(priceChangeEvents.createdAt), priceChangeEvents.id)
@@ -81,6 +110,6 @@ export const loadSubscriptionHistory = unstable_cache(
       })),
     };
   },
-  ["subscription-price-history-v1"],
+  ["subscription-price-history-v3"],
   { tags: [PRICING_PAGE_CACHE_TAG], revalidate: 900 },
 );

@@ -76,8 +76,8 @@ export function SubscriptionHistoryPanel({
         <div aria-live="polite">
           <p className="comparison-note">
             {en
-              ? "Original-currency changes confirmed in two separate collections. FX-only changes are excluded. Dates show confirmation, not the provider's effective date."
-              : "仅展示两轮采集确认的原币变化，不包含单独的汇率变化。日期为本站确认时间，不代表官方生效日。"}
+              ? "Original-currency changes confirmed in two separate collections. FX-only changes and large App Store changes with unclear billing periods are excluded. Dates show confirmation, not the provider's effective date."
+              : "仅展示两轮采集确认的原币变化，排除单独的汇率变化及账期不明的 App Store 大幅变动。日期为本站确认时间，不代表官方生效日。"}
           </p>
           {failed ? (
             <p role="status">
