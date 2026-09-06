@@ -422,6 +422,70 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       /price anomaly/i,
     );
   });
+  it("rejects historical IDs reused by stable-key matches in both domains", async () => {
+    const channel = channels();
+    channel.offers.push({
+      ...channel.offers[0],
+      id: "anchor",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishChannelSnapshot(channel);
+    await publishChannelSnapshot({ ...channel, offers: [channel.offers[1]] });
+    const channelBaseline =
+      await connection.client`select identity, payload from public_offer_baselines where domain='channels' and offer_id='offer'`;
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: [{ ...channel.offers[1], id: "offer" }],
+      }),
+    ).rejects.toThrow(/stable identity changed/);
+    expect(
+      await connection.client`select identity, payload from public_offer_baselines where domain='channels' and offer_id='offer'`,
+    ).toEqual(channelBaseline);
+
+    const model = transit();
+    model.availabilitySamples = [];
+    model.offers.push({
+      ...model.offers[0],
+      id: "anchor",
+      standardModel: "anchor",
+    });
+    await publishTransitSnapshot(model);
+    await publishTransitSnapshot({ ...model, offers: [model.offers[1]] });
+    const transitBaseline =
+      await connection.client`select identity, payload from public_offer_baselines where domain='transit' and offer_id='model-offer'`;
+    await expect(
+      publishTransitSnapshot({
+        ...model,
+        offers: [{ ...model.offers[1], id: "model-offer" }],
+      }),
+    ).rejects.toThrow(/stable identity changed/);
+    expect(
+      await connection.client`select identity, payload from public_offer_baselines where domain='transit' and offer_id='model-offer'`,
+    ).toEqual(transitBaseline);
+  });
+  it.each(["websiteUrl", "sourceUrl", "apiBaseUrl"] as const)(
+    "pins station %s origins while allowing same-origin path corrections",
+    async (field) => {
+      const first = transit();
+      first.stations[0].apiBaseUrl = "https://example.com/v1";
+      await publishTransitSnapshot(first);
+      const moved = structuredClone(first);
+      moved.stations[0][field] = "https://another.example.org/pricing";
+      await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+        /station source identity changed/i,
+      );
+      const [retained] =
+        await connection.client`select website_url, source_url, api_base_url from transit_stations where id='station'`;
+      expect(retained).toMatchObject({
+        website_url: first.stations[0].websiteUrl,
+        source_url: first.stations[0].sourceUrl,
+        api_base_url: first.stations[0].apiBaseUrl,
+      });
+      moved.stations[0][field] = "https://example.com/corrected-path";
+      await publishTransitSnapshot(moved);
+    },
+  );
   it("rejects oversized generations before publication or full hydration", async () => {
     const channel = channels();
     const oversizedChannel = {

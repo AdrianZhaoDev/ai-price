@@ -673,7 +673,9 @@ export function aggregateAvailability(
     left.checkedAt.localeCompare(right.checkedAt),
   );
   const latest = normalized.findLast(
-    (item) => item.sourceType !== "public_model_catalog",
+    (item) =>
+      item.sourceType !== "public_model_catalog" &&
+      item.sourceType !== "unknown",
   );
   if (!latest) return EMPTY_AVAILABILITY;
   // A reporting source is one evidence stream; never silently merge another

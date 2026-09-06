@@ -10,6 +10,46 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it.each(["unknown", "public_model_catalog"])(
+    "keeps valid monitoring evidence ahead of a newer %s sample",
+    (sourceType) => {
+      const station = getSyntheticTransitStations()[0];
+      station.availability = normalizeTransitAvailability({});
+      const now = new Date();
+      const valid = {
+        id: "valid",
+        stationId: station.id,
+        scope: "station",
+        sourceType: "authorized_probe",
+        sourceUrl: "https://example.com/status",
+        success: true,
+        checkedAt: new Date(now.getTime() - 60000).toISOString(),
+      };
+      const model = normalizeTransitDatabaseSnapshot(
+        {
+          generatedAt: now.toISOString(),
+          stations: [station],
+          availabilitySamples: [
+            valid,
+            {
+              ...valid,
+              id: "unsupported",
+              sourceType,
+              success: false,
+              checkedAt: now.toISOString(),
+            },
+          ],
+        },
+        { now },
+      );
+      expect(model?.stations[0].availability).toMatchObject({
+        sevenDaySamples: 1,
+        sevenDayRate: 1,
+        sourceType: "authorized_probe",
+        lastCheckedAt: valid.checkedAt,
+      });
+    },
+  );
   it("keeps valid raw evidence when an embedded aggregate contains only a count", () => {
     const station = getSyntheticTransitStations()[0];
     const now = new Date();

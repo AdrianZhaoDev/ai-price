@@ -424,12 +424,11 @@ export async function publishChannelSnapshot(
     >(
       tx,
       "channels",
-      snapshot.offers
-        .filter((offer) => !matches.has(offer.id))
-        .map((offer) => ({
-          id: offer.id,
-          identity: [offer.merchantId, offer.productId, offer.offerUrl],
-        })),
+      // Current stable-key matches must not bypass retained ID ownership.
+      snapshot.offers.map((offer) => ({
+        id: offer.id,
+        identity: [offer.merchantId, offer.productId, offer.offerUrl],
+      })),
     );
     for (const offer of snapshot.offers) {
       const retained = historical.get(offer.id);
@@ -817,6 +816,9 @@ export async function publishTransitSnapshot(
     const baselineRows = await tx
       .select({
         stationId: transitStations.id,
+        websiteUrl: transitStations.websiteUrl,
+        sourceUrl: transitStations.sourceUrl,
+        apiBaseUrl: transitStations.apiBaseUrl,
         totalCount: sql<number>`count(${transitOffers.id})::int`,
         count: sql<number>`count(${transitOffers.id}) filter (where ${transitOffers.status} = 'verified' and ${transitOffers.lastVerifiedAt} >= ${verificationCutoff.toISOString()}::timestamptz and ${transitOffers.lastVerifiedAt} <= ${verificationCeiling.toISOString()}::timestamptz and ${transitStations.dataStatus} = 'verified' and ${transitStations.status} <> 'unavailable')::int`,
       })
@@ -850,6 +852,28 @@ export async function publishTransitSnapshot(
         );
     }
     for (const station of baselineRows) {
+      const incomingStation = snapshot.stations.find(
+        (item) => item.id === station.stationId,
+      );
+      if (incomingStation) {
+        for (const field of [
+          "websiteUrl",
+          "sourceUrl",
+          "apiBaseUrl",
+        ] as const) {
+          const previousOrigin = station[field]
+            ? new URL(station[field]).origin
+            : null;
+          const incomingUrl = incomingStation[field];
+          const incomingOrigin = incomingUrl
+            ? new URL(incomingUrl).origin
+            : null;
+          if (previousOrigin !== incomingOrigin)
+            throw new Error(
+              "Transit station source identity changed; previous snapshot retained for review.",
+            );
+        }
+      }
       const baseline = station.count;
       const nextCount = incomingCounts.get(station.stationId) ?? 0;
       if (
@@ -917,9 +941,11 @@ export async function publishTransitSnapshot(
     >(
       tx,
       "transit",
-      snapshot.offers
-        .filter((offer) => !matches.has(offer.id))
-        .map((offer) => ({ id: offer.id, identity: baselineIdentity(offer) })),
+      // Validate every historical ID, even when its incoming key has a current match.
+      snapshot.offers.map((offer) => ({
+        id: offer.id,
+        identity: baselineIdentity(offer),
+      })),
     );
     for (const offer of snapshot.offers) {
       const retained = historical.get(offer.id);
