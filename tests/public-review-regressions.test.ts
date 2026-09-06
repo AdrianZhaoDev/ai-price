@@ -25,6 +25,99 @@ import { isTransitStationPublic } from "@/lib/transit/types";
 import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("rejects monitor scopes and attribution not supported by the read model", () => {
+    const sample = {
+      id: "sample",
+      stationId: "station",
+      scope: "station",
+      matchLevel: "station",
+      sourceType: "public_status",
+      success: true,
+      checkedAt: new Date().toISOString(),
+    };
+    expect(transitAvailabilitySnapshotSchema.safeParse(sample).success).toBe(
+      true,
+    );
+    for (const scope of ["group", "model"])
+      expect(
+        transitAvailabilitySnapshotSchema.safeParse({ ...sample, scope })
+          .success,
+      ).toBe(false);
+    for (const matchLevel of ["group", "model", "family"])
+      expect(
+        transitAvailabilitySnapshotSchema.safeParse({ ...sample, matchLevel })
+          .success,
+      ).toBe(false);
+    expect(
+      transitAvailabilitySnapshotSchema.safeParse({ ...sample, scope: "offer" })
+        .success,
+    ).toBe(false);
+    expect(
+      transitAvailabilitySnapshotSchema.safeParse({
+        ...sample,
+        offerId: "offer",
+      }).success,
+    ).toBe(false);
+    expect(
+      transitAvailabilitySnapshotSchema.safeParse({
+        ...sample,
+        scope: "offer",
+        offerId: "offer",
+        matchLevel: "exact",
+      }).success,
+    ).toBe(true);
+  });
+  it("disambiguates detail kinds and prefers advertised IDs to other slugs", async () => {
+    const snapshot = createSyntheticChannelSnapshot();
+    const id = "shared-id";
+    snapshot.offers[0].id = id;
+    snapshot.products![1].id = id;
+    snapshot.products![0].slug = id;
+    snapshot.merchants![1].id = id;
+    snapshot.merchants![0].slug = id;
+    const spy = vi
+      .spyOn(getDefaultChannelRepository(), "getSnapshot")
+      .mockResolvedValue(snapshot);
+    try {
+      for (const kind of ["offer", "product", "merchant"]) {
+        const response = await handleChannelDetailGet(
+          new Request(`http://localhost/api/channels/${id}?kind=${kind}`),
+          { params: Promise.resolve({ id }) },
+        );
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.kind).toBe(kind);
+        expect(body[kind].id).toBe(id);
+      }
+      for (const query of [
+        "kind=bad",
+        "kind=offer&kind=product",
+        "unknown=1",
+      ]) {
+        expect(
+          (
+            await handleChannelDetailGet(
+              new Request(`http://localhost/api/channels/${id}?${query}`),
+              { params: Promise.resolve({ id }) },
+            )
+          ).status,
+        ).toBe(400);
+      }
+      expect(
+        (
+          await handleChannelDetailGet(
+            new Request(
+              `http://localhost/api/channels/offers/${id}?kind=product`,
+            ),
+            { params: Promise.resolve({ id }) },
+            true,
+          )
+        ).status,
+      ).toBe(400);
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it("preserves safe snapshot metadata on all channel detail kinds", async () => {
     const snapshot = createSyntheticChannelSnapshot();
     snapshot.dataStatus = "degraded";
@@ -302,6 +395,20 @@ describe("public review regressions", () => {
       channelOfferFiltersSchema.parse({ sort: "updated", direction: "asc" })
         .direction,
     ).toBe("asc");
+    expect(
+      channelOfferFiltersSchema.parse({ sort: "price_desc" }),
+    ).toMatchObject({ sort: "price", direction: "desc" });
+    expect(
+      channelOfferFiltersSchema.parse({ sort: "price_desc", direction: "asc" })
+        .direction,
+    ).toBe("asc");
+    expect(
+      (
+        await channelsGet(
+          new Request("http://localhost/api/channels?sort=price_desc"),
+        )
+      ).status,
+    ).toBe(200);
   });
   it("never resolves products through the offer-only endpoint", async () => {
     const id = createSyntheticChannelSnapshot().products![0].id;

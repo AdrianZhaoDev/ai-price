@@ -128,6 +128,16 @@ export function isOfferEligibleForLowestPrice(
   });
 }
 
+function sourceHealthPriority(offer: ChannelOffer): number {
+  const priorities: Record<string, number> = {
+    healthy: 4,
+    unknown: 2,
+    degraded: 1,
+    failed: 0,
+  };
+  return priorities[sourceHealthOf(offer)] ?? 0;
+}
+
 function sourcePriority(offer: ChannelOffer): number {
   const sourceTypePriority: Record<string, number> = {
     authorized_feed: 50,
@@ -136,15 +146,9 @@ function sourcePriority(offer: ChannelOffer): number {
     merchant_submission: 20,
     manual_snapshot: 10,
   };
-  const healthPriority: Record<string, number> = {
-    healthy: 4,
-    unknown: 2,
-    degraded: 1,
-    failed: 0,
-  };
   return (
     (sourceTypePriority[offer.sourceType] ?? 0) * 10 +
-    (healthPriority[sourceHealthOf(offer)] ?? 0)
+    sourceHealthPriority(offer)
   );
 }
 
@@ -359,23 +363,24 @@ function resolveSort(input: ChannelSortInput | undefined): {
   direction: "asc" | "desc";
   query?: string;
 } {
-  if (typeof input === "string") {
-    if (input === "price_desc") return { by: "price", direction: "desc" };
-    if (input === "price_asc") return { by: "price", direction: "asc" };
-    if (input === "updated_desc") return { by: "updated", direction: "desc" };
-    return {
-      by: input,
-      direction:
-        input === "updated" || input === "availability" ? "desc" : "asc",
-    };
-  }
-  const by = input?.by ?? "price";
+  const rawBy = typeof input === "string" ? input : (input?.by ?? "price");
+  const by =
+    rawBy === "price_asc" || rawBy === "price_desc"
+      ? "price"
+      : rawBy === "updated_desc"
+        ? "updated"
+        : rawBy;
+  const defaultDirection =
+    rawBy === "price_desc" || by === "updated" || by === "relevance"
+      ? "desc"
+      : "asc";
   return {
     by,
     direction:
-      input?.direction ??
-      (by === "updated" || by === "availability" ? "desc" : "asc"),
-    query: input?.query,
+      typeof input === "string"
+        ? defaultDirection
+        : (input?.direction ?? defaultDirection),
+    query: typeof input === "string" ? undefined : input?.query,
   };
 }
 
@@ -418,6 +423,10 @@ export function sortChannelOffers(
     }
     if (primary) return primary * sign;
 
+    const health = sourceHealthPriority(right) - sourceHealthPriority(left);
+    if (health) return health;
+    const source = sourcePriority(right) - sourcePriority(left);
+    if (source) return source;
     const seen = timestamp(right.lastSeenAt) - timestamp(left.lastSeenAt);
     if (seen) return seen;
     return compareText(left.id, right.id);

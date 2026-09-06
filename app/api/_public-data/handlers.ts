@@ -154,42 +154,67 @@ export async function handleChannelDetailGet(
   if (!validChannelId(id)) {
     return publicError("Channel offer not found", 404, "NOT_FOUND");
   }
+  const params = requestSearchParams(_request);
+  const kinds = params?.getAll("kind") ?? [];
+  const suppliedKind = kinds[0]?.trim().toLowerCase();
+  if (
+    !params ||
+    [...params.keys()].some((key) => key !== "kind") ||
+    kinds.length > 1 ||
+    (suppliedKind !== undefined &&
+      !["offer", "product", "merchant"].includes(suppliedKind)) ||
+    (offerOnly && suppliedKind !== undefined && suppliedKind !== "offer")
+  )
+    return publicError("Invalid channel detail query", 400, "INVALID_QUERY");
+  const kind = offerOnly ? "offer" : suppliedKind;
   try {
     const repository = getDefaultChannelRepository();
     const snapshot = await repository.getSnapshot();
     const metadata = publicChannelSnapshotMetadata(snapshot);
     const offer = snapshot.offers.find(
-      (candidate) => candidate.id === id && isPublicChannelOffer(candidate),
+      (candidate) =>
+        (!kind || kind === "offer") &&
+        candidate.id === id &&
+        isPublicChannelOffer(candidate),
     );
     if (offer) {
       return publicJson({
         ok: true,
         domain: "channels",
         ...metadata,
+        kind: "offer",
         offer: publicChannelOffer(offer),
       });
     }
-    if (offerOnly)
+    if (kind === "offer")
       return publicError("Channel offer not found", 404, "NOT_FOUND");
-    const product = (snapshot.products ?? []).find(
-      (candidate) => candidate.id === id || candidate.slug === id,
-    );
+    const products = snapshot.products ?? [];
+    const product =
+      kind && kind !== "product"
+        ? undefined
+        : (products.find((candidate) => candidate.id === id) ??
+          products.find((candidate) => candidate.slug === id));
     if (product && ["published", "verified"].includes(product.reviewStatus)) {
       return publicJson({
         ok: true,
         domain: "channels",
         ...metadata,
+        kind: "product",
         product: publicChannelProduct(product),
       });
     }
-    const merchant = (snapshot.merchants ?? []).find(
-      (candidate) => candidate.id === id || candidate.slug === id,
-    );
+    const merchants = snapshot.merchants ?? [];
+    const merchant =
+      kind && kind !== "merchant"
+        ? undefined
+        : (merchants.find((candidate) => candidate.id === id) ??
+          merchants.find((candidate) => candidate.slug === id));
     if (merchant && merchant.status === "active") {
       return publicJson({
         ok: true,
         domain: "channels",
         ...metadata,
+        kind: "merchant",
         merchant: publicChannelMerchant(merchant),
       });
     }

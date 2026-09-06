@@ -793,6 +793,10 @@ function normalizeFilterInput(input: unknown): unknown {
     true,
   );
   if (value.sort === "price_asc") value.sort = "price";
+  if (value.sort === "price_desc") {
+    value.sort = "price";
+    if (value.direction === undefined) value.direction = "desc";
+  }
   if (value.sort === "updated_desc") value.sort = "updated";
   if (value.direction === undefined)
     value.direction =

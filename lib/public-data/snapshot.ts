@@ -136,34 +136,54 @@ export const channelSnapshotSchema = z.object({
   offers: z.array(channelOfferSnapshotSchema).max(500_000),
 });
 
-export const transitAvailabilitySnapshotSchema = z.object({
-  id: safeId,
-  stationId: safeId,
-  offerId: safeId.nullable().optional(),
-  scope: z.enum(["station", "group", "model", "offer"]),
-  standardModel: boundedText(160).nullable().optional(),
-  groupName: boundedText(160).nullable().optional(),
-  sourceType: z.enum([
-    "public_status",
-    "public_model_catalog",
-    "partner_api",
-    "merchant_reported",
-    "manual_snapshot",
-    "authorized_probe",
-    "user_submitted",
-    "synthetic_fixture",
-    "unknown",
-  ]),
-  sourceUrl: httpUrl.nullable().optional(),
-  matchLevel: z.enum(["exact", "group", "model", "family", "station"]),
-  success: z.boolean(),
-  latencyMs: z.number().int().nonnegative().max(300_000).nullable().optional(),
-  sampleCount: z.number().int().positive().max(100_000).default(1),
-  sevenDayRate: z.number().finite().min(0).max(1).nullable().optional(),
-  checkedAt: observedDate,
-  expiresAt: isoDate.nullable().optional(),
-  note: z.string().max(500).nullable().optional(),
-});
+export const transitAvailabilitySnapshotSchema = z
+  .object({
+    id: safeId,
+    stationId: safeId,
+    offerId: safeId.nullable().optional(),
+    // Only evidence scopes rendered by the current read model are accepted.
+    scope: z.enum(["station", "offer"]),
+    standardModel: boundedText(160).nullable().optional(),
+    groupName: boundedText(160).nullable().optional(),
+    sourceType: z.enum([
+      "public_status",
+      "public_model_catalog",
+      "partner_api",
+      "merchant_reported",
+      "manual_snapshot",
+      "authorized_probe",
+      "user_submitted",
+      "synthetic_fixture",
+      "unknown",
+    ]),
+    sourceUrl: httpUrl.nullable().optional(),
+    matchLevel: z.enum(["exact", "station"]),
+    success: z.boolean(),
+    latencyMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(300_000)
+      .nullable()
+      .optional(),
+    sampleCount: z.number().int().positive().max(100_000).default(1),
+    sevenDayRate: z.number().finite().min(0).max(1).nullable().optional(),
+    checkedAt: observedDate,
+    expiresAt: isoDate.nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
+  })
+  .superRefine((sample, context) => {
+    if (
+      sample.scope === "offer"
+        ? !sample.offerId || sample.matchLevel !== "exact"
+        : Boolean(sample.offerId)
+    )
+      context.addIssue({
+        code: "custom",
+        message:
+          "Availability scope must identify an exact offer or the station alone.",
+      });
+  });
 
 export const transitOfferSnapshotSchema = z.object({
   id: safeId,

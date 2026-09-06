@@ -361,6 +361,28 @@ function freshVerification(
   );
 }
 
+function expireAvailability(
+  availability: TransitAvailability,
+  now: Date,
+): TransitAvailability {
+  const age = availability.lastCheckedAt
+    ? now.getTime() - Date.parse(availability.lastCheckedAt)
+    : Infinity;
+  const oldestAge = availability.firstCheckedAt
+    ? now.getTime() - Date.parse(availability.firstCheckedAt)
+    : 0;
+  // We retain aggregates, not the complete evidence stream. If the window
+  // changes, clear the aggregate rather than inventing a recomputed rate.
+  if (
+    !Number.isFinite(age) ||
+    age < 0 ||
+    age >= 7 * 86400000 ||
+    oldestAge >= 7 * 86400000
+  )
+    return { ...EMPTY_AVAILABILITY, recentSamples: [] };
+  return availability;
+}
+
 export function normalizeTransitOffer(
   input: unknown,
   stationId: string,
@@ -1230,7 +1252,9 @@ export class TransitRepository {
       const degraded = cloneReadModel(this.lastGood);
       const now = this.now();
       for (const station of degraded.stations) {
+        station.availability = expireAvailability(station.availability, now);
         for (const offer of station.offers) {
+          offer.availability = expireAvailability(offer.availability, now);
           if (
             offer.status === "verified" &&
             !freshVerification(offer.lastVerifiedAt, now)

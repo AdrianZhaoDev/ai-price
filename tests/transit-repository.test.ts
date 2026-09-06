@@ -425,6 +425,60 @@ describe("transit repository", () => {
     expect((await repository.list()).items[0].offers).toEqual([]);
   });
 
+  it("expires station and nested availability when their evidence ages out", async () => {
+    let now = new Date("2026-09-06T00:00:00Z");
+    const sampleAt = new Date(
+      now.getTime() - 7 * 86400000 + 3600000,
+    ).toISOString();
+    let unavailable = false;
+    const station = getSyntheticTransitStations()[0];
+    station.synthetic = false;
+    station.dataStatus = "verified";
+    station.availability = {
+      ...station.availability,
+      sevenDayRate: 1,
+      sevenDaySamples: 1,
+      firstCheckedAt: sampleAt,
+      lastCheckedAt: sampleAt,
+      recentSamples: [{ ok: true, checkedAt: sampleAt, latencyMs: 100 }],
+    };
+    station.offers = [
+      {
+        ...station.offers[0],
+        status: "verified",
+        lastVerifiedAt: now.toISOString(),
+        availability: {
+          ...station.availability,
+          scope: "offer",
+          matchLevel: "exact",
+        },
+      },
+    ];
+    const repository = createTransitRepository({
+      cacheTtlMs: 0,
+      now: () => now,
+      databaseLoader: async () => {
+        if (unavailable) throw new Error("offline");
+        return { generatedAt: now.toISOString(), stations: [station] };
+      },
+    });
+    const first = await repository.load();
+    expect(first.stations[0].availability.sevenDaySamples).toBe(1);
+    expect(first.stations[0].offers[0].availability.sevenDaySamples).toBe(1);
+    unavailable = true;
+    now = new Date(now.getTime() + 2 * 3600000);
+    const fallback = await repository.load();
+    expect(fallback.stations[0].offers[0].status).toBe("verified");
+    for (const evidence of [
+      fallback.stations[0].availability,
+      fallback.stations[0].offers[0].availability,
+    ]) {
+      expect(evidence.sevenDayRate).toBeNull();
+      expect(evidence.sevenDaySamples).toBe(0);
+      expect(evidence.recentSamples).toEqual([]);
+    }
+  });
+
   it("can disable synthetic fallback for a production-only route", async () => {
     const repository = createTransitRepository({
       allowSyntheticFixture: false,

@@ -31,6 +31,56 @@ function offer(overrides: Partial<ChannelOffer> = {}): ChannelOffer {
 }
 
 describe("channel availability and ranking", () => {
+  it("prefers healthy sources on price ties before recency or source type", () => {
+    const healthy = offer({
+      id: "healthy",
+      sourceHealth: "healthy",
+      sourceType: "manual_snapshot",
+      lastSeenAt: "2026-09-06T00:00:00Z",
+    });
+    const unknown = offer({
+      id: "unknown",
+      sourceHealth: "unknown",
+      sourceType: "public_api",
+      lastSeenAt: "2026-09-06T01:00:00Z",
+    });
+    for (const sort of ["price_asc", "price_desc"] as const)
+      expect(
+        sortChannelOffers([unknown, healthy], sort).map((row) => row.id),
+      ).toEqual(["healthy", "unknown"]);
+  });
+  it("normalizes helper aliases and field-specific default directions", () => {
+    const cheap = offer({ id: "cheap", priceMinor: 100 });
+    const expensive = offer({ id: "expensive", priceMinor: 200 });
+    expect(
+      sortChannelOffers([cheap, expensive], { by: "price_desc" })[0].id,
+    ).toBe("expensive");
+    expect(
+      sortChannelOffers([cheap, expensive], {
+        by: "price_desc",
+        direction: "asc",
+      })[0].id,
+    ).toBe("cheap");
+    const exact = offer({ id: "exact", productName: "needle" });
+    const partial = offer({
+      id: "partial",
+      productName: "other needle",
+      rawTitle: "other",
+      merchantName: "other",
+    });
+    expect(
+      sortChannelOffers([partial, exact], {
+        by: "relevance",
+        query: "needle",
+      })[0].id,
+    ).toBe("exact");
+    expect(
+      sortChannelOffers(
+        [offer({ availabilityStatus: "out_of_stock" }), cheap],
+        "availability",
+      )[0].id,
+    ).toBe("cheap");
+  });
   it("declines cross-currency minimum and top-five awards without conversion", () => {
     const offers = [
       offer({
