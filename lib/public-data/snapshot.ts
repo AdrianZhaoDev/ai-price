@@ -125,6 +125,11 @@ export const channelOfferSnapshotSchema = z.object({
         .strict(),
     )
     .max(64)
+    .refine(
+      (tiers) =>
+        new Set(tiers.map((tier) => tier.minQuantity)).size === tiers.length,
+      { message: "Bulk quantity boundaries must be unique." },
+    )
     .default([]),
   tags,
   riskLabels: tags,

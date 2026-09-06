@@ -60,6 +60,42 @@ function assertStablePrice(
     );
 }
 
+type OfferIdentity = { id: string; source: string; key: string };
+function matchOfferIdentities(
+  previous: OfferIdentity[],
+  incoming: OfferIdentity[],
+): Map<string, string> {
+  const byId = new Map(previous.map((row) => [row.id, row]));
+  const byKey = new Map<string, OfferIdentity | null>();
+  const sourceCounts = new Map<string, number>();
+  for (const row of previous) {
+    const key = JSON.stringify([row.source, row.key]);
+    byKey.set(key, byKey.has(key) ? null : row);
+    sourceCounts.set(row.source, (sourceCounts.get(row.source) ?? 0) + 1);
+  }
+  const matches = new Map<string, string>();
+  const retained = new Map<string, Set<string>>();
+  for (const row of incoming) {
+    const prior =
+      byId.get(row.id) ?? byKey.get(JSON.stringify([row.source, row.key]));
+    if (!prior) continue;
+    if (prior.source !== row.source)
+      throw new Error(
+        "Offer source identity changed; previous snapshot retained for review.",
+      );
+    matches.set(row.id, prior.id);
+    const ids = retained.get(row.source) ?? new Set<string>();
+    ids.add(prior.id);
+    retained.set(row.source, ids);
+  }
+  for (const [source, count] of sourceCounts)
+    if (countCollapsed(count, retained.get(source)?.size ?? 0))
+      throw new Error(
+        "Offer identity overlap collapsed; previous snapshot retained for review.",
+      );
+  return matches;
+}
+
 type PublishTransaction = Parameters<
   Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
 >[0];
@@ -338,20 +374,56 @@ export async function publishChannelSnapshot(
         await tx
           .select({
             id: channelPublicOffers.id,
+            merchantId: channelPublicOffers.merchantId,
+            productId: channelPublicOffers.productId,
+            offerUrl: channelPublicOffers.offerUrl,
+            bulkPricingTiers: channelPublicOffers.bulkPricingTiers,
             priceMinor: channelPublicOffers.priceMinor,
             currency: channelPublicOffers.currency,
           })
           .from(channelPublicOffers)
       ).map((row) => [row.id, row]),
     );
+    const identity = (offer: {
+      id: string;
+      merchantId: string;
+      productId: string;
+      offerUrl: string;
+    }): OfferIdentity => ({
+      id: offer.id,
+      source: offer.merchantId,
+      key: JSON.stringify([offer.productId, offer.offerUrl]),
+    });
+    const matches = matchOfferIdentities(
+      [...previousPrices.values()].map(identity),
+      snapshot.offers.map(identity),
+    );
     for (const offer of snapshot.offers) {
-      const prior = previousPrices.get(offer.id);
+      const prior = previousPrices.get(matches.get(offer.id) ?? "");
       if (!prior) continue;
       if (prior.priceMinor != null && prior.currency !== offer.currency)
         throw new Error(
           "Channel price currency changed; previous snapshot retained for review.",
         );
       assertStablePrice(prior.priceMinor, offer.priceMinor);
+      const oldTiers = new Map(
+        prior.bulkPricingTiers.map((tier) => [tier.minQuantity, tier]),
+      );
+      let matchedTiers = 0;
+      for (const tier of offer.bulkPricingTiers) {
+        const old = oldTiers.get(tier.minQuantity);
+        if (!old) continue;
+        matchedTiers++;
+        if (old.currency !== tier.currency)
+          throw new Error(
+            "Bulk price currency changed; previous snapshot retained for review.",
+          );
+        assertStablePrice(finiteNumber(old.priceMinor), tier.priceMinor);
+      }
+      if (countCollapsed(oldTiers.size, matchedTiers))
+        throw new Error(
+          "Bulk tier identity overlap collapsed; previous snapshot retained for review.",
+        );
     }
     await clearChannelRows(tx);
     const offerCounts = new Map<
@@ -728,6 +800,9 @@ export async function publishTransitSnapshot(
         await tx
           .select({
             id: transitOffers.id,
+            stationId: transitOffers.stationId,
+            standardModel: transitOffers.standardModel,
+            groupName: transitOffers.groupName,
             currency: transitOffers.currency,
             billingMode: transitOffers.billingMode,
             inputPrice: transitOffers.inputPrice,
@@ -743,8 +818,27 @@ export async function publishTransitSnapshot(
           .from(transitOffers)
       ).map((row) => [row.id, row]),
     );
+    const identity = (offer: {
+      id: string;
+      stationId: string;
+      standardModel: string;
+      groupName?: string | null;
+      billingMode: string;
+    }): OfferIdentity => ({
+      id: offer.id,
+      source: offer.stationId,
+      key: JSON.stringify([
+        offer.standardModel,
+        offer.groupName ?? null,
+        offer.billingMode,
+      ]),
+    });
+    const matches = matchOfferIdentities(
+      [...previousPrices.values()].map(identity),
+      snapshot.offers.map(identity),
+    );
     for (const offer of snapshot.offers) {
-      const prior = previousPrices.get(offer.id);
+      const prior = previousPrices.get(matches.get(offer.id) ?? "");
       if (!prior) continue;
       if (
         prior.currency !== offer.currency ||

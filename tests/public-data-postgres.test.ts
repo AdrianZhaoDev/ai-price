@@ -547,6 +547,97 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       }),
     ).resolves.toMatchObject({ published: true });
   });
+  it("keeps anomaly checks across ID changes and rejects wholesale identity churn", async () => {
+    const channel = channels();
+    const station = transit();
+    const channelResult = await publishChannelSnapshot(channel);
+    const transitResult = await publishTransitSnapshot(station);
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: [{ ...channel.offers[0], id: "new-id", priceMinor: 9000 }],
+      }),
+    ).rejects.toThrow("Price anomaly");
+    await expect(
+      publishTransitSnapshot({
+        ...station,
+        offers: [{ ...station.offers[0], id: "new-id", modelMultiplier: 20 }],
+        availabilitySamples: [],
+      }),
+    ).rejects.toThrow("Price anomaly");
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: [
+          {
+            ...channel.offers[0],
+            id: "new-id",
+            offerUrl: "https://example.com/different",
+            priceMinor: 9000,
+          },
+        ],
+      }),
+    ).rejects.toThrow("identity overlap");
+    await expect(
+      publishTransitSnapshot({
+        ...station,
+        offers: [
+          {
+            ...station.offers[0],
+            id: "new-id",
+            standardModel: "renamed-model",
+            modelMultiplier: 20,
+          },
+        ],
+        availabilitySamples: [],
+      }),
+    ).rejects.toThrow("identity overlap");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(channelResult.generationId);
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(transitResult.generationId);
+  });
+  it("validates bulk-tier changes even with an unchanged headline price", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].bulkPricingTiers = [
+      { minQuantity: 10, priceMinor: 900, currency: "CNY" },
+    ];
+    const initial = await publishChannelSnapshot(snapshot);
+    for (const tier of [
+      { minQuantity: 10, priceMinor: 9000, currency: "CNY" },
+      { minQuantity: 10, priceMinor: 900, currency: "USD" },
+      { minQuantity: 20, priceMinor: 9000, currency: "CNY" },
+    ])
+      await expect(
+        publishChannelSnapshot({
+          ...snapshot,
+          offers: [{ ...snapshot.offers[0], bulkPricingTiers: [tier] }],
+        }),
+      ).rejects.toThrow();
+    await expect(
+      publishChannelSnapshot({
+        ...snapshot,
+        offers: [
+          {
+            ...snapshot.offers[0],
+            bulkPricingTiers: [
+              ...snapshot.offers[0].bulkPricingTiers,
+              ...snapshot.offers[0].bulkPricingTiers,
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow("unique");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(initial.generationId);
+  });
   it("rejects disappearance of publishable offers even when raw counts stay constant", async () => {
     const snapshot = transit();
     snapshot.availabilitySamples = [];
