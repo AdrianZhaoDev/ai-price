@@ -6,6 +6,7 @@ import {
   dedupeChannelOffers,
   filterChannelOffers,
   isOfferAvailable,
+  effectiveChannelAvailability,
   isOfferEligibleForLowestPrice,
   rankChannelOffers,
   selectLowestAvailableOffer,
@@ -30,6 +31,62 @@ function offer(overrides: Partial<ChannelOffer> = {}): ChannelOffer {
 }
 
 describe("channel availability and ranking", () => {
+  it("declines cross-currency minimum and top-five awards without conversion", () => {
+    const offers = [
+      offer({
+        id: "cny",
+        currency: "CNY",
+        priceMinor: 1000,
+        publicDedupeKey: "cny",
+      }),
+      offer({
+        id: "usd",
+        currency: "USD",
+        priceMinor: 100,
+        publicDedupeKey: "usd",
+      }),
+    ];
+    expect(
+      selectLowestAvailableOffer(offers, { now: referenceNow }),
+    ).toBeUndefined();
+    expect(
+      selectLowestAvailableOffer(offers, { now: referenceNow, currency: "USD" })
+        ?.id,
+    ).toBe("usd");
+    const summary = buildChannelProductSummaries(offers, {
+      now: referenceNow,
+    })[0];
+    expect(summary.multipleCurrencies).toBe(true);
+    expect(summary.lowestPriceMinor).toBeUndefined();
+    expect(
+      buildChannelMerchantSummaries(offers, { now: referenceNow }).every(
+        (merchant) =>
+          merchant.lowestPriceHits === 0 && merchant.topFiveHits === 0,
+      ),
+    ).toBe(true);
+  });
+  it("filters and labels availability from expiry and stock evidence", () => {
+    const expired = offer({
+      id: "expired-evidence",
+      expiresAt: "2020-01-01T00:00:00Z",
+    });
+    const empty = offer({ id: "empty-evidence", stockQuantity: 0 });
+    expect(effectiveChannelAvailability(expired)).toBe("expired");
+    expect(effectiveChannelAvailability(empty)).toBe("out_of_stock");
+    expect(
+      filterChannelOffers([expired, empty], { availability: "in_stock" }),
+    ).toEqual([]);
+    expect(
+      filterChannelOffers([expired, empty], { availability: "expired" }).map(
+        (row) => row.id,
+      ),
+    ).toEqual([expired.id]);
+    expect(
+      filterChannelOffers([expired, empty], {
+        availability: "out_of_stock",
+      }).map((row) => row.id),
+    ).toEqual([empty.id]);
+  });
   it("keeps unknown, sold-out and expired rows out of lowest price", () => {
     const soldOut = offer({
       id: "sold-out",

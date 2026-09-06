@@ -53,7 +53,13 @@ function billingLabel(mode: TransitOffer["billingMode"], locale: Locale) {
   ];
 }
 
-function statusLabel(station: TransitStation, locale: Locale): string {
+function statusLabel(
+  station: TransitStation,
+  locale: Locale,
+  degraded: boolean,
+): string {
+  if (degraded)
+    return locale === "en" ? "Stale or degraded data" : "数据过期或降级";
   if (station.synthetic)
     return locale === "en" ? "Synthetic fixture" : "合成演示数据";
   if (station.dataStatus === "verified")
@@ -134,7 +140,7 @@ export function ApiTransitDetailPage({
             <p className={styles.lead}>{station.summary}</p>
           </div>
           <div className={styles.heroAside}>
-            <p>{statusLabel(station, locale)}</p>
+            <p>{statusLabel(station, locale, degraded)}</p>
             <p>
               {isEnglish ? "Last updated" : "最近更新"}:{" "}
               {formatDate(station.lastUpdatedAt, locale)}
@@ -149,7 +155,7 @@ export function ApiTransitDetailPage({
         <div
           className={styles.status}
           data-tone={
-            !station.synthetic && station.dataStatus === "verified"
+            !degraded && !station.synthetic && station.dataStatus === "verified"
               ? "ok"
               : "warning"
           }
@@ -157,7 +163,7 @@ export function ApiTransitDetailPage({
         >
           <span className={styles.statusMark} aria-hidden="true" />
           <div>
-            <strong>{statusLabel(station, locale)}</strong>
+            <strong>{statusLabel(station, locale, degraded)}</strong>
             <p>
               {station.synthetic
                 ? isEnglish

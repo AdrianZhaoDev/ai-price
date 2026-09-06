@@ -1,5 +1,6 @@
 import { isSafePublicHttpUrl, safePublicHttpUrl } from "@/lib/public-data/urls";
 import type { ChannelListResult } from "@/lib/channels/repository";
+import { effectiveChannelAvailability } from "@/lib/channels/ranking";
 import type {
   ChannelMerchant,
   ChannelMerchantSummary,
@@ -97,7 +98,7 @@ export function serializeChannelOffer(offer: ChannelOffer) {
     offerUrl: safeUrl(offer.offerUrl),
     priceMinor: offer.priceMinor,
     currency: offer.currency,
-    availability: offer.availabilityStatus,
+    availability: effectiveChannelAvailability(offer),
     stockQuantity: offer.stockQuantity ?? null,
     minPurchaseQuantity: offer.minPurchaseQuantity ?? null,
     tiers: offer.tiers.map((tier) => ({
@@ -157,6 +158,7 @@ function serializeChannelProductSummary(summary: ChannelProductSummary) {
     merchantCount: summary.merchantCount,
     lowestPriceMinor: summary.lowestPriceMinor ?? null,
     lowestCurrency: summary.lowestCurrency ?? null,
+    multipleCurrencies: summary.multipleCurrencies === true,
     lowestOffer: summary.lowestAvailableOffer
       ? serializeChannelOffer(summary.lowestAvailableOffer)
       : null,

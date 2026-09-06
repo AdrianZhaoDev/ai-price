@@ -10,6 +10,70 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("demotes a verified offer without any verification timestamp", () => {
+    const station = getSyntheticTransitStations()[0];
+    const result = normalizeTransitOffer(
+      { ...station.offers[0], status: "verified", lastVerifiedAt: null },
+      station.id,
+    );
+    expect(result?.status).toBe("unknown");
+  });
+  it("sorts structured comparisons using only matching offer evidence", async () => {
+    const template = getSyntheticTransitStations()[0];
+    const now = Date.now();
+    const goodOffer = {
+      ...template.offers[0],
+      id: "good-match",
+      standardModelId: "selected",
+      combinedRate: 1,
+      lastVerifiedAt: new Date(now - 3600000).toISOString(),
+      availability: {
+        ...template.offers[0].availability,
+        sevenDayRate: 0.8,
+        sevenDaySamples: 10,
+      },
+    };
+    const badOffer = {
+      ...goodOffer,
+      id: "bad-match",
+      combinedRate: 10,
+      lastVerifiedAt: new Date(now - 7200000).toISOString(),
+      availability: { ...goodOffer.availability, sevenDayRate: 0.2 },
+    };
+    const unrelated = {
+      ...goodOffer,
+      id: "unrelated",
+      standardModelId: "other",
+      combinedRate: 0.001,
+      lastVerifiedAt: new Date(now).toISOString(),
+      availability: { ...goodOffer.availability, sevenDayRate: 1 },
+    };
+    const stations = [
+      {
+        ...template,
+        id: "bad",
+        slug: "bad",
+        name: "A bad",
+        lastUpdatedAt: unrelated.lastVerifiedAt,
+        offers: [unrelated, badOffer],
+        prices: [unrelated, badOffer],
+      },
+      {
+        ...template,
+        id: "good",
+        slug: "good",
+        name: "Z good",
+        offers: [goodOffer],
+        prices: [goodOffer],
+      },
+    ];
+    const repository = createTransitRepository({ fixture: stations });
+    for (const sort of ["rate", "stability", "updated", "overall"]) {
+      const result = await repository.list({ model: "selected", sort });
+      expect(result.items[0].id).toBe("good");
+      expect(result.items[1].offerCount).toBe(2);
+    }
+  });
   it("does not refresh old offer verification just by rebuilding its generation", () => {
     const now = new Date();
     const station = getSyntheticTransitStations()[0];
@@ -49,6 +113,10 @@ describe("transit repository", () => {
     );
     expect(
       (await repository.list({ model: "model-99" })).items[0].offers[0].id,
+    ).toBe("offer-99");
+    expect(
+      (await repository.list({ q: station.name, model: "model-99" })).items[0]
+        .offers[0].id,
     ).toBe("offer-99");
   });
   it("retains explicit degraded status and independently marks old generations stale", () => {

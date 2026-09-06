@@ -1,4 +1,5 @@
 import type { ChannelListResult } from "@/lib/channels/repository";
+import { effectiveChannelAvailability } from "@/lib/channels/ranking";
 import type {
   ChannelMerchant,
   ChannelMerchantSummary,
@@ -236,7 +237,7 @@ export function publicChannelOffer(
     offerUrl: publicUrl(offer.offerUrl),
     priceMinor: integer(offer.priceMinor),
     currency: currency(offer.currency),
-    availabilityStatus: enumValue(offer.availabilityStatus, [
+    availabilityStatus: enumValue(effectiveChannelAvailability(offer), [
       "in_stock",
       "out_of_stock",
       "unknown",
@@ -345,6 +346,7 @@ function publicChannelProductSummary(
     merchantCount: integer(product.merchantCount),
     lowestPriceMinor: integer(product.lowestPriceMinor),
     lowestCurrency: currency(product.lowestCurrency),
+    multipleCurrencies: product.multipleCurrencies === true,
     lowestOfferId: nullableText(product.lowestOfferId, 160),
     lowestAvailableOffer:
       product.lowestAvailableOffer &&

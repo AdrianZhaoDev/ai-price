@@ -7,6 +7,7 @@ import {
 } from "@/lib/channels/repository";
 import {
   isOfferAvailable,
+  effectiveChannelAvailability,
   type OfferAvailabilityOptions,
 } from "@/lib/channels/ranking";
 import type {
@@ -538,11 +539,15 @@ export async function ChannelsPage({
                       </span>
                     </div>
                     <span className={styles.price}>
-                      {formatMinorPrice(
-                        product.lowestPriceMinor,
-                        product.lowestCurrency,
-                        locale,
-                      )}
+                      {product.multipleCurrencies
+                        ? isEnglish
+                          ? "Currencies are not comparable"
+                          : "不同币种，不作最低价比较"
+                        : formatMinorPrice(
+                            product.lowestPriceMinor,
+                            product.lowestCurrency,
+                            locale,
+                          )}
                     </span>
                     <p className={styles.small}>
                       {product.offerCount}{" "}
@@ -672,7 +677,10 @@ export async function ChannelsPage({
                       className={styles.pill}
                       data-tone={available ? "positive" : "warning"}
                     >
-                      {availabilityLabel(offer.availabilityStatus, locale)}
+                      {availabilityLabel(
+                        effectiveChannelAvailability(offer, availabilityNow),
+                        locale,
+                      )}
                     </span>
                     <a
                       className={styles.sourceLink}

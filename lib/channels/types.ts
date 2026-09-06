@@ -918,6 +918,7 @@ export type ChannelProductSummary = {
   merchantCount: number;
   lowestPriceMinor?: number;
   lowestCurrency?: string;
+  multipleCurrencies?: boolean;
   lowestOfferId?: string;
   lowestAvailableOffer?: ChannelOffer;
   lastSeenAt?: string;

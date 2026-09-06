@@ -533,8 +533,10 @@ export function normalizeTransitOffer(
       "verified",
     ),
   } satisfies TransitOffer;
-  if (candidate.status === "verified" && candidate.lastVerifiedAt) {
-    const age = now.getTime() - Date.parse(candidate.lastVerifiedAt);
+  if (candidate.status === "verified") {
+    const age = candidate.lastVerifiedAt
+      ? now.getTime() - Date.parse(candidate.lastVerifiedAt)
+      : Infinity;
     if (age > 36 * 60 * 60 * 1000 || age < -5 * 60 * 1000)
       candidate.status = "unknown";
   }
@@ -1306,18 +1308,50 @@ export class TransitRepository {
         : station.offers.filter(isTransitOfferPublic);
       return { ...station, offers, prices: offers };
     });
-    const sorted = sortTransitStations(visible, query.sort);
+    const visibleById = new Map(
+      visible.map((station) => [station.id, station]),
+    );
+    const structuredFilter = Boolean(
+      query.model || query.family || query.channel || query.pool,
+    );
+    const rankable = structuredFilter
+      ? visible.map((station) => {
+          const offers = station.offers.filter((offer) =>
+            offerMatches(offer, query),
+          );
+          const latest = offers.reduce(
+            (value, offer) =>
+              Math.max(value, Date.parse(offer.lastVerifiedAt ?? "") || 0),
+            0,
+          );
+          return {
+            ...station,
+            offers,
+            prices: offers,
+            lastUpdatedAt: new Date(latest).toISOString(),
+            availability: { ...station.availability, sevenDaySamples: 0 },
+          };
+        })
+      : visible;
+    const sorted = sortTransitStations(rankable, query.sort);
     const page = paginateTransitStations(sorted, query);
-    const items = page.items.map((station) => {
+    const items = page.items.map((rankedStation) => {
+      const station = visibleById.get(rankedStation.id)!;
       const q = query.q?.toLocaleLowerCase("en-US");
+      const stationMatchesText =
+        !q ||
+        [station.name, station.slug, station.summary]
+          .join(" ")
+          .toLocaleLowerCase("en-US")
+          .includes(q);
       const preferred = station.offers.filter(
         (offer) =>
           offerMatches(offer, query) &&
-          (!q ||
+          (stationMatchesText ||
             [offer.standardModelId, offer.standardModelLabel, offer.groupName]
               .join(" ")
               .toLocaleLowerCase("en-US")
-              .includes(q)),
+              .includes(q!)),
       );
       const preferredIds = new Set(preferred.map((offer) => offer.id));
       return publicStationView(

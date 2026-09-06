@@ -49,6 +49,13 @@ describe("transit detail rendering", () => {
       expect(html).toContain("0.00000001×");
       expect(html).toContain("0.00000002");
       expect(html).toContain(locale === "en" ? "degraded" : "降级");
+      const page = new DOMParser().parseFromString(html, "text/html");
+      expect(
+        page.querySelector('[role="status"]')?.getAttribute("data-tone"),
+      ).toBe("warning");
+      expect(page.querySelector('[role="status"] strong')?.textContent).toBe(
+        locale === "en" ? "Stale or degraded data" : "数据过期或降级",
+      );
       expect(html).toContain("nofollow noopener noreferrer");
       for (const example of stations) {
         expect(

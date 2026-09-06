@@ -45,6 +45,26 @@ function availabilityOf(offer: ChannelOffer): string {
   return candidate.availabilityStatus ?? candidate.availability ?? "unknown";
 }
 
+/** Source status corrected by explicit expiry and inventory evidence. */
+export function effectiveChannelAvailability(
+  offer: ChannelOffer,
+  nowOrOptions: Date | OfferAvailabilityOptions = new Date(),
+): ChannelOffer["availabilityStatus"] {
+  const now = asDate(
+    nowOrOptions instanceof Date ? nowOrOptions : nowOrOptions.now,
+  );
+  if (offer.expiresAt && timestamp(offer.expiresAt) <= now.getTime())
+    return "expired";
+  if (availabilityOf(offer) === "expired") return "expired";
+  if (
+    offer.stockQuantity !== null &&
+    offer.stockQuantity !== undefined &&
+    offer.stockQuantity <= 0
+  )
+    return "out_of_stock";
+  return availabilityOf(offer) as ChannelOffer["availabilityStatus"];
+}
+
 function publicationOf(offer: ChannelOffer): string {
   return (offer.publicationStatus ?? "published").toLowerCase();
 }
@@ -65,7 +85,7 @@ export function isOfferAvailable(
   const options =
     nowOrOptions instanceof Date ? { now: nowOrOptions } : nowOrOptions;
   const now = asDate(options.now);
-  const availability = availabilityOf(offer);
+  const availability = effectiveChannelAvailability(offer, now);
   if (availability !== "in_stock") return false;
   if (offer.priceMinor === null || !Number.isFinite(offer.priceMinor)) {
     return false;
@@ -271,7 +291,7 @@ export function filterChannelOffers(
     }
     if (
       filters.availability !== "all" &&
-      availabilityOf(offer) !== filters.availability
+      effectiveChannelAvailability(offer) !== filters.availability
     ) {
       return false;
     }
@@ -301,7 +321,7 @@ function availabilityRank(offer: ChannelOffer): number {
     expired: 3,
     unavailable: 4,
   };
-  return ranks[availabilityOf(offer)] ?? 9;
+  return ranks[effectiveChannelAvailability(offer)] ?? 9;
 }
 
 function priceCompare(left: ChannelOffer, right: ChannelOffer): number {
@@ -441,6 +461,8 @@ export function selectLowestAvailableOffer(
     }
     return isOfferEligibleForLowestPrice(offer, options);
   });
+  if (new Set(eligible.map((offer) => offer.currency)).size > 1)
+    return undefined;
   return sortChannelOffers(eligible, "price_asc")[0];
 }
 
@@ -484,6 +506,14 @@ export function buildChannelProductSummaries(
       offerCount: group.length,
       availableOfferCount: available.length,
       merchantCount: new Set(available.map((offer) => offer.merchantId)).size,
+      multipleCurrencies:
+        new Set(
+          available
+            .filter((offer) =>
+              isOfferEligibleForLowestPrice(offer, { now: options.now }),
+            )
+            .map((offer) => offer.currency),
+        ).size > 1,
       lowestPriceMinor: lowest?.priceMinor ?? undefined,
       lowestCurrency: lowest?.currency,
       lowestOfferId: lowest?.id,
@@ -540,6 +570,7 @@ export function buildChannelMerchantSummaries(
     const eligible = group.filter((offer) =>
       isOfferEligibleForLowestPrice(offer, { now: options.now }),
     );
+    if (new Set(eligible.map((offer) => offer.currency)).size > 1) continue;
     const lowest = selectLowestAvailableOffer(group, { now: options.now });
     if (lowest) lowestIds.add(lowest.id);
     for (const offer of sortChannelOffers(eligible, "price_asc").slice(0, 5)) {
