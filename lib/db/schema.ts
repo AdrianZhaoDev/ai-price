@@ -824,6 +824,7 @@ export const channelPublicOffers = pgTable(
       .references(() => channelProducts.id, { onDelete: "restrict" })
       .notNull(),
     sourceName: text("source_name").notNull(),
+    sourceType: text("source_type").default("manual_snapshot").notNull(),
     sourceUrl: text("source_url").notNull(),
     title: text("title").notNull(),
     offerUrl: text("offer_url").notNull(),

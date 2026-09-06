@@ -3,7 +3,11 @@ import {
   getDefaultChannelRepository,
   createChannelRepository,
 } from "@/lib/channels/repository";
-import { handleChannelDetailGet } from "@/app/api/_public-data/handlers";
+import {
+  handleChannelDetailGet,
+  handleTransitGet,
+} from "@/app/api/_public-data/handlers";
+import { getDefaultTransitRepository } from "@/lib/transit/repository";
 import { GET as channelsGet } from "@/app/api/channels/route";
 import { GET as offerDetailGet } from "@/app/api/channels/offers/[id]/route";
 import { createSyntheticChannelSnapshot } from "@/lib/channels/fixture";
@@ -25,6 +29,46 @@ import { isTransitStationPublic } from "@/lib/transit/types";
 import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("returns successful empty queries from nonempty last-good snapshots", async () => {
+    const channelSnapshot = createSyntheticChannelSnapshot();
+    channelSnapshot.dataStatus = "degraded";
+    channelSnapshot.dataSource = "database";
+    const channelSpy = vi
+      .spyOn(getDefaultChannelRepository(), "load")
+      .mockResolvedValue(channelSnapshot);
+    const transitRepository = getDefaultTransitRepository();
+    const model = await transitRepository.load();
+    const transitSpy = vi.spyOn(transitRepository, "load").mockResolvedValue({
+      ...model,
+      stations: getSyntheticTransitStations().map((station) => ({
+        ...station,
+        dataStatus: "verified" as const,
+      })),
+      degraded: true,
+      isSynthetic: false,
+    });
+    try {
+      for (const query of ["q=no-such-record", "offset=5000"])
+        expect(
+          (
+            await channelsGet(
+              new Request(`http://localhost/api/channels?${query}`),
+            )
+          ).status,
+        ).toBe(200);
+      for (const query of ["q=no-such-record", "cursor=o5000"])
+        expect(
+          (
+            await handleTransitGet(
+              new Request(`http://localhost/api/transit?${query}`),
+            )
+          ).status,
+        ).toBe(200);
+    } finally {
+      channelSpy.mockRestore();
+      transitSpy.mockRestore();
+    }
+  });
   it("rejects monitor scopes and attribution not supported by the read model", () => {
     const sample = {
       id: "sample",
@@ -38,6 +82,17 @@ describe("public review regressions", () => {
     expect(transitAvailabilitySnapshotSchema.safeParse(sample).success).toBe(
       true,
     );
+    expect(
+      transitAvailabilitySnapshotSchema.safeParse({ ...sample, sampleCount: 2 })
+        .success,
+    ).toBe(false);
+    expect(
+      transitAvailabilitySnapshotSchema.safeParse({
+        ...sample,
+        sampleCount: 2,
+        sevenDayRate: 0,
+      }).success,
+    ).toBe(true);
     for (const scope of ["group", "model"])
       expect(
         transitAvailabilitySnapshotSchema.safeParse({ ...sample, scope })

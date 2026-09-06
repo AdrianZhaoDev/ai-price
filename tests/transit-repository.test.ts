@@ -10,6 +10,38 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("does not blend a partial aggregate with another source's evidence", () => {
+    const fallback = normalizeTransitAvailability({
+      sevenDayRate: 0.75,
+      sevenDaySamples: 4,
+      sourceType: "authorized_probe",
+      sourceLabel: "Independent probe",
+      lastCheckedAt: "2026-09-06T00:00:00Z",
+    });
+    const partial = normalizeTransitAvailability(
+      { sourceType: "merchant_reported" },
+      fallback,
+    );
+    expect(partial.sevenDayRate).toBeNull();
+    expect(partial.sevenDaySamples).toBe(0);
+    expect(partial.sourceLabel).toBeNull();
+    const station = getSyntheticTransitStations()[0];
+    const offer = normalizeTransitOffer(
+      {
+        ...station.offers[0],
+        availability: { sourceType: "merchant_reported" },
+      },
+      station.id,
+      fallback,
+      new Date("2026-09-06T01:00:00Z"),
+    );
+    expect(offer?.availability).toMatchObject({
+      sevenDayRate: 0.75,
+      sevenDaySamples: 4,
+      sourceType: "authorized_probe",
+      sourceLabel: "Independent probe",
+    });
+  });
   it("expires embedded aggregates on successful reads and uses fresh sample evidence", () => {
     const now = new Date("2026-09-06T12:00:00Z");
     const station = getSyntheticTransitStations()[0];

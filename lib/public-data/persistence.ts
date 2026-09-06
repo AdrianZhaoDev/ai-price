@@ -244,6 +244,29 @@ export async function publishChannelSnapshot(
       }
     }
 
+    const baseline = await tx
+      .select({
+        merchantId: channelPublicOffers.merchantId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(channelPublicOffers)
+      .groupBy(channelPublicOffers.merchantId);
+    const incomingCounts = new Map<string, number>();
+    for (const offer of snapshot.offers)
+      incomingCounts.set(
+        offer.merchantId,
+        (incomingCounts.get(offer.merchantId) ?? 0) + 1,
+      );
+    for (const source of baseline) {
+      const nextCount = incomingCounts.get(source.merchantId) ?? 0;
+      if (
+        nextCount === 0 ||
+        (source.count - nextCount >= 2 && nextCount < source.count * 0.7)
+      )
+        throw new Error(
+          "Channel source coverage or offer count collapsed; previous snapshot retained.",
+        );
+    }
     await clearChannelRows(tx);
     const offerCounts = new Map<
       string,
@@ -361,6 +384,7 @@ export async function publishChannelSnapshot(
           merchantId: offer.merchantId,
           productId: offer.productId,
           sourceName: offer.sourceName,
+          sourceType: offer.sourceType,
           sourceUrl: offer.sourceUrl,
           title: offer.title,
           offerUrl: offer.offerUrl,

@@ -257,6 +257,12 @@ public_data_generations 授予 SELECT、INSERT、UPDATE，其余六张公共当�
 SELECT、INSERT、UPDATE、DELETE。只读 Web 账号仅授予八张公共表的 SELECT。
 不要授予 TRUNCATE、DDL、旧业务表访问或额外角色成员资格。
 
+`0012` 为当前卡网报价新增 source_type；旧导入记录默认为 manual_snapshot，不能从
+来源展示名称推断 API/feed 类型。原站适配器显式写 public_api，后续 feed 应声明准确类型。
+迁移为增量加列，代码回滚保留该列。报价首次出现时间从保留观测取最早值；采价不等于商户审核。
+卡网替换会拒绝任何已有商户来源消失，以及单来源报价减少至少两条且低于原数 70% 的快照；
+若是获准的真实下架或来源移除，应人工复核并制定独立数据调整，不能用截断快照绕过门禁。
+
 暂无获准来源时，可在用户明确批准后仅发布“待收录/暂无已核验数据”的只读栏目：
 `PUBLIC_DATA_INDEXING_ENABLED` 保持 false，GitHub Variable
 `PUBLIC_DATA_COLLECTION_ENABLED` 不设置或设为 false。生产禁止使用 synthetic fixture。

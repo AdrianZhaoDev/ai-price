@@ -117,11 +117,12 @@ function freshestTimestamp(station: TransitStation): number {
 }
 
 function stabilityScore(station: TransitStation): number | null {
-  const values = station.offers
-    .map((offer) => offer.availability)
-    .filter((availability) => availability.sevenDayRate !== null);
+  const values = [
+    station.availability,
+    ...station.offers.map((offer) => offer.availability),
+  ].filter((availability) => availabilityRate(availability) !== null);
   if (!values.length) return null;
-  // Use the strongest available exact sample, while leaving sample count as a
+  // Use the strongest available station or exact-offer sample, with count as a
   // tie-breaker.  This is intentionally not a hidden weighted recommendation.
   return Math.max(...values.map((item) => item.sevenDayRate as number));
 }

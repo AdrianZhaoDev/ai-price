@@ -85,6 +85,13 @@
       "when": 1788724397999,
       "tag": "0011_preserve_channel_observations",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788725812605,
+      "tag": "0012_channel_source_type",
+      "breakpoints": true
     }
   ]
 }

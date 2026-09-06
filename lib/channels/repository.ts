@@ -8,9 +8,10 @@ import {
   channelMerchants,
   channelProducts,
   channelPublicOffers,
+  channelOfferObservations,
   publicDataGenerations,
 } from "@/lib/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, min } from "drizzle-orm";
 import { createSyntheticChannelSnapshot } from "./fixture";
 import {
   buildChannelMerchantSummaries,
@@ -51,6 +52,8 @@ export type ChannelRepositoryOptions = {
 };
 
 export type ChannelListResult = {
+  /** Unfiltered read-model state, not the current query's match count. */
+  snapshotEmpty?: boolean;
   offers: ChannelOffer[];
   products: ReturnType<typeof import("./ranking").buildChannelProductSummaries>;
   merchants: ReturnType<
@@ -68,22 +71,6 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function sourceTypeFromName(
-  name: string,
-):
-  | "public_page"
-  | "public_api"
-  | "authorized_feed"
-  | "merchant_submission"
-  | "manual_snapshot" {
-  const normalized = name.toLocaleLowerCase("en-US");
-  if (normalized.includes("api")) return "public_api";
-  if (normalized.includes("feed")) return "authorized_feed";
-  if (normalized.includes("submit")) return "merchant_submission";
-  if (normalized.includes("manual")) return "manual_snapshot";
-  return "public_page";
 }
 
 function publicationStatusFromDb(
@@ -157,20 +144,36 @@ async function readChannelSnapshot(
     .limit(1);
   if (!generation) return null;
 
-  const [merchantRows, productRows, offerRows] = await Promise.all([
-    database
-      .select()
-      .from(channelMerchants)
-      .where(eq(channelMerchants.generationId, generation.id)),
-    database
-      .select()
-      .from(channelProducts)
-      .where(eq(channelProducts.generationId, generation.id)),
-    database
-      .select()
-      .from(channelPublicOffers)
-      .where(eq(channelPublicOffers.generationId, generation.id)),
-  ]);
+  const [merchantRows, productRows, offerRows, firstObservations] =
+    await Promise.all([
+      database
+        .select()
+        .from(channelMerchants)
+        .where(eq(channelMerchants.generationId, generation.id)),
+      database
+        .select()
+        .from(channelProducts)
+        .where(eq(channelProducts.generationId, generation.id)),
+      database
+        .select()
+        .from(channelPublicOffers)
+        .where(eq(channelPublicOffers.generationId, generation.id)),
+      database
+        .select({
+          offerId: channelOfferObservations.offerId,
+          firstSeenAt: min(channelOfferObservations.observedAt),
+        })
+        .from(channelOfferObservations)
+        .innerJoin(
+          channelPublicOffers,
+          eq(channelOfferObservations.offerId, channelPublicOffers.id),
+        )
+        .where(eq(channelPublicOffers.generationId, generation.id))
+        .groupBy(channelOfferObservations.offerId),
+    ]);
+  const firstSeenById = new Map(
+    firstObservations.map((row) => [row.offerId, row.firstSeenAt]),
+  );
 
   const generatedAt = generation.generatedAt.toISOString();
   const merchants: ChannelMerchant[] = merchantRows.flatMap((row) => {
@@ -184,7 +187,8 @@ async function readChannelSnapshot(
       operatorType: row.operatorType ?? undefined,
       platforms: asStringArray(row.platforms),
       riskLabels: asStringArray(row.riskLabels),
-      lastReviewedAt: row.latestSeenAt?.toISOString() ?? null,
+      // Price collection is not an identity or risk review.
+      lastReviewedAt: null,
     });
     return parsed.success ? [parsed.data] : [];
   });
@@ -224,7 +228,7 @@ async function readChannelSnapshot(
         sourceId: createHash("sha256")
           .update(JSON.stringify([row.sourceName, row.sourceUrl]))
           .digest("hex"),
-        sourceType: sourceTypeFromName(row.sourceName),
+        sourceType: row.sourceType,
         sourceUrl: row.sourceUrl,
         offerUrl: row.offerUrl,
         priceMinor: row.priceMinor,
@@ -236,7 +240,7 @@ async function readChannelSnapshot(
         labels: asStringArray(row.tags),
         riskLabels: asStringArray(row.riskLabels),
         expiresAt: row.expiresAt?.toISOString() ?? null,
-        firstSeenAt: row.observedAt.toISOString(),
+        firstSeenAt: firstSeenById.get(row.id) ?? row.observedAt.toISOString(),
         lastSeenAt: row.lastSeenAt.toISOString(),
         observedAt: row.observedAt.toISOString(),
         publicDedupeKey: createHash("sha256")
@@ -493,6 +497,7 @@ export class ChannelRepository {
       products,
       merchants,
       totalOffers: filteredUnique.length,
+      snapshotEmpty: snapshot.offers.length === 0,
       generatedAt: snapshot.generatedAt,
       generationId: snapshot.generationId,
       dataStatus: snapshot.dataStatus,

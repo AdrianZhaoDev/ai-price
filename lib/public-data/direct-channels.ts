@@ -89,6 +89,7 @@ export function parseDirectChannels(
         merchantId: directChannelSourceId,
         productId: "redeemgpt-plus-recharge-89",
         sourceName: "公开 API / Original merchant catalogue",
+        sourceType: "public_api",
         sourceUrl: endpoint,
         offerUrl: origin,
         title: item.name,

@@ -119,7 +119,7 @@ export async function handleChannelsGet(
     const body = publicChannelList(result, view, parsed.data);
     const unavailable =
       result.dataStatus === "degraded" &&
-      result.offers.length === 0 &&
+      result.snapshotEmpty === true &&
       result.dataSource !== "synthetic" &&
       result.dataSource !== "synthetic_fixture";
     return publicJson(body, {
@@ -269,7 +269,7 @@ export async function handleTransitGet(request: Request): Promise<Response> {
     });
     const body = publicTransitList(result);
     const unavailable =
-      result.degraded && result.items.length === 0 && !result.isSynthetic;
+      result.degraded && result.snapshotEmpty === true && !result.isSynthetic;
     return publicJson(body, {
       status: unavailable ? 503 : 200,
       cache: !unavailable,

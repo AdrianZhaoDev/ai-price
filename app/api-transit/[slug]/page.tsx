@@ -7,7 +7,7 @@ import {
 import { loadTransitDetail } from "@/lib/transit/detail";
 import { isPublicDirectoryIndexingEnabled } from "@/lib/public-data/indexing";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,

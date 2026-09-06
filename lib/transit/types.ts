@@ -384,6 +384,8 @@ export const transitListQuerySchema = z
 export type TransitListQuery = z.infer<typeof transitListQuerySchema>;
 
 export type TransitListResult = {
+  /** Whether the underlying model is empty before filtering and pagination. */
+  snapshotEmpty?: boolean;
   items: TransitStation[];
   /** Alias retained for callers that use station terminology. */
   stations: TransitStation[];

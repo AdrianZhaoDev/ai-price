@@ -60,6 +60,23 @@ describe("transit ratio and comparable-rate rules", () => {
 });
 
 describe("transit filters, ordering, and cursors", () => {
+  it("ranks station-scoped availability by rate before sample count", () => {
+    const template = getSyntheticTransitStations()[0];
+    const stations = [0, 1].map((rate) => ({
+      ...template,
+      id: `station-${rate}`,
+      slug: `station-${rate}`,
+      offers: [],
+      availability: {
+        ...template.availability,
+        sevenDayRate: rate,
+        sevenDaySamples: rate ? 2 : 100,
+      },
+    }));
+    expect(
+      sortTransitStations(stations, "stability").map((station) => station.id),
+    ).toEqual(["station-1", "station-0"]);
+  });
   it("filters synthetic stations by text, family, channel, and risk", () => {
     const stations = getSyntheticTransitStations();
     expect(

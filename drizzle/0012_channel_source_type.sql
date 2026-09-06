@@ -1,0 +1,1 @@
+ALTER TABLE "channel_public_offers" ADD COLUMN "source_type" text DEFAULT 'manual_snapshot' NOT NULL;

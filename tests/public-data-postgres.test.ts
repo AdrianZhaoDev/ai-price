@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { closeDatabase, createDatabaseConnection } from "@/lib/db/client";
 import {
   channelSnapshotSchema,
@@ -164,6 +172,17 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         if (statement.trim()) await connection.client.unsafe(statement);
       }
     }
+    const [sourceColumn] =
+      await connection.client`select count(*)::int as count from information_schema.columns where table_schema='public' and table_name='channel_public_offers' and column_name='source_type'`;
+    if (!sourceColumn.count)
+      await connection.client.unsafe(
+        await readFile(
+          new URL("../drizzle/0012_channel_source_type.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+  });
+  beforeEach(async () => {
     await connection.client`truncate channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
   });
   afterAll(async () => {
@@ -175,11 +194,18 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
   it("retains immutable offer history through replacement, removal, and replay", async () => {
     const a = channels();
     a.offers[0].id = "history-offer";
+    a.offers[0].observedAt = new Date(Date.parse(now) - 3600000).toISOString();
     const first = await publishChannelSnapshot(a);
     const b = channels();
     b.offers[0].id = "history-offer";
     b.offers[0].priceMinor = 1290;
     await publishChannelSnapshot(b);
+    const refreshed = await loadChannelSnapshotFromDatabase(
+      connection.database,
+    );
+    expect(refreshed?.offers[0].firstSeenAt).toBe(a.offers[0].observedAt);
+    expect(refreshed?.offers[0].observedAt).toBe(b.offers[0].observedAt);
+    expect(refreshed?.merchants?.[0].lastReviewedAt ?? null).toBeNull();
     await publishChannelSnapshot(a);
     const replacement = channels();
     replacement.offers[0].id = "replacement-offer";
@@ -204,6 +230,47 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect(
       await connection.client`select id from channel_offer_observations where offer_id='history-offer'`,
     ).toHaveLength(2);
+  });
+
+  it("preserves explicit source types independent of source labels", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].sourceType = "authorized_feed";
+    snapshot.offers[0].sourceName = "Capital Market";
+    await publishChannelSnapshot(snapshot);
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))?.offers[0]
+        .sourceType,
+    ).toBe("authorized_feed");
+  });
+
+  it("rejects a nonempty partial channel corpus and lost merchant coverage", async () => {
+    const snapshot = channels();
+    snapshot.offers = Array.from({ length: 10 }, (_, index) => ({
+      ...snapshot.offers[0],
+      id: `offer-${index}`,
+      offerUrl: `https://example.com/buy/${index}`,
+    }));
+    const initial = await publishChannelSnapshot(snapshot);
+    await expect(
+      publishChannelSnapshot({
+        ...snapshot,
+        offers: snapshot.offers.slice(0, 1),
+      }),
+    ).rejects.toThrow("collapsed");
+    const changedMerchant = {
+      ...snapshot,
+      merchants: [{ ...snapshot.merchants[0], id: "different" }],
+      offers: snapshot.offers.map((offer) => ({
+        ...offer,
+        merchantId: "different",
+      })),
+    };
+    await expect(publishChannelSnapshot(changedMerchant)).rejects.toThrow(
+      "collapsed",
+    );
+    const retained = await loadChannelSnapshotFromDatabase(connection.database);
+    expect(retained?.generationId).toBe(initial.generationId);
+    expect(retained?.offers).toHaveLength(10);
   });
 
   it("round-trips nullable channel fields, keeps repeat imports idempotent, and restores A after B", async () => {
@@ -231,6 +298,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
   });
 
   it("rolls back a failed replacement after row deletion without corrupting the last snapshot", async () => {
+    await publishChannelSnapshot(channels());
     const bad = channels();
     bad.products.push({
       ...bad.products[0],

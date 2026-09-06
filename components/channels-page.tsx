@@ -53,6 +53,58 @@ function boundedLimit(value: string | undefined): number | undefined {
   return Math.min(Math.max(parsed, 1), 50);
 }
 
+function boundedOffset(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0
+    ? Math.min(parsed, 500000)
+    : 0;
+}
+
+function DirectoryPagination({
+  path,
+  params,
+  parameter,
+  offset,
+  limit,
+  total,
+  label,
+  isEnglish,
+}: {
+  path: string;
+  params: URLSearchParams;
+  parameter: string;
+  offset: number;
+  limit: number;
+  total: number;
+  label: string;
+  isEnglish: boolean;
+}) {
+  if (total <= limit && offset === 0) return null;
+  const link = (next: number) => {
+    const query = new URLSearchParams(params);
+    query.set(parameter, String(next));
+    return `${path}?${query.toString()}`;
+  };
+  return (
+    <nav className={styles.sectionHeader} aria-label={label}>
+      {offset > 0 ? (
+        <Link href={link(Math.max(0, offset - limit))} prefetch={false}>
+          {isEnglish ? "Previous page" : "上一页"}
+        </Link>
+      ) : null}
+      <span>
+        {Math.min(offset + 1, total)}–{Math.min(offset + limit, total)} /{" "}
+        {total}
+      </span>
+      {offset + limit < total ? (
+        <Link href={link(offset + limit)} prefetch={false}>
+          {isEnglish ? "Next page" : "下一页"}
+        </Link>
+      ) : null}
+    </nav>
+  );
+}
+
 function channelFiltersFromParams(
   params: Record<string, string | string[] | undefined>,
 ): Partial<ChannelOfferFilters> {
@@ -69,12 +121,13 @@ function channelFiltersFromParams(
   )
     ? (sortValue as ChannelOfferFilters["sort"])
     : undefined;
-  const limit = boundedLimit(firstValue(params.limit));
+  const limit = boundedLimit(firstValue(params.limit)) ?? 20;
   return {
     ...(query ? { query } : {}),
     ...(availability ? { availability } : {}),
     ...(sort ? { sort } : {}),
-    ...(limit ? { limit } : {}),
+    limit,
+    offset: boundedOffset(firstValue(params.offset)),
     publishedOnly: true,
   };
 }
@@ -289,8 +342,44 @@ export async function ChannelsPage({
   );
   const path = isEnglish ? "/en/channels" : "/channels";
   const structuredData = channelStructuredData(data, locale, path);
-  const visibleProducts = data.products.slice(0, 24);
-  const visibleMerchants = data.merchants.slice(0, 12);
+  const productOffset = boundedOffset(firstValue(params.productOffset));
+  const merchantOffset = boundedOffset(firstValue(params.merchantOffset));
+  const visibleProducts = data.products.slice(
+    productOffset,
+    productOffset + 24,
+  );
+  const visibleMerchants = data.merchants.slice(
+    merchantOffset,
+    merchantOffset + 12,
+  );
+  // Carry only normalized, supported filters across each independent pager.
+  const paginationParams = new URLSearchParams({
+    q: filters.query ?? "",
+    availability: filters.availability ?? "all",
+    sort: filters.sort ?? "price",
+    limit: String(filters.limit),
+    offset: String(filters.offset),
+    productOffset: String(productOffset),
+    merchantOffset: String(merchantOffset),
+  });
+  const pager = (
+    parameter: string,
+    offset: number,
+    limit: number,
+    total: number,
+    label: string,
+  ) => (
+    <DirectoryPagination
+      path={path}
+      params={paginationParams}
+      parameter={parameter}
+      offset={offset}
+      limit={limit}
+      total={total}
+      label={label}
+      isEnglish={isEnglish}
+    />
+  );
   const availabilityNow: OfferAvailabilityOptions = {
     now: new Date(),
   };
@@ -586,6 +675,14 @@ export async function ChannelsPage({
           )}
         </section>
 
+        {pager(
+          "productOffset",
+          productOffset,
+          24,
+          data.products.length,
+          isEnglish ? "Product pages" : "产品分页",
+        )}
+
         <section aria-labelledby="channel-merchants-title">
           <div className={styles.sectionHeader}>
             <h2 id="channel-merchants-title">
@@ -634,6 +731,14 @@ export async function ChannelsPage({
             </div>
           ) : null}
         </section>
+
+        {pager(
+          "merchantOffset",
+          merchantOffset,
+          12,
+          data.merchants.length,
+          isEnglish ? "Merchant pages" : "商户分页",
+        )}
 
         <section aria-labelledby="channel-offers-title">
           <div className={styles.sectionHeader}>
@@ -710,6 +815,14 @@ export async function ChannelsPage({
             </div>
           )}
         </section>
+
+        {pager(
+          "offset",
+          filters.offset ?? 0,
+          filters.limit ?? 20,
+          data.totalOffers,
+          isEnglish ? "Offer pages" : "报价分页",
+        )}
 
         <p className={styles.footnote}>
           {isEnglish

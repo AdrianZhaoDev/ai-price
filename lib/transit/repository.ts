@@ -296,6 +296,9 @@ export function normalizeTransitAvailability(
 ): TransitAvailability {
   const row = asRecord(input);
   if (!row) return structuredClone(fallback);
+  // An explicit aggregate is one evidence stream. Missing fields must never
+  // inherit another source's measurements or attribution piecemeal.
+  fallback = EMPTY_AVAILABILITY;
   const rate =
     normalizedRate(pick(row, "sevenDayRate", "seven_day_rate")) ??
     fallback.sevenDayRate;
@@ -1447,6 +1450,7 @@ export class TransitRepository {
     });
     return {
       ...page,
+      snapshotEmpty: model.stations.length === 0,
       items,
       stations: items,
       generatedAt: model.generatedAt,

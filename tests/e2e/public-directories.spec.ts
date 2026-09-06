@@ -37,6 +37,18 @@ test.describe("public channel and API transit directories", () => {
     await expect(page).toHaveURL(/\/channels\?q=api&sort=price&limit=1/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
+    await page.goto("/en/channels?limit=1");
+    const offerPages = page.getByRole("navigation", { name: "Offer pages" });
+    if (await offerPages.count()) {
+      await offerPages.getByRole("link", { name: "Next page" }).click();
+      await expect(page).toHaveURL(/offset=1/);
+      await page
+        .getByRole("navigation", { name: "Offer pages" })
+        .getByRole("link", { name: "Previous page" })
+        .click();
+      await expect(page).toHaveURL(/offset=0/);
+    }
+
     await page.goto("/api-transit?q=token&sort=stability&limit=1");
     await expect(page).toHaveURL(
       /\/api-transit\?q=token&sort=stability&limit=1/,

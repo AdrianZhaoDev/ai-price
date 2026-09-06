@@ -85,6 +85,15 @@ export const channelOfferSnapshotSchema = z.object({
   merchantId: safeId,
   productId: safeId,
   sourceName: boundedText(160),
+  sourceType: z
+    .enum([
+      "public_page",
+      "public_api",
+      "authorized_feed",
+      "merchant_submission",
+      "manual_snapshot",
+    ])
+    .default("manual_snapshot"),
   sourceUrl: httpUrl,
   title: boundedText(320),
   offerUrl: httpUrl,
@@ -173,6 +182,12 @@ export const transitAvailabilitySnapshotSchema = z
     note: z.string().max(500).nullable().optional(),
   })
   .superRefine((sample, context) => {
+    if (sample.sampleCount > 1 && sample.sevenDayRate == null)
+      context.addIssue({
+        code: "custom",
+        path: ["sevenDayRate"],
+        message: "Rolling availability summaries require a rate.",
+      });
     if (
       sample.scope === "offer"
         ? !sample.offerId || sample.matchLevel !== "exact"
