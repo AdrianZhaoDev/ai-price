@@ -115,7 +115,7 @@ export async function handleChannelsGet(
 
   try {
     const result = await getChannelList(parsed.data);
-    const body = publicChannelList(result, view);
+    const body = publicChannelList(result, view, parsed.data);
     const unavailable =
       result.dataStatus === "degraded" &&
       result.offers.length === 0 &&
@@ -142,6 +142,7 @@ export async function handleChannelsGet(
 export async function handleChannelDetailGet(
   _request: Request,
   context: { params: Promise<{ id: string }> },
+  offerOnly = false,
 ): Promise<Response> {
   let id: string;
   try {
@@ -167,6 +168,8 @@ export async function handleChannelDetailGet(
         offer: publicChannelOffer(offer),
       });
     }
+    if (offerOnly)
+      return publicError("Channel offer not found", 404, "NOT_FOUND");
     const product = (snapshot.products ?? []).find(
       (candidate) =>
         candidate.id.toLowerCase() === id.toLowerCase() ||
@@ -184,7 +187,7 @@ export async function handleChannelDetailGet(
         candidate.id.toLowerCase() === id.toLowerCase() ||
         candidate.slug.toLowerCase() === id.toLowerCase(),
     );
-    if (merchant && ["active", "pending_review"].includes(merchant.status)) {
+    if (merchant && merchant.status === "active") {
       return publicJson({
         ok: true,
         domain: "channels",

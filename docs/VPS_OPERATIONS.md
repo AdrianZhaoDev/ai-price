@@ -244,6 +244,7 @@ chmod 700 /tmp/ai-price-vps-install.sh
 
 新增 `0009` migration 仅增加 `public_data_generations`、`channel_*` 和 `transit_*`
 表，不改动官方价格和订阅数据。仍须由标准发布脚本在 migration 前备份 VPS 数据库。
+`0010` 去掉这些表 B-tree 索引中的长 search_text，只保留 generation_id，不删除数据。
 回滚代码可保留这些新增表；不得为回滚代码而删除表或恢复覆盖整个生产库。
 
 暂无获准来源时，可在用户明确批准后仅发布“待收录/暂无已核验数据”的只读栏目：
@@ -260,6 +261,11 @@ chmod 700 /tmp/ai-price-vps-install.sh
 先手工触发 `collect-public-data.yml`，确认 published generation 的数据可与原站核验，
 再开启 PUBLIC_DATA_COLLECTION_ENABLED。Web/API 请求不能抓上游；API 保持
 private/no-store，HTML 沿用源站 15 分钟微缓存，读模型进程缓存 30 秒。
+
+原站直采使用 GitHub Variables `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz` 和
+`PUBLIC_CHANNELS_DIRECT_SOURCES=redeemgpt-public`；对应领域 SNAPSHOT_URL 留空。生产
+只能使用已通过 CI/复审并合并到 main 的版本。启用前核对约 2 个站点、63 条中转报价及
+1 条商家报价（条数会随原站变化，不是固定成功条件）；详细口径见来源准入记录。
 
 除第 3.3 节验收外，还须检查中英文 `/channels`、`/api-transit` 返回 200、无演示
 商家/站点、canonical 正确；未就绪页面含 noindex 且 sitemap 不包含新栏目。

@@ -766,10 +766,7 @@ export const channelMerchants = pgTable(
       table.generationId,
       table.slug,
     ),
-    index("channel_merchants_generation_search_idx").on(
-      table.generationId,
-      table.searchText,
-    ),
+    index("channel_merchants_generation_search_idx").on(table.generationId),
     index("channel_merchants_generation_status_idx").on(
       table.generationId,
       table.status,
@@ -809,10 +806,7 @@ export const channelProducts = pgTable(
       table.platform,
       table.productType,
     ),
-    index("channel_products_generation_search_idx").on(
-      table.generationId,
-      table.searchText,
-    ),
+    index("channel_products_generation_search_idx").on(table.generationId),
   ],
 );
 
@@ -878,10 +872,7 @@ export const channelPublicOffers = pgTable(
       table.productId,
       table.lastSeenAt,
     ),
-    index("channel_public_offers_generation_search_idx").on(
-      table.generationId,
-      table.searchText,
-    ),
+    index("channel_public_offers_generation_search_idx").on(table.generationId),
   ],
 );
 
@@ -980,10 +971,7 @@ export const transitStations = pgTable(
       table.dataStatus,
       table.lowestMultiplier,
     ),
-    index("transit_stations_generation_search_idx").on(
-      table.generationId,
-      table.searchText,
-    ),
+    index("transit_stations_generation_search_idx").on(table.generationId),
   ],
 );
 

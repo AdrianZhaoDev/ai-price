@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Locale } from "@/lib/i18n";
 import { absoluteUrl, metadataForDocument } from "@/lib/seo";
 import {
-  getTransitStationBySlug,
+  publicStationView,
   loadTransitReadModel,
 } from "@/lib/transit/repository";
 import type {
@@ -10,6 +10,7 @@ import type {
   TransitOffer,
   TransitStation,
 } from "@/lib/transit/types";
+import { isTransitStationPublic } from "@/lib/transit/types";
 import { SiteFooter, SiteHeader } from "./site-header";
 import styles from "./public-data-directory.module.css";
 
@@ -85,15 +86,19 @@ export async function ApiTransitDetailPage({
   locale: Locale;
   slug: string;
 }) {
-  const [station, model] = await Promise.all([
-    getTransitStationBySlug(slug),
-    loadTransitReadModel(),
-  ]);
-  if (!station) {
+  const model = await loadTransitReadModel();
+  const candidate = model.stations.find(
+    (item) => item.slug === slug.toLowerCase(),
+  );
+  if (
+    !candidate ||
+    !isTransitStationPublic(candidate, { includeSample: model.isSynthetic })
+  ) {
     // Importing `notFound` here would make this reusable component harder to
     // test; the route wrapper handles the null case and renders its 404.
     return null;
   }
+  const station = publicStationView(candidate, false);
   const isEnglish = locale === "en";
   const path = isEnglish
     ? `/en/api-transit/${station.slug}`
@@ -244,6 +249,33 @@ export async function ApiTransitDetailPage({
                   <div className={styles.offerPrice}>
                     <strong>{offerRate(offer, locale)}</strong>
                     <span>{offer.currency}</span>
+                    {offer.billingMode === "token" &&
+                    offer.inputPrice !== null ? (
+                      <span>
+                        {isEnglish ? "Input" : "输入"}:{" "}
+                        {offer.inputPrice.toLocaleString(
+                          isEnglish ? "en-US" : "zh-CN",
+                          { maximumFractionDigits: 6 },
+                        )}{" "}
+                        {offer.currency} /{" "}
+                        {isEnglish ? "1M tokens" : "百万 tokens"}
+                      </span>
+                    ) : null}
+                    {offer.billingMode === "token" &&
+                    offer.outputPrice !== null ? (
+                      <span>
+                        {isEnglish ? "Output" : "输出"}:{" "}
+                        {offer.outputPrice.toLocaleString(
+                          isEnglish ? "en-US" : "zh-CN",
+                          { maximumFractionDigits: 6 },
+                        )}{" "}
+                        {offer.currency} /{" "}
+                        {isEnglish ? "1M tokens" : "百万 tokens"}
+                      </span>
+                    ) : null}
+                    {offer.priceSourceLabel ? (
+                      <span>{offer.priceSourceLabel}</span>
+                    ) : null}
                   </div>
                   <span
                     className={styles.pill}

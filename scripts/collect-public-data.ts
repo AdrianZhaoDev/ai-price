@@ -1,4 +1,6 @@
 import { config } from "dotenv";
+import { collectDirectTransit } from "@/lib/public-data/direct-transit";
+import { collectDirectChannels } from "@/lib/public-data/direct-channels";
 import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import {
@@ -121,6 +123,26 @@ async function readSnapshotFromUrl(rawUrl: string): Promise<unknown> {
 }
 
 async function readSnapshot(domain: Domain): Promise<unknown> {
+  if (
+    domain === "channels" &&
+    process.env.PUBLIC_CHANNELS_DIRECT_SOURCES?.trim()
+  ) {
+    if (snapshotFile(domain) || snapshotUrl(domain))
+      throw new Error(
+        "Direct sources and imported channel snapshots are mutually exclusive.",
+      );
+    return collectDirectChannels(process.env.PUBLIC_CHANNELS_DIRECT_SOURCES);
+  }
+  if (
+    domain === "transit" &&
+    process.env.PUBLIC_TRANSIT_DIRECT_SOURCES?.trim()
+  ) {
+    if (snapshotFile(domain) || snapshotUrl(domain))
+      throw new Error(
+        "Direct sources and imported transit snapshots are mutually exclusive.",
+      );
+    return collectDirectTransit(process.env.PUBLIC_TRANSIT_DIRECT_SOURCES);
+  }
   const file = snapshotFile(domain);
   if (file) {
     if ((await stat(file)).size > MAX_SNAPSHOT_BYTES)
@@ -139,6 +161,14 @@ async function readSnapshot(domain: Domain): Promise<unknown> {
 async function publishDomain(domain: Domain): Promise<unknown> {
   const raw = await readSnapshot(domain);
   const snapshot = parsePublicSnapshot(domain, raw);
+  if (process.argv.includes("--dry-run")) {
+    return {
+      validated: true,
+      published: false,
+      sourceCount: snapshot.sourceCount,
+      offers: snapshot.offers.length,
+    };
+  }
   if (domain === "channels") {
     return publishChannelSnapshot(snapshot as ChannelSnapshot);
   }
@@ -149,15 +179,22 @@ async function main(): Promise<void> {
   // The collector must never silently fall back to DATABASE_URL/LOCAL_DATABASE_URL:
   // a scheduled GitHub job should only write the explicitly designated public
   // snapshot database.  The web reader may still use its documented fallback.
-  if (!process.env.PUBLIC_DATA_DATABASE_URL?.trim()) {
+  const dryRun = process.argv.includes("--dry-run");
+  if (!dryRun && !process.env.PUBLIC_DATA_DATABASE_URL?.trim()) {
     throw new Error(
       "PUBLIC_DATA_DATABASE_URL is required for public-data collection.",
     );
   }
-  validateDatabaseUrl(process.env.PUBLIC_DATA_DATABASE_URL);
+  if (!dryRun) validateDatabaseUrl(process.env.PUBLIC_DATA_DATABASE_URL!);
   const domains = requestedDomains();
   const configured = domains.filter(
-    (domain) => snapshotUrl(domain) || snapshotFile(domain),
+    (domain) =>
+      snapshotUrl(domain) ||
+      snapshotFile(domain) ||
+      (domain === "channels" &&
+        process.env.PUBLIC_CHANNELS_DIRECT_SOURCES?.trim()) ||
+      (domain === "transit" &&
+        process.env.PUBLIC_TRANSIT_DIRECT_SOURCES?.trim()),
   );
   if (configured.length === 0) {
     throw new Error(
@@ -175,6 +212,16 @@ async function main(): Promise<void> {
         console.log(
           `Importing ${domain} snapshot from ${safeTargetLabel(safe)}.`,
         );
+      } else if (
+        domain === "channels" &&
+        process.env.PUBLIC_CHANNELS_DIRECT_SOURCES?.trim()
+      ) {
+        console.log("Collecting reviewed original merchant API.");
+      } else if (
+        domain === "transit" &&
+        process.env.PUBLIC_TRANSIT_DIRECT_SOURCES?.trim()
+      ) {
+        console.log("Collecting reviewed original transit APIs.");
       } else {
         console.log(
           `Importing ${domain} snapshot from a configured local file.`,

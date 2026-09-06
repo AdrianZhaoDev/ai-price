@@ -6,6 +6,12 @@
 
 ## 1. 新增采集项目
 
+公开渠道/中转目录是独立领域，其第一手来源指商家/中转站自己的公开报价，不是品牌
+官方报价。使用 `lib/public-data/direct-channels.ts`、`direct-transit.ts` 注册受审原站 ID，
+输出公开快照 schema，不写入下述官方目录。逐来源记录 `PUBLIC_DATA_SOURCE_REVIEW.md`，
+保持只读、无认证、限频、明确币种/单位、异常保留旧快照，并补充脱敏结构 fixture。
+该例外不改变品牌官方来源规则。
+
 1. 只选择无需登录、可重复访问的官方公开页面、官方公开 JSON 或 App Store。
    第三方媒体只能用于发现线索，不能作为价格来源。
 2. 在 `lib/data/catalog.ts` 新增目录项和基础报价，保证 `id`、`providerSlug`、

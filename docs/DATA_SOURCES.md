@@ -15,12 +15,18 @@
 
 `/channels`（卡网报价）和 `/api-transit`（API 中转站）使用独立的公开快照数据集，
 不改变官方订阅/API 价格来源的口径，也不把第三方聚合站自动升级为可信价格证据。每个
-快照来源必须先经过人工审核，确认页面公开或已获授权、允许自动读取和再发布，并记录
+快照来源必须先经过人工审核，核对公开性、访问条款及拟展示的事实字段范围，并记录
 来源说明；不得使用需要登录、绕过访问控制、用户任意提交的 URL 或含凭据的接口。
+
+原站直采现支持 `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz` 和
+`PUBLIC_CHANNELS_DIRECT_SOURCES=redeemgpt-public`，范围、频率及价格单位见
+[`PUBLIC_DATA_SOURCE_REVIEW.md`](PUBLIC_DATA_SOURCE_REVIEW.md)。同一领域直采与快照
+URL/file 互斥。可先执行 `npm run collect:public -- --domain=all --dry-run`，不需要
+数据库且不写库。选定中转来源任一失败保留整批旧快照；商家和中转分别处理。
 
 - GitHub Actions 运行 `npm run collect:public -- --trigger=scheduled --domain=all`，
   通过 `PUBLIC_CHANNELS_SNAPSHOT_URL` 和/或 `PUBLIC_TRANSIT_SNAPSHOT_URL` 指定已审核
-  的来源。至少配置一个来源；只配置一个域时，另一域明确跳过；两个都缺少或
+  的来源，或配置 DIRECT_SOURCES 原站 ID。至少配置一个来源；只配置一个域时，另一域明确跳过；全部缺少或
   `PUBLIC_DATA_DATABASE_URL` 缺少时，任务在采集前失败。
 - 采集器在 GitHub runner 上顺序请求（并发上限 1），仅允许 HTTPS，拒绝凭据、私有主机、
   重定向和超大响应，并使用固定超时；不使用 VPS 的 WARP/代理、SMTP、`DATA_SYNC` 或

@@ -52,6 +52,8 @@ jobs:
           PUBLIC_DATA_DATABASE_URL: ${{ secrets.PUBLIC_DATA_DATABASE_URL }}
           PUBLIC_CHANNELS_SNAPSHOT_URL: ${{ secrets.PUBLIC_CHANNELS_SNAPSHOT_URL || vars.PUBLIC_CHANNELS_SNAPSHOT_URL }}
           PUBLIC_TRANSIT_SNAPSHOT_URL: ${{ secrets.PUBLIC_TRANSIT_SNAPSHOT_URL || vars.PUBLIC_TRANSIT_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_DIRECT_SOURCES: ${{ vars.PUBLIC_TRANSIT_DIRECT_SOURCES }}
+          PUBLIC_CHANNELS_DIRECT_SOURCES: ${{ vars.PUBLIC_CHANNELS_DIRECT_SOURCES }}
         run: |
           set -euo pipefail
           # Do not print values: database and feed URLs may be secrets.  A
@@ -74,8 +76,8 @@ jobs:
             echo "PUBLIC_DATA_DATABASE_URL must target the remote public-data database; refusing to run public collection." >&2
             exit 1
           fi
-          if [[ -z "${PUBLIC_CHANNELS_SNAPSHOT_URL:-}" && -z "${PUBLIC_TRANSIT_SNAPSHOT_URL:-}" ]]; then
-            echo "At least one of PUBLIC_CHANNELS_SNAPSHOT_URL or PUBLIC_TRANSIT_SNAPSHOT_URL must be configured; refusing to run public collection." >&2
+          if [[ -z "${PUBLIC_CHANNELS_SNAPSHOT_URL:-}" && -z "${PUBLIC_TRANSIT_SNAPSHOT_URL:-}" && -z "${PUBLIC_TRANSIT_DIRECT_SOURCES:-}" && -z "${PUBLIC_CHANNELS_DIRECT_SOURCES:-}" ]]; then
+            echo "Configure at least one reviewed snapshot or direct source; refusing to run public collection." >&2
             exit 1
           fi
 
@@ -95,6 +97,8 @@ jobs:
           PUBLIC_DATA_DATABASE_URL: ${{ secrets.PUBLIC_DATA_DATABASE_URL }}
           PUBLIC_CHANNELS_SNAPSHOT_URL: ${{ secrets.PUBLIC_CHANNELS_SNAPSHOT_URL || vars.PUBLIC_CHANNELS_SNAPSHOT_URL }}
           PUBLIC_TRANSIT_SNAPSHOT_URL: ${{ secrets.PUBLIC_TRANSIT_SNAPSHOT_URL || vars.PUBLIC_TRANSIT_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_DIRECT_SOURCES: ${{ vars.PUBLIC_TRANSIT_DIRECT_SOURCES }}
+          PUBLIC_CHANNELS_DIRECT_SOURCES: ${{ vars.PUBLIC_CHANNELS_DIRECT_SOURCES }}
         run: env -u http_proxy -u https_proxy -u all_proxy -u no_proxy npm run collect:public -- --trigger=scheduled --domain=all
         timeout-minutes: 25
         continue-on-error: false

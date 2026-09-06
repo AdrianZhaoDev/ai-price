@@ -1056,7 +1056,7 @@ function cloneReadModel(model: TransitReadModel): TransitReadModel {
   return structuredClone(model);
 }
 
-function publicStationView(
+export function publicStationView(
   station: TransitStation,
   includeUnpublished: boolean,
 ): TransitStation {

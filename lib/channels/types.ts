@@ -794,12 +794,38 @@ function normalizeFilterInput(input: unknown): unknown {
   );
   if (value.sort === "price_asc") value.sort = "price";
   if (value.sort === "updated_desc") value.sort = "updated";
+  if (value.direction === undefined)
+    value.direction =
+      value.sort === "updated" || value.sort === "relevance" ? "desc" : "asc";
+  for (const alias of [
+    "q",
+    "search",
+    "merchant_ids",
+    "merchantId",
+    "merchant",
+    "product_ids",
+    "productId",
+    "product",
+    "platform",
+    "product_types",
+    "productType",
+    "source_types",
+    "sourceType",
+    "availabilityStatus",
+    "availability_status",
+    "min_price_minor",
+    "priceMin",
+    "max_price_minor",
+    "priceMax",
+    "published_only",
+  ])
+    delete value[alias];
   return value;
 }
 
 export const channelOfferFiltersSchema = z.preprocess(
   normalizeFilterInput,
-  z.object({
+  z.strictObject({
     query: boundedString(120).optional(),
     merchantIds: z.array(boundedString(120)).max(100).optional(),
     productIds: z.array(boundedString(160)).max(100).optional(),

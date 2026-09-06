@@ -52,12 +52,19 @@ test.describe("public channel and API transit directories", () => {
     let stationSlug: string | undefined;
     expect([200, 503]).toContain(response.status());
     expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+    if (process.env.EXPECT_PUBLIC_DIRECT_DATA === "true")
+      expect(response.status()).toBe(200);
     if (response.status() === 200) {
       const body = await response.json();
       expect(body.apiVersion).toBe(1);
       expect(body.policy.requestTimeCollection).toBe(false);
       expect(body.query.includeUnpublished).toBe(false);
       stationSlug = body.items[0]?.slug;
+      if (process.env.EXPECT_PUBLIC_DIRECT_DATA === "true") {
+        expect(body.isSynthetic).toBe(false);
+        expect(body.total).toBe(2);
+        expect(stationSlug).toBeTruthy();
+      }
     } else {
       expect(response.headers()["cache-control"]).toContain("no-store");
     }
@@ -72,6 +79,10 @@ test.describe("public channel and API transit directories", () => {
       });
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(page.getByText(/站点详情|Station detail/)).toBeVisible();
+      if (process.env.EXPECT_PUBLIC_DIRECT_DATA === "true") {
+        await expect(page.getByText(/输入:.*CNY/).first()).toBeVisible();
+        await expect(page.getByText(/输出:.*CNY/).first()).toBeVisible();
+      }
       await page.goto(`/en/api-transit/${stationSlug}`);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     }

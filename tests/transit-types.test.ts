@@ -49,7 +49,7 @@ describe("transit public schemas", () => {
     ).toBe(false);
   });
 
-  it("only treats active/limited verified rows as public by default", () => {
+  it("requires reviewed data and excludes unavailable stations", () => {
     const station = getSyntheticTransitStations()[0];
     expect(
       isTransitStationPublic({ status: station.status, dataStatus: "sample" }),

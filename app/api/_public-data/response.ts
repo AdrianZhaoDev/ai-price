@@ -13,6 +13,7 @@ import type {
   TransitStation,
 } from "@/lib/transit/types";
 import { safePublicHttpUrl } from "@/lib/public-data/urls";
+import { isTransitStationPublic } from "@/lib/transit/types";
 
 /**
  * Preserve the production rule that all /api endpoints are private/no-store.
@@ -386,12 +387,17 @@ export type ChannelResponseView = "all" | "offers" | "products" | "merchants";
 export function publicChannelList(
   result: ChannelListResult,
   view: ChannelResponseView = "all",
+  pagination: { limit: number; offset: number } = { limit: 50, offset: 0 },
 ): Record<string, unknown> {
   const offers = result.offers
     .filter(isPublicChannelOffer)
     .map(publicChannelOffer);
-  const products = result.products.map(publicChannelProductSummary);
-  const merchants = result.merchants.map(publicChannelMerchantSummary);
+  const products = result.products
+    .slice(pagination.offset, pagination.offset + pagination.limit)
+    .map(publicChannelProductSummary);
+  const merchants = result.merchants
+    .slice(pagination.offset, pagination.offset + pagination.limit)
+    .map(publicChannelMerchantSummary);
   const items =
     view === "offers"
       ? offers
@@ -408,8 +414,8 @@ export function publicChannelList(
     view,
     total: integer(items.length),
     totalOffers: integer(result.totalOffers),
-    totalProducts: integer(products.length),
-    totalMerchants: integer(merchants.length),
+    totalProducts: integer(result.products.length),
+    totalMerchants: integer(result.merchants.length),
     items,
     generatedAt: date(result.generatedAt),
     generationId: nullableText(result.generationId, 200),
@@ -668,11 +674,8 @@ export function publicTransitList(
   result: TransitListResult,
 ): Record<string, unknown> {
   const stations = result.items
-    .filter(
-      (station) =>
-        (station.status === "active" || station.status === "limited") &&
-        (station.dataStatus === "verified" ||
-          (result.isSynthetic && station.dataStatus === "sample")),
+    .filter((station) =>
+      isTransitStationPublic(station, { includeSample: result.isSynthetic }),
     )
     .map(publicTransitStation);
   const warning = publicTransitWarning(result);

@@ -274,11 +274,13 @@ export function transitStationMatchesQuery(
       station.name,
       station.slug,
       station.summary,
-      ...station.offers.flatMap((offer) => [
-        offer.standardModelId,
-        offer.standardModelLabel,
-        offer.groupName,
-      ]),
+      ...station.offers
+        .filter((offer) => includeUnpublished || isTransitOfferPublic(offer))
+        .flatMap((offer) => [
+          offer.standardModelId,
+          offer.standardModelLabel,
+          offer.groupName,
+        ]),
     ]
       .join(" ")
       .toLocaleLowerCase("en-US");

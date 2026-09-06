@@ -4,6 +4,18 @@
 > 调研日期：2026-09-06
 > 对照页面：[PriceAI 卡网订阅比价](https://priceai.cc/channels)、[PriceAI API 中转站](https://priceai.cc/api-transit)
 
+### 2026-09-07 原站直采增量
+
+新增独立实现的 `lib/public-data/direct-transit.ts` 和 `direct-channels.ts`，直接读取
+原站公开接口并转换为本站快照。真实只读试采通过：2 家中转站 63 条报价、1 家商家
+1 条明确商品报价；没有导入生产数据库。来源、币种换算、频率、限制和配置见
+[`PUBLIC_DATA_SOURCE_REVIEW.md`](PUBLIC_DATA_SOURCE_REVIEW.md)。CLI 新增 `--dry-run`。
+详情页补齐输入/输出单价、币种及单位。监测、历史、全量商家覆盖仍不是此次交付范围。
+
+修复审核发现的 API 分页、未审核记录过滤、查询白名单与默认排序、详情重复读取、
+金额/slug 校验一致性、保留地址段和长文本索引问题。迁移 `0010` 仅调整新领域索引。
+仍须完成本轮验证、CI、机器人复审、远程公共库凭据配置及 main 生产发布验收。
+
 ## 1. 结论
 
 当前项目可以接入这两个栏目，但不应把它们直接塞进现有的 `products`、`plans`、`sources` 或 `/api-pricing` 数据模型：

@@ -457,7 +457,8 @@ export function isTransitStationPublic(
   options: { includeSample?: boolean; includeUnpublished?: boolean } = {},
 ): boolean {
   if (options.includeUnpublished) return true;
-  if (station.status !== "active" && station.status !== "limited") return false;
+  // A reviewed price catalogue can be public without claiming measured uptime.
+  if (station.status === "unavailable") return false;
   if (station.dataStatus === "verified") return true;
   return options.includeSample === true && station.dataStatus === "sample";
 }

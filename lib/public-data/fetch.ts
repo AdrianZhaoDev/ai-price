@@ -5,10 +5,10 @@ import { isPrivateOrReservedHostname } from "./urls";
 export const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 
 /** Enforce the cap while reading, not after buffering an unbounded response. */
-export async function readBoundedJson(
+export async function readBoundedText(
   body: AsyncIterable<Uint8Array>,
   maximum = MAX_SNAPSHOT_BYTES,
-): Promise<unknown> {
+): Promise<string> {
   let size = 0;
   const chunks: Uint8Array[] = [];
   for await (const chunk of body) {
@@ -17,10 +17,24 @@ export async function readBoundedJson(
       throw new Error("Snapshot exceeds the response size limit.");
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  return Buffer.concat(chunks).toString("utf8");
 }
 
-export async function fetchPublicSnapshot(url: URL): Promise<unknown> {
+export async function readBoundedJson(
+  body: AsyncIterable<Uint8Array>,
+  maximum = MAX_SNAPSHOT_BYTES,
+): Promise<unknown> {
+  return JSON.parse(await readBoundedText(body, maximum));
+}
+
+export async function fetchPublicText(url: URL): Promise<string> {
+  return (await fetchPublicSnapshot(url, "text")) as string;
+}
+
+export async function fetchPublicSnapshot(
+  url: URL,
+  format: "json" | "text" = "json",
+): Promise<unknown> {
   const addresses = await lookup(url.hostname.replace(/^\[|\]$/g, ""), {
     all: true,
     verbatim: true,
@@ -46,7 +60,11 @@ export async function fetchPublicSnapshot(url: URL): Promise<unknown> {
       dispatcher,
       redirect: "error",
       signal: AbortSignal.timeout(30_000),
-      headers: { accept: "application/json" },
+      headers: {
+        accept: format === "json" ? "application/json" : "text/html",
+        "user-agent":
+          "LowPriceRadar-PublicPrices/1.0 (+https://lowpriceradar.com)",
+      },
     });
     try {
       if (!response.ok || !response.body)
@@ -56,7 +74,9 @@ export async function fetchPublicSnapshot(url: URL): Promise<unknown> {
       ) {
         throw new Error("Snapshot exceeds the response size limit.");
       }
-      return await readBoundedJson(response.body);
+      return format === "json"
+        ? await readBoundedJson(response.body)
+        : await readBoundedText(response.body);
     } finally {
       if (response.body && !response.body.locked) await response.body.cancel();
     }

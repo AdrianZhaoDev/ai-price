@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeDatabase, createDatabaseConnection } from "@/lib/db/client";
 import {
@@ -139,6 +140,13 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         if (statement.trim()) await connection.client.unsafe(statement);
       }
     }
+    const indexMigration = await readFile(
+      new URL("../drizzle/0010_fine_guardian.sql", import.meta.url),
+      "utf8",
+    );
+    for (const statement of indexMigration.split("--> statement-breakpoint")) {
+      if (statement.trim()) await connection.client.unsafe(statement);
+    }
     await connection.client`truncate channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
   });
   afterAll(async () => {
@@ -187,6 +195,14 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     ).rejects.toThrow("empty");
   });
 
+  it("stores long non-compressible public search text without B-tree tuple failures", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].title = randomBytes(1900).toString("hex");
+    await expect(publishChannelSnapshot(snapshot)).resolves.toMatchObject({
+      published: true,
+    });
+  });
+
   it("round-trips transit prices and samples and restores a previous feed", async () => {
     const a = transit();
     await publishTransitSnapshot(a);
@@ -208,5 +224,26 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       await loadTransitSnapshotFromDatabase(connection.database),
     );
     expect(restored?.stations[0].offers[0].combinedRate).toBeCloseTo(0.2);
+  });
+
+  it("retains original-source rows when a later catalogue collapses", async () => {
+    const snapshot = transit();
+    snapshot.stations[0].payload.adapterVersion = "sub2api-public-v1";
+    snapshot.availabilitySamples = [];
+    snapshot.offers = Array.from({ length: 10 }, (_, index) => ({
+      ...snapshot.offers[0],
+      id: `native-${index}`,
+    }));
+    await publishTransitSnapshot(snapshot);
+    await expect(
+      publishTransitSnapshot({
+        ...snapshot,
+        offers: snapshot.offers.slice(0, 5),
+      }),
+    ).rejects.toThrow("collapsed");
+    const read = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    expect(read?.stations[0].offers).toHaveLength(10);
   });
 });

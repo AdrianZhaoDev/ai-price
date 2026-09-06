@@ -181,7 +181,7 @@ function offerPriceNote(offer: TransitOffer, locale: Locale): string {
     );
   }
   return pieces.length
-    ? pieces.join(" · ")
+    ? `${pieces.join(" · ")} ${offer.currency} / ${locale === "en" ? "1M tokens" : "百万 tokens"}`
     : locale === "en"
       ? "No token-unit price published"
       : "未发布 Token 单位价";

@@ -496,6 +496,22 @@ export async function publishTransitSnapshot(
         );
       }
     }
+    // Native adapters must not silently publish a truncated model catalogue.
+    // Check under the same domain lock/transaction as the replacement.
+    for (const station of snapshot.stations) {
+      if (station.payload.adapterVersion !== "sub2api-public-v1") continue;
+      const [baseline] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(transitOffers)
+        .where(eq(transitOffers.stationId, station.id));
+      const nextCount = snapshot.offers.filter(
+        (offer) => offer.stationId === station.id,
+      ).length;
+      if (baseline.count - nextCount >= 2 && nextCount < baseline.count * 0.7)
+        throw new Error(
+          "Original model count collapsed; previous snapshot retained.",
+        );
+    }
     await clearTransitRows(tx);
     const offersByStation = new Map<string, TransitSnapshot["offers"]>();
     for (const offer of snapshot.offers) {

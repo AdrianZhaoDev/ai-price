@@ -72,7 +72,7 @@ export const channelOfferSnapshotSchema = z.object({
   sourceUrl: httpUrl,
   title: publicText,
   offerUrl: httpUrl,
-  priceMinor: z.number().finite().nonnegative().nullable(),
+  priceMinor: z.number().int().nonnegative().nullable(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   availability: z.enum(["in_stock", "out_of_stock", "unknown", "expired"]),
   stockCount: z.number().int().nonnegative().nullable().optional(),
@@ -168,7 +168,10 @@ export const transitOfferSnapshotSchema = z.object({
 
 export const transitStationSnapshotSchema = z.object({
   id: safeId,
-  slug: safeId,
+  slug: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .max(120),
   name: publicText,
   websiteUrl: httpUrl,
   apiBaseUrl: httpUrl.nullable().optional(),
