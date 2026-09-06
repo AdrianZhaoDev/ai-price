@@ -1436,11 +1436,16 @@ export class TransitRepository {
               .includes(q!)),
       );
       const preferredIds = new Set(preferred.map((offer) => offer.id));
+      const structured = station.offers.filter(
+        (offer) => offerMatches(offer, query) && !preferredIds.has(offer.id),
+      );
+      for (const offer of structured) preferredIds.add(offer.id);
       return publicStationView(
         {
           ...station,
           offers: [
             ...preferred,
+            ...structured,
             ...station.offers.filter((offer) => !preferredIds.has(offer.id)),
           ],
         },

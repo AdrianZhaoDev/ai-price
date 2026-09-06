@@ -7,6 +7,25 @@ import {
 import { syntheticChannelOffers } from "@/lib/channels/fixture";
 
 describe("ChannelRepository", () => {
+  it("reloads with zero TTL even when the clock has not advanced", async () => {
+    let calls = 0;
+    const now = new Date();
+    const repository = new ChannelRepository({
+      cacheTtlMs: 0,
+      now: () => now,
+      loadPublishedOffers: async () => {
+        calls++;
+        if (calls === 2) throw new Error("offline");
+        return {
+          generatedAt: now.toISOString(),
+          offers: [syntheticChannelOffers[0]],
+        };
+      },
+    });
+    await repository.load();
+    expect((await repository.load()).dataStatus).toBe("degraded");
+    expect(calls).toBe(2);
+  });
   it("ages cached last-good offer health during a prolonged database outage", async () => {
     let now = new Date("2026-09-06T00:00:00Z");
     let unavailable = false;

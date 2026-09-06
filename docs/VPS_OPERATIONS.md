@@ -257,6 +257,14 @@ public_data_generations 授予 SELECT、INSERT、UPDATE，其余六张公共当�
 SELECT、INSERT、UPDATE、DELETE。只读 Web 账号仅授予八张公共表的 SELECT。
 不要授予 TRUNCATE、DDL、旧业务表访问或额外角色成员资格。
 
+`0014` 增加采集器专用 public_offer_baselines，按领域与报价 ID 保存最近已接受的价格基准，
+下架不删除；返回报价用 ID 与稳定身份分别做等值查询，并用固定长度哈希索引加完整身份校验，
+避免把新报价与无界观测历史做 OR 连接。迁移从卡网保留观测及两个领域当前报价回填；
+迁移前已删除且从未保留的中转报价不伪造历史。采集写入账号对此第九张表仅授予
+SELECT、INSERT、UPDATE，Web 只读账号不需访问它。它也不加入官方 DATA_SYNC 镜像。
+回滚保留该表，并先关闭公共采集；旧采集器不会维护基准，不能在回滚期间继续发布。
+异常价格门禁同样适用于消失后以原 ID 或相同稳定身份新 ID 回归的报价。
+
 `0012` 为当前卡网报价新增 source_type；旧导入记录默认为 manual_snapshot，不能从
 来源展示名称推断 API/feed 类型。原站适配器显式写 public_api，后续 feed 应声明准确类型。
 迁移为增量加列，代码回滚保留该列；采价不等于商户审核。

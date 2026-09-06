@@ -21,6 +21,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { PgTable, PgInsertValue } from "drizzle-orm/pg-core";
 import { calculateRechargeCoefficient } from "@/lib/transit/ranking";
 import { isTransitStationPublic } from "@/lib/transit/types";
+import {
+  loadOfferBaselines,
+  saveOfferBaselines,
+} from "@/lib/public-data/baselines";
 
 export type PublicPublishResult = {
   domain: "channels" | "transit";
@@ -399,8 +403,29 @@ export async function publishChannelSnapshot(
       [...previousPrices.values()].map(identity),
       snapshot.offers.map(identity),
     );
+    const historical = await loadOfferBaselines<
+      NonNullable<ReturnType<typeof previousPrices.get>>
+    >(
+      tx,
+      "channels",
+      snapshot.offers
+        .filter((offer) => !matches.has(offer.id))
+        .map((offer) => ({
+          id: offer.id,
+          identity: [offer.merchantId, offer.productId, offer.offerUrl],
+        })),
+    );
     for (const offer of snapshot.offers) {
-      const prior = previousPrices.get(matches.get(offer.id) ?? "");
+      const retained = historical.get(offer.id);
+      if (
+        retained?.identity[0] != null &&
+        retained.identity[0] !== offer.merchantId
+      )
+        throw new Error(
+          "Offer source identity changed; previous snapshot retained for review.",
+        );
+      const prior =
+        previousPrices.get(matches.get(offer.id) ?? "") ?? retained?.payload;
       if (!prior) continue;
       if (prior.priceMinor != null && prior.currency !== offer.currency)
         throw new Error(
@@ -426,39 +451,6 @@ export async function publishChannelSnapshot(
           "Bulk tier identity overlap collapsed; previous snapshot retained for review.",
         );
     }
-    const unmatchedOffers = snapshot.offers
-      .filter((offer) => !matches.has(offer.id))
-      .map((offer) => ({
-        id: offer.id,
-        merchant_id: offer.merchantId,
-        product_id: offer.productId,
-        offer_url: offer.offerUrl,
-      }));
-    const historicalFirstSeen = unmatchedOffers.length
-      ? await tx
-          .select({
-            offerId: sql<string>`incoming.id`,
-            firstSeenAt:
-              sql`min(least(${channelOfferObservations.observedAt}, (${channelOfferObservations.offerSnapshot}->>'firstSeenAt')::timestamptz))`.mapWith(
-                channelPublicOffers.firstSeenAt,
-              ),
-          })
-          .from(channelOfferObservations)
-          // One bound JSON parameter keeps large snapshots below PostgreSQL's
-          // parameter limit. Absent offers may return with a new upstream ID.
-          .innerJoin(
-            sql`jsonb_to_recordset(${JSON.stringify(unmatchedOffers)}::jsonb) as incoming(id text, merchant_id text, product_id text, offer_url text)`,
-            sql`${channelOfferObservations.offerId} = incoming.id or (
-              ${channelOfferObservations.offerSnapshot}->>'merchantId' = incoming.merchant_id and
-              ${channelOfferObservations.offerSnapshot}->>'productId' = incoming.product_id and
-              ${channelOfferObservations.offerSnapshot}->>'offerUrl' = incoming.offer_url
-            )`,
-          )
-          .groupBy(sql`incoming.id`)
-      : [];
-    const historicalById = new Map(
-      historicalFirstSeen.map((row) => [row.offerId, row.firstSeenAt]),
-    );
     const firstSeenById = new Map(
       snapshot.offers.map((offer) => [
         offer.id,
@@ -468,7 +460,7 @@ export async function publishChannelSnapshot(
             previousPrices
               .get(matches.get(offer.id) ?? "")
               ?.firstSeenAt.getTime() ?? Infinity,
-            historicalById.get(offer.id)?.getTime() ?? Infinity,
+            historical.get(offer.id)?.firstSeenAt.getTime() ?? Infinity,
           ),
         ),
       ]),
@@ -653,6 +645,16 @@ export async function publishChannelSnapshot(
           });
       }
     }
+    await saveOfferBaselines(
+      tx,
+      "channels",
+      snapshot.offers.map((offer) => ({
+        id: offer.id,
+        identity: [offer.merchantId, offer.productId, offer.offerUrl],
+        payload: { ...offer },
+        firstSeenAt: firstSeenById.get(offer.id)!,
+      })),
+    );
     await tx
       .update(publicDataGenerations)
       .set({
@@ -887,8 +889,29 @@ export async function publishTransitSnapshot(
       [...previousPrices.values()].map(identity),
       snapshot.offers.map(identity),
     );
+    const baselineIdentity = (offer: TransitSnapshot["offers"][number]) => [
+      offer.stationId,
+      offer.standardModel,
+      offer.groupName ?? null,
+      offer.billingMode,
+    ];
+    const historical = await loadOfferBaselines<
+      NonNullable<ReturnType<typeof previousPrices.get>>
+    >(
+      tx,
+      "transit",
+      snapshot.offers
+        .filter((offer) => !matches.has(offer.id))
+        .map((offer) => ({ id: offer.id, identity: baselineIdentity(offer) })),
+    );
     for (const offer of snapshot.offers) {
-      const prior = previousPrices.get(matches.get(offer.id) ?? "");
+      const retained = historical.get(offer.id);
+      if (retained && retained.identity[0] !== offer.stationId)
+        throw new Error(
+          "Offer source identity changed; previous snapshot retained for review.",
+        );
+      const prior =
+        previousPrices.get(matches.get(offer.id) ?? "") ?? retained?.payload;
       if (!prior) continue;
       if (
         prior.currency !== offer.currency ||
@@ -1040,6 +1063,23 @@ export async function publishTransitSnapshot(
         })),
       );
     }
+    await saveOfferBaselines(
+      tx,
+      "transit",
+      snapshot.offers.map((offer) => ({
+        id: offer.id,
+        identity: baselineIdentity(offer),
+        payload: {
+          ...offer,
+          combinedMultiplier: transitCombinedMultiplier(offer),
+          fixedPriceCurrency: offer.fixedPriceCurrency ?? null,
+          fixedPriceUnit: offer.fixedPriceUnit ?? null,
+        },
+        firstSeenAt:
+          historical.get(offer.id)?.firstSeenAt ??
+          new Date(offer.lastVerifiedAt ?? snapshot.generatedAt),
+      })),
+    );
     await tx
       .update(publicDataGenerations)
       .set({

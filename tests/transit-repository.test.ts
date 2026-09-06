@@ -10,6 +10,42 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("keeps structured matches visible when free text matches a different offer", async () => {
+    const station = getSyntheticTransitStations()[0];
+    const now = new Date();
+    station.dataStatus = "verified";
+    station.offers = Array.from({ length: 7 }, (_, index) => ({
+      ...station.offers[0],
+      id: `mixed-${index}`,
+      status: "verified" as const,
+      standardModelId:
+        index === 0
+          ? "text-match"
+          : index === 6
+            ? "structured-match"
+            : `unrelated-${index}`,
+      standardModelLabel:
+        index === 0
+          ? "text-match"
+          : index === 6
+            ? "structured-match"
+            : `unrelated-${index}`,
+      lastVerifiedAt: now.toISOString(),
+    }));
+    const repository = createTransitRepository({
+      loader: async () => ({
+        generatedAt: now.toISOString(),
+        stations: [station],
+      }),
+      now: () => now,
+    });
+    const result = await repository.list({
+      q: "text-match",
+      model: "structured-match",
+    });
+    expect(result.items[0].offers).toHaveLength(5);
+    expect(result.items[0].offers[0].standardModelId).toBe("structured-match");
+  });
   it("does not blend a partial aggregate with another source's evidence", () => {
     const fallback = normalizeTransitAvailability({
       sevenDayRate: 0.75,

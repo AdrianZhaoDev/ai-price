@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -6,11 +7,35 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+// Last accepted evidence survives removal from the current public catalogue.
+// This is a collector-only safety baseline, not a public price-history API.
+export const publicOfferBaselines = pgTable(
+  "public_offer_baselines",
+  {
+    domain: text("domain").notNull(),
+    offerId: text("offer_id").notNull(),
+    identity: jsonb("identity").$type<unknown[]>().notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.domain, table.offerId] }),
+    index("public_offer_baselines_identity_idx").on(
+      table.domain,
+      sql`md5(${table.identity}::text)`,
+    ),
+  ],
+);
 
 export const priceModeEnum = pgEnum("price_mode", [
   "global",

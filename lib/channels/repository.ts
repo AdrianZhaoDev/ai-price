@@ -351,6 +351,7 @@ export class ChannelRepository {
     const nowMs = this.now().getTime();
     if (
       !options.forceRefresh &&
+      this.cacheTtlMs > 0 &&
       this.cached &&
       nowMs - this.cached.cachedAt <= this.cacheTtlMs
     ) {

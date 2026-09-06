@@ -195,9 +195,19 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       for (const statement of migration.split("--> statement-breakpoint"))
         if (statement.trim()) await connection.client.unsafe(statement);
     }
+    const [baselineTable] =
+      await connection.client`select to_regclass('public.public_offer_baselines') as name`;
+    if (!baselineTable.name) {
+      const migration = await readFile(
+        new URL("../drizzle/0014_public_offer_baselines.sql", import.meta.url),
+        "utf8",
+      );
+      for (const statement of migration.split("--> statement-breakpoint"))
+        if (statement.trim()) await connection.client.unsafe(statement);
+    }
   });
   beforeEach(async () => {
-    await connection.client`truncate channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
+    await connection.client`truncate public_offer_baselines, channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
   });
   afterAll(async () => {
     await closeDatabase();
@@ -296,6 +306,99 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       result?.offers.find((offer) => offer.id === "new-returned-id")
         ?.firstSeenAt,
     ).toBe(first.offers[0].observedAt);
+  });
+  it.each(["price", "currency", "bulk"])(
+    "rejects returning channel %s anomalies using retained evidence",
+    async (kind) => {
+      const first = channels();
+      first.offers[0].bulkPricingTiers = [
+        { minQuantity: 2, priceMinor: 900, currency: "CNY" },
+      ];
+      first.offers.push({
+        ...first.offers[0],
+        id: "anchor",
+        offerUrl: "https://example.com/anchor",
+      });
+      await publishChannelSnapshot(first);
+      await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+      const returned = structuredClone(first);
+      returned.offers[0].id = "returned-new-id";
+      if (kind === "price") returned.offers[0].priceMinor = 99900;
+      if (kind === "currency") returned.offers[0].currency = "USD";
+      if (kind === "bulk")
+        returned.offers[0].bulkPricingTiers[0].priceMinor = 99900;
+      await expect(publishChannelSnapshot(returned)).rejects.toThrow(
+        /price|currency/i,
+      );
+      expect(
+        (
+          await loadChannelSnapshotFromDatabase(connection.database)
+        )?.offers.map((offer) => offer.id),
+      ).toEqual(["anchor"]);
+    },
+  );
+  it.each(["price", "currency", "multiplier"])(
+    "rejects returning transit %s anomalies using retained evidence",
+    async (kind) => {
+      const first = transit();
+      first.availabilitySamples = [];
+      first.offers[0].inputPrice = 1;
+      first.offers.push({
+        ...first.offers[0],
+        id: "anchor",
+        standardModel: "anchor",
+      });
+      await publishTransitSnapshot(first);
+      await publishTransitSnapshot({ ...first, offers: [first.offers[1]] });
+      const returned = structuredClone(first);
+      returned.offers[0].id = "returned-new-id";
+      if (kind === "price") returned.offers[0].inputPrice = 99;
+      if (kind === "currency") returned.offers[0].currency = "CNY";
+      if (kind === "multiplier") returned.offers[0].modelMultiplier = 99;
+      await expect(publishTransitSnapshot(returned)).rejects.toThrow(
+        /price|units/i,
+      );
+      const [count] =
+        await connection.client`select count(*)::int as count from transit_offers`;
+      expect(count.count).toBe(1);
+      await publishTransitSnapshot({
+        ...returned,
+        offers: [
+          { ...first.offers[0], id: "returned-new-id" },
+          first.offers[1],
+        ],
+      });
+    },
+  );
+  it("backfills retained baselines for absent channel offers and current transit offers", async () => {
+    const first = channels();
+    first.offers.push({
+      ...first.offers[0],
+      id: "anchor",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishChannelSnapshot(first);
+    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    await publishTransitSnapshot(transit());
+    const migration = await readFile(
+      new URL("../drizzle/0014_public_offer_baselines.sql", import.meta.url),
+      "utf8",
+    );
+    await connection.client.begin(async (tx) => {
+      await tx`drop table public_offer_baselines`;
+      for (const statement of migration.split("--> statement-breakpoint"))
+        if (statement.trim()) await tx.unsafe(statement);
+      const rows =
+        await tx`select domain, offer_id, payload from public_offer_baselines order by domain, offer_id`;
+      expect(rows).toHaveLength(3);
+      expect(
+        rows.find((row) => row.offer_id === "offer")?.payload.priceMinor,
+      ).toBe(990);
+      expect(
+        rows.find((row) => row.domain === "transit")?.payload
+          .combinedMultiplier,
+      ).toBe(0.2);
+    });
   });
   it("backfills first-seen from pre-migration stable-identity history", async () => {
     const first = channels();
