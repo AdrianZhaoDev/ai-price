@@ -168,7 +168,10 @@ async function existingGeneration(
     sql`select pg_advisory_xact_lock(hashtext(${`public-data:${domain}`}))`,
   );
   const [current] = await tx
-    .select({ generatedAt: publicDataGenerations.generatedAt })
+    .select({
+      generatedAt: publicDataGenerations.generatedAt,
+      contentHash: publicDataGenerations.contentHash,
+    })
     .from(publicDataGenerations)
     .where(
       and(
@@ -181,6 +184,14 @@ async function existingGeneration(
   if (current && Date.parse(generatedAt) < current.generatedAt.getTime())
     throw new Error(
       "Snapshot is older than the published generation; current data retained.",
+    );
+  if (
+    current &&
+    Date.parse(generatedAt) === current.generatedAt.getTime() &&
+    hash !== current.contentHash
+  )
+    throw new Error(
+      "Snapshot conflicts with the published generation at the same time; current data retained.",
     );
   const [row] = await tx
     .select()
@@ -350,6 +361,49 @@ export async function publishChannelSnapshot(
       }
     }
 
+    const persistedMerchants = await tx
+      .select({
+        id: channelMerchants.id,
+        websiteUrl: channelMerchants.websiteUrl,
+        host: channelMerchants.host,
+      })
+      .from(channelMerchants);
+    const incomingMerchants = new Map(
+      snapshot.merchants.map((merchant) => [merchant.id, merchant]),
+    );
+    for (const previous of persistedMerchants) {
+      const incoming = incomingMerchants.get(previous.id);
+      if (
+        incoming &&
+        (new URL(previous.websiteUrl).origin !==
+          new URL(incoming.websiteUrl).origin ||
+          previous.host.toLowerCase() !== incoming.host.toLowerCase())
+      )
+        throw new Error(
+          "Channel merchant identity changed; previous snapshot retained for review.",
+        );
+    }
+    const persistedProducts = await tx
+      .select({
+        id: channelProducts.id,
+        platform: channelProducts.platform,
+        productType: channelProducts.productType,
+      })
+      .from(channelProducts);
+    const incomingProducts = new Map(
+      snapshot.products.map((product) => [product.id, product]),
+    );
+    for (const previous of persistedProducts) {
+      const incoming = incomingProducts.get(previous.id);
+      if (
+        incoming &&
+        (previous.platform !== incoming.platform ||
+          previous.productType !== incoming.productType)
+      )
+        throw new Error(
+          "Channel product identity changed; previous snapshot retained for review.",
+        );
+    }
     const baseline = await tx
       .select({
         merchantId: channelPublicOffers.merchantId,

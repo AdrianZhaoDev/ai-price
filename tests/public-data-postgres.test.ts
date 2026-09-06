@@ -32,6 +32,19 @@ import {
 
 const testUrl = process.env.TEST_PUBLIC_DATA_DATABASE_URL;
 const now = new Date().toISOString();
+let generationClock = Date.parse(now);
+// Ordinary replacement tests represent distinct, ordered upstream batches.
+// Timestamp/replay tests call the real publishers directly instead.
+function nextGeneration<T extends { generatedAt: string }>(snapshot: T): T {
+  snapshot.generatedAt = new Date(++generationClock).toISOString();
+  return snapshot;
+}
+const publishNextChannelSnapshot = (
+  snapshot: Parameters<typeof publishChannelSnapshot>[0],
+) => publishChannelSnapshot(nextGeneration(snapshot));
+const publishNextTransitSnapshot = (
+  snapshot: Parameters<typeof publishTransitSnapshot>[0],
+) => publishTransitSnapshot(nextGeneration(snapshot));
 const channels = () =>
   channelSnapshotSchema.parse({
     schemaVersion: 1,
@@ -216,25 +229,85 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     vi.unstubAllEnvs();
   });
 
-  it("retains immutable offer history through replacement, removal, and replay", async () => {
+  it.each([
+    "merchant-origin",
+    "merchant-host",
+    "product-platform",
+    "product-type",
+  ])("rejects channel entity reassignment: %s", async (field) => {
+    const first = channels();
+    const published = await publishNextChannelSnapshot(first);
+    const changed = structuredClone(first);
+    if (field === "merchant-origin")
+      changed.merchants[0].websiteUrl = "https://another.example.org";
+    if (field === "merchant-host")
+      changed.merchants[0].host = "another.example.org";
+    if (field === "product-platform")
+      changed.products[0].platform = "another-platform";
+    if (field === "product-type") changed.products[0].productType = "account";
+    await expect(publishNextChannelSnapshot(changed)).rejects.toThrow(
+      /Channel (merchant|product) identity changed/,
+    );
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(published.generationId);
+    const corrected = structuredClone(first);
+    corrected.merchants[0].websiteUrl = "https://example.com/corrected-path";
+    corrected.products[0].displayName = "Corrected display name";
+    await publishNextChannelSnapshot(corrected);
+  });
+  it("rejects equal-time different-content conflicts while preserving exact replay", async () => {
+    const channel = channels();
+    const station = transit();
+    const channelResult = await publishChannelSnapshot(channel);
+    const transitResult = await publishTransitSnapshot(station);
+    expect((await publishChannelSnapshot(channel)).published).toBe(false);
+    expect((await publishTransitSnapshot(station)).published).toBe(false);
+    const changedChannel = structuredClone(channel);
+    changedChannel.offers[0].priceMinor = 1000;
+    const changedTransit = structuredClone(station);
+    changedTransit.offers[0].modelMultiplier = 2.1;
+    await expect(publishChannelSnapshot(changedChannel)).rejects.toThrow(
+      "same time",
+    );
+    await expect(publishTransitSnapshot(changedTransit)).rejects.toThrow(
+      "same time",
+    );
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(channelResult.generationId);
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(transitResult.generationId);
+    await publishNextChannelSnapshot(changedChannel);
+    await publishNextTransitSnapshot(changedTransit);
+    await expect(publishChannelSnapshot(channel)).rejects.toThrow("older than");
+    await expect(publishTransitSnapshot(station)).rejects.toThrow("older than");
+  });
+
+  it("retains immutable offer history through replacement, removal, and later republication", async () => {
     const a = channels();
     a.offers[0].id = "history-offer";
     a.offers[0].observedAt = new Date(Date.parse(now) - 3600000).toISOString();
-    const first = await publishChannelSnapshot(a);
+    const first = await publishNextChannelSnapshot(a);
     const b = channels();
     b.offers[0].id = "history-offer";
     b.offers[0].priceMinor = 1290;
-    await publishChannelSnapshot(b);
+    await publishNextChannelSnapshot(b);
     const refreshed = await loadChannelSnapshotFromDatabase(
       connection.database,
     );
     expect(refreshed?.offers[0].firstSeenAt).toBe(a.offers[0].observedAt);
     expect(refreshed?.offers[0].observedAt).toBe(b.offers[0].observedAt);
     expect(refreshed?.merchants?.[0].lastReviewedAt ?? null).toBeNull();
-    await publishChannelSnapshot(a);
+    await publishNextChannelSnapshot(a);
     const replacement = channels();
     replacement.offers[0].id = "replacement-offer";
-    await publishChannelSnapshot(replacement);
+    await publishNextChannelSnapshot(replacement);
     const current =
       await connection.client`select id from channel_public_offers where id='history-offer'`;
     expect(current).toHaveLength(0);
@@ -261,11 +334,11 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     first.offers[0].observedAt = new Date(
       Date.parse(now) - 3600000,
     ).toISOString();
-    await publishChannelSnapshot(first);
+    await publishNextChannelSnapshot(first);
     for (const id of ["rekey-one", "rekey-two", "offer"]) {
       const next = channels();
       next.offers[0].id = id;
-      await publishChannelSnapshot(next);
+      await publishNextChannelSnapshot(next);
       const result = await loadChannelSnapshotFromDatabase(connection.database);
       expect(result?.offers[0].firstSeenAt).toBe(first.offers[0].observedAt);
       expect(result?.offers[0].observedAt).toBe(now);
@@ -276,10 +349,13 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       offerUrl: "https://example.com/anchor",
     });
-    await publishChannelSnapshot(current);
-    await publishChannelSnapshot({ ...current, offers: [current.offers[1]] });
+    await publishNextChannelSnapshot(current);
+    await publishNextChannelSnapshot({
+      ...current,
+      offers: [current.offers[1]],
+    });
     // The old ID has no current predecessor; recover its retained lineage.
-    await publishChannelSnapshot(current);
+    await publishNextChannelSnapshot(current);
     expect(
       (await loadChannelSnapshotFromDatabase(connection.database))?.offers.find(
         (offer) => offer.id === "offer",
@@ -296,12 +372,12 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       offerUrl: "https://example.com/anchor",
     });
-    await publishChannelSnapshot(first);
-    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    await publishNextChannelSnapshot(first);
+    await publishNextChannelSnapshot({ ...first, offers: [first.offers[1]] });
     const returned = channels();
     returned.offers[0].id = "new-returned-id";
     returned.offers.push(first.offers[1]);
-    await publishChannelSnapshot(returned);
+    await publishNextChannelSnapshot(returned);
     const result = await loadChannelSnapshotFromDatabase(connection.database);
     expect(
       result?.offers.find((offer) => offer.id === "new-returned-id")
@@ -320,15 +396,15 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         id: "anchor",
         offerUrl: "https://example.com/anchor",
       });
-      await publishChannelSnapshot(first);
-      await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+      await publishNextChannelSnapshot(first);
+      await publishNextChannelSnapshot({ ...first, offers: [first.offers[1]] });
       const returned = structuredClone(first);
       returned.offers[0].id = "returned-new-id";
       if (kind === "price") returned.offers[0].priceMinor = 99900;
       if (kind === "currency") returned.offers[0].currency = "USD";
       if (kind === "bulk")
         returned.offers[0].bulkPricingTiers[0].priceMinor = 99900;
-      await expect(publishChannelSnapshot(returned)).rejects.toThrow(
+      await expect(publishNextChannelSnapshot(returned)).rejects.toThrow(
         /price|currency/i,
       );
       expect(
@@ -349,20 +425,20 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         id: "anchor",
         standardModel: "anchor",
       });
-      await publishTransitSnapshot(first);
-      await publishTransitSnapshot({ ...first, offers: [first.offers[1]] });
+      await publishNextTransitSnapshot(first);
+      await publishNextTransitSnapshot({ ...first, offers: [first.offers[1]] });
       const returned = structuredClone(first);
       returned.offers[0].id = "returned-new-id";
       if (kind === "price") returned.offers[0].inputPrice = 99;
       if (kind === "currency") returned.offers[0].currency = "CNY";
       if (kind === "multiplier") returned.offers[0].modelMultiplier = 99;
-      await expect(publishTransitSnapshot(returned)).rejects.toThrow(
+      await expect(publishNextTransitSnapshot(returned)).rejects.toThrow(
         /price|units/i,
       );
       const [count] =
         await connection.client`select count(*)::int as count from transit_offers`;
       expect(count.count).toBe(1);
-      await publishTransitSnapshot({
+      await publishNextTransitSnapshot({
         ...returned,
         offers: [
           { ...first.offers[0], id: "returned-new-id" },
@@ -378,14 +454,14 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       offerUrl: "https://example.com/anchor",
     });
-    await publishChannelSnapshot(first);
+    await publishNextChannelSnapshot(first);
     const changed = structuredClone(first);
     changed.offers[0].offerUrl = "https://example.com/changed";
-    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+    await expect(publishNextChannelSnapshot(changed)).rejects.toThrow(
       /stable identity changed/,
     );
-    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
-    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+    await publishNextChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    await expect(publishNextChannelSnapshot(changed)).rejects.toThrow(
       /stable identity changed/,
     );
     changed.offers[0] = {
@@ -393,7 +469,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "new-return",
       priceMinor: 99900,
     };
-    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+    await expect(publishNextChannelSnapshot(changed)).rejects.toThrow(
       /price anomaly/i,
     );
     const model = transit();
@@ -403,14 +479,14 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor-model",
       standardModel: "anchor",
     });
-    await publishTransitSnapshot(model);
+    await publishNextTransitSnapshot(model);
     const moved = structuredClone(model);
     moved.offers[0].groupName = "moved-group";
-    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+    await expect(publishNextTransitSnapshot(moved)).rejects.toThrow(
       /stable identity changed/,
     );
-    await publishTransitSnapshot({ ...model, offers: [model.offers[1]] });
-    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+    await publishNextTransitSnapshot({ ...model, offers: [model.offers[1]] });
+    await expect(publishNextTransitSnapshot(moved)).rejects.toThrow(
       /stable identity changed/,
     );
     moved.offers[0] = {
@@ -418,7 +494,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "new-return",
       modelMultiplier: 999,
     };
-    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+    await expect(publishNextTransitSnapshot(moved)).rejects.toThrow(
       /price anomaly/i,
     );
   });
@@ -429,12 +505,15 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       offerUrl: "https://example.com/anchor",
     });
-    await publishChannelSnapshot(channel);
-    await publishChannelSnapshot({ ...channel, offers: [channel.offers[1]] });
+    await publishNextChannelSnapshot(channel);
+    await publishNextChannelSnapshot({
+      ...channel,
+      offers: [channel.offers[1]],
+    });
     const channelBaseline =
       await connection.client`select identity, payload from public_offer_baselines where domain='channels' and offer_id='offer'`;
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: [{ ...channel.offers[1], id: "offer" }],
       }),
@@ -450,12 +529,12 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       standardModel: "anchor",
     });
-    await publishTransitSnapshot(model);
-    await publishTransitSnapshot({ ...model, offers: [model.offers[1]] });
+    await publishNextTransitSnapshot(model);
+    await publishNextTransitSnapshot({ ...model, offers: [model.offers[1]] });
     const transitBaseline =
       await connection.client`select identity, payload from public_offer_baselines where domain='transit' and offer_id='model-offer'`;
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...model,
         offers: [{ ...model.offers[1], id: "model-offer" }],
       }),
@@ -469,10 +548,10 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     async (field) => {
       const first = transit();
       first.stations[0].apiBaseUrl = "https://example.com/v1";
-      await publishTransitSnapshot(first);
+      await publishNextTransitSnapshot(first);
       const moved = structuredClone(first);
       moved.stations[0][field] = "https://another.example.org/pricing";
-      await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+      await expect(publishNextTransitSnapshot(moved)).rejects.toThrow(
         /station source identity changed/i,
       );
       const [retained] =
@@ -483,7 +562,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         api_base_url: first.stations[0].apiBaseUrl,
       });
       moved.stations[0][field] = "https://example.com/corrected-path";
-      await publishTransitSnapshot(moved);
+      await publishNextTransitSnapshot(moved);
     },
   );
   it("rejects oversized generations before publication or full hydration", async () => {
@@ -506,8 +585,8 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         ),
       }).success,
     ).toBe(false);
-    await publishChannelSnapshot(channel);
-    await publishTransitSnapshot(model);
+    await publishNextChannelSnapshot(channel);
+    await publishNextTransitSnapshot(model);
     await connection.client`insert into channel_public_offers select (jsonb_populate_record(null::channel_public_offers, to_jsonb(o) || jsonb_build_object('id', 'extra-' || n))).* from channel_public_offers o cross join generate_series(1, ${PUBLIC_DATA_LIMITS.channelOffers}) n where o.id='offer'`;
     await connection.client`insert into transit_offers select (jsonb_populate_record(null::transit_offers, to_jsonb(o) || jsonb_build_object('id', 'extra-' || n))).* from transit_offers o cross join generate_series(1, ${PUBLIC_DATA_LIMITS.transitOffers}) n where o.id='model-offer'`;
     await expect(
@@ -524,9 +603,9 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: "anchor",
       offerUrl: "https://example.com/anchor",
     });
-    await publishChannelSnapshot(first);
-    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
-    await publishTransitSnapshot(transit());
+    await publishNextChannelSnapshot(first);
+    await publishNextChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    await publishNextTransitSnapshot(transit());
     const migration = await readFile(
       new URL("../drizzle/0014_public_offer_baselines.sql", import.meta.url),
       "utf8",
@@ -552,10 +631,10 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     first.offers[0].observedAt = new Date(
       Date.parse(now) - 3600000,
     ).toISOString();
-    await publishChannelSnapshot(first);
+    await publishNextChannelSnapshot(first);
     const next = channels();
     next.offers[0].id = "migrated-rekey";
-    await publishChannelSnapshot(next);
+    await publishNextChannelSnapshot(next);
     const migration = await readFile(
       new URL(
         "../drizzle/0013_channel_first_seen_lineage.sql",
@@ -580,7 +659,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     const snapshot = channels();
     snapshot.offers[0].sourceType = "authorized_feed";
     snapshot.offers[0].sourceName = "Capital Market";
-    await publishChannelSnapshot(snapshot);
+    await publishNextChannelSnapshot(snapshot);
     expect(
       (await loadChannelSnapshotFromDatabase(connection.database))?.offers[0]
         .sourceType,
@@ -594,9 +673,9 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       id: `offer-${index}`,
       offerUrl: `https://example.com/buy/${index}`,
     }));
-    const initial = await publishChannelSnapshot(snapshot);
+    const initial = await publishNextChannelSnapshot(snapshot);
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...snapshot,
         offers: snapshot.offers.slice(0, 1),
       }),
@@ -609,7 +688,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         merchantId: "different",
       })),
     };
-    await expect(publishChannelSnapshot(changedMerchant)).rejects.toThrow(
+    await expect(publishNextChannelSnapshot(changedMerchant)).rejects.toThrow(
       "collapsed",
     );
     const retained = await loadChannelSnapshotFromDatabase(connection.database);
@@ -617,9 +696,9 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect(retained?.offers).toHaveLength(10);
   });
 
-  it("round-trips nullable channel fields, keeps repeat imports idempotent, and restores A after B", async () => {
+  it("round-trips nullable channel fields, preserves exact replay, and republishes earlier values with a newer generation", async () => {
     const a = channels();
-    const first = await publishChannelSnapshot(a);
+    const first = await publishNextChannelSnapshot(a);
     const read = await loadChannelSnapshotFromDatabase(connection.database);
     expect(read?.merchants).toHaveLength(1);
     expect(read?.offers).toHaveLength(1);
@@ -630,38 +709,38 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect((await publishChannelSnapshot(a)).published).toBe(false);
     const b = channels();
     b.offers[0].priceMinor = 1290;
-    await publishChannelSnapshot(b);
+    await publishNextChannelSnapshot(b);
     expect(
       (await loadChannelSnapshotFromDatabase(connection.database))?.offers[0]
         .priceMinor,
     ).toBe(1290);
-    expect((await publishChannelSnapshot(a)).published).toBe(true);
+    expect((await publishNextChannelSnapshot(a)).published).toBe(true);
     const restored = await loadChannelSnapshotFromDatabase(connection.database);
-    expect(restored?.generationId).toBe(first.generationId);
+    expect(restored?.generationId).not.toBe(first.generationId);
     expect(restored?.offers[0].priceMinor).toBe(990);
   });
 
   it("rolls back a failed replacement after row deletion without corrupting the last snapshot", async () => {
-    await publishChannelSnapshot(channels());
+    await publishNextChannelSnapshot(channels());
     const bad = channels();
     bad.products.push({
       ...bad.products[0],
       displayName: "Duplicate primary key",
     });
-    await expect(publishChannelSnapshot(bad)).rejects.toThrow();
+    await expect(publishNextChannelSnapshot(bad)).rejects.toThrow();
     expect(
       (await loadChannelSnapshotFromDatabase(connection.database))?.offers[0]
         .priceMinor,
     ).toBe(990);
     await expect(
-      publishChannelSnapshot({ ...channels(), offers: [] }),
+      publishNextChannelSnapshot({ ...channels(), offers: [] }),
     ).rejects.toThrow("empty");
   });
 
   it("stores long non-compressible public search text without B-tree tuple failures", async () => {
     const snapshot = channels();
     snapshot.products[0].summary = randomBytes(1900).toString("hex");
-    await expect(publishChannelSnapshot(snapshot)).resolves.toMatchObject({
+    await expect(publishNextChannelSnapshot(snapshot)).resolves.toMatchObject({
       published: true,
     });
   });
@@ -670,34 +749,34 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     const snapshot = channels();
     snapshot.offers[0].sourceUrl = `https://example.com/${"a".repeat(1000)}`;
     snapshot.offers[0].offerUrl = `https://example.com/${"b".repeat(1000)}`;
-    const published = await publishChannelSnapshot(snapshot);
+    const published = await publishNextChannelSnapshot(snapshot);
     const read = await loadChannelSnapshotFromDatabase(connection.database);
     expect(read?.offers).toHaveLength(1);
     expect(read?.offers[0].sourceUrl).toBe(snapshot.offers[0].sourceUrl);
     for (const status of ["pending_review", "suspended"] as const) {
       const bad = channels();
       bad.merchants[0].status = status;
-      await expect(publishChannelSnapshot(bad)).rejects.toThrow(
+      await expect(publishNextChannelSnapshot(bad)).rejects.toThrow(
         "no public offers",
       );
       bad.merchants[0].status = "active";
       bad.offers[0].status = status;
-      await expect(publishChannelSnapshot(bad)).rejects.toThrow(
+      await expect(publishNextChannelSnapshot(bad)).rejects.toThrow(
         "no public offers",
       );
     }
     const bad = channels();
     bad.merchants[0].name = "a".repeat(161);
-    await expect(publishChannelSnapshot(bad)).rejects.toThrow();
+    await expect(publishNextChannelSnapshot(bad)).rejects.toThrow();
     expect(
       (await loadChannelSnapshotFromDatabase(connection.database))
         ?.generationId,
     ).toBe(published.generationId);
   });
 
-  it("round-trips transit prices and samples and restores a previous feed", async () => {
+  it("round-trips transit prices and samples and republishes previous values with a newer generation", async () => {
     const a = transit();
-    await publishTransitSnapshot(a);
+    await publishNextTransitSnapshot(a);
     const read = normalizeTransitDatabaseSnapshot(
       await loadTransitSnapshotFromDatabase(connection.database),
     );
@@ -707,11 +786,11 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect((await publishTransitSnapshot(a)).published).toBe(false);
     const b = transit();
     b.offers[0].modelMultiplier = 3;
-    await publishTransitSnapshot(b);
-    expect((await publishTransitSnapshot(a)).published).toBe(true);
+    await publishNextTransitSnapshot(b);
+    expect((await publishNextTransitSnapshot(a)).published).toBe(true);
     const bad = transit();
     bad.availabilitySamples[0].offerId = "missing";
-    await expect(publishTransitSnapshot(bad)).rejects.toThrow("unknown");
+    await expect(publishNextTransitSnapshot(bad)).rejects.toThrow("unknown");
     const restored = normalizeTransitDatabaseSnapshot(
       await loadTransitSnapshotFromDatabase(connection.database),
     );
@@ -723,7 +802,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     snapshot.offers[0].rechargeCoefficient = null;
     snapshot.offers[0].rechargeRatio = "1:2";
     snapshot.stations[0].status = "unknown";
-    const published = await publishTransitSnapshot(snapshot);
+    const published = await publishNextTransitSnapshot(snapshot);
     const read = normalizeTransitDatabaseSnapshot(
       await loadTransitSnapshotFromDatabase(connection.database),
     );
@@ -741,12 +820,12 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         stations: [{ ...snapshot.stations[0], status: "unavailable" as const }],
       },
     ])
-      await expect(publishTransitSnapshot(bad)).rejects.toThrow(
+      await expect(publishNextTransitSnapshot(bad)).rejects.toThrow(
         "no public stations",
       );
     const bad = transit();
     bad.stations[0].name = "a".repeat(201);
-    await expect(publishTransitSnapshot(bad)).rejects.toThrow();
+    await expect(publishNextTransitSnapshot(bad)).rejects.toThrow();
     const retained = normalizeTransitDatabaseSnapshot(
       await loadTransitSnapshotFromDatabase(connection.database),
     );
@@ -763,18 +842,18 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         ...snapshot.offers[0],
         id: `native-${index}`,
       }));
-      await publishTransitSnapshot(snapshot);
+      await publishNextTransitSnapshot(snapshot);
       await expect(
-        publishTransitSnapshot({
+        publishNextTransitSnapshot({
           ...snapshot,
           offers: snapshot.offers.slice(0, 5),
         }),
       ).rejects.toThrow("collapsed");
       await expect(
-        publishTransitSnapshot({ ...snapshot, offers: [] }),
+        publishNextTransitSnapshot({ ...snapshot, offers: [] }),
       ).rejects.toThrow("collapsed");
       await expect(
-        publishTransitSnapshot({
+        publishNextTransitSnapshot({
           ...snapshot,
           stations: [{ ...snapshot.stations[0], id: "other-station" }],
           offers: [],
@@ -834,36 +913,36 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     const channel = channels();
     const station = transit();
     station.offers[0].inputPrice = 1e-8;
-    const channelResult = await publishChannelSnapshot(channel);
-    const transitResult = await publishTransitSnapshot(station);
+    const channelResult = await publishNextChannelSnapshot(channel);
+    const transitResult = await publishNextTransitSnapshot(station);
     for (const priceMinor of [0, 1980, null])
       await expect(
-        publishChannelSnapshot({
+        publishNextChannelSnapshot({
           ...channel,
           offers: [{ ...channel.offers[0], priceMinor }],
         }),
       ).rejects.toThrow("Price anomaly");
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: [{ ...channel.offers[0], currency: "USD" }],
       }),
     ).rejects.toThrow("currency changed");
     for (const inputPrice of [0, 2e-8, null])
       await expect(
-        publishTransitSnapshot({
+        publishNextTransitSnapshot({
           ...station,
           offers: [{ ...station.offers[0], inputPrice }],
         }),
       ).rejects.toThrow("Price anomaly");
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...station,
         offers: [{ ...station.offers[0], modelMultiplier: 4 }],
       }),
     ).rejects.toThrow("Price anomaly");
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...station,
         offers: [{ ...station.offers[0], currency: "CNY" }],
       }),
@@ -878,13 +957,13 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       )?.generationId,
     ).toBe(transitResult.generationId);
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: [{ ...channel.offers[0], priceMinor: 1485 }],
       }),
     ).resolves.toMatchObject({ published: true });
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...station,
         offers: [{ ...station.offers[0], modelMultiplier: 3 }],
       }),
@@ -893,23 +972,23 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
   it("keeps anomaly checks across ID changes and rejects wholesale identity churn", async () => {
     const channel = channels();
     const station = transit();
-    const channelResult = await publishChannelSnapshot(channel);
-    const transitResult = await publishTransitSnapshot(station);
+    const channelResult = await publishNextChannelSnapshot(channel);
+    const transitResult = await publishNextTransitSnapshot(station);
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: [{ ...channel.offers[0], id: "new-id", priceMinor: 9000 }],
       }),
     ).rejects.toThrow("Price anomaly");
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...station,
         offers: [{ ...station.offers[0], id: "new-id", modelMultiplier: 20 }],
         availabilitySamples: [],
       }),
     ).rejects.toThrow("Price anomaly");
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: [
           {
@@ -922,7 +1001,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       }),
     ).rejects.toThrow("identity overlap");
     await expect(
-      publishTransitSnapshot({
+      publishNextTransitSnapshot({
         ...station,
         offers: [
           {
@@ -950,20 +1029,20 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     snapshot.offers[0].bulkPricingTiers = [
       { minQuantity: 10, priceMinor: 900, currency: "CNY" },
     ];
-    const initial = await publishChannelSnapshot(snapshot);
+    const initial = await publishNextChannelSnapshot(snapshot);
     for (const tier of [
       { minQuantity: 10, priceMinor: 9000, currency: "CNY" },
       { minQuantity: 10, priceMinor: 900, currency: "USD" },
       { minQuantity: 20, priceMinor: 9000, currency: "CNY" },
     ])
       await expect(
-        publishChannelSnapshot({
+        publishNextChannelSnapshot({
           ...snapshot,
           offers: [{ ...snapshot.offers[0], bulkPricingTiers: [tier] }],
         }),
       ).rejects.toThrow();
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...snapshot,
         offers: [
           {
@@ -987,13 +1066,13 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       { minQuantity: 10, priceMinor: 900, currency: "CNY" },
       { minQuantity: 20, priceMinor: 800, currency: "CNY" },
     ];
-    const initial = await publishChannelSnapshot(snapshot);
+    const initial = await publishNextChannelSnapshot(snapshot);
     for (const tier of [
       { minQuantity: 30, priceMinor: 8000, currency: "CNY" },
       { minQuantity: 30, priceMinor: 800, currency: "USD" },
     ])
       await expect(
-        publishChannelSnapshot({
+        publishNextChannelSnapshot({
           ...snapshot,
           offers: [
             {
@@ -1011,10 +1090,10 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
   it("rejects disappearance of publishable offers even when raw counts stay constant", async () => {
     const snapshot = transit();
     snapshot.availabilitySamples = [];
-    const initial = await publishTransitSnapshot(snapshot);
+    const initial = await publishNextTransitSnapshot(snapshot);
     for (const status of ["pending_review", "unknown", "unavailable"] as const)
       await expect(
-        publishTransitSnapshot({
+        publishNextTransitSnapshot({
           ...snapshot,
           offers: [{ ...snapshot.offers[0], status }],
         }),
@@ -1024,7 +1103,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       new Date(Date.now() - 40 * 3600000).toISOString(),
     ])
       await expect(
-        publishTransitSnapshot({
+        publishNextTransitSnapshot({
           ...snapshot,
           offers: [{ ...snapshot.offers[0], lastVerifiedAt }],
         }),
@@ -1039,9 +1118,9 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       ...channel.offers[0],
       id: `offer-${index}`,
     }));
-    await publishChannelSnapshot(channel);
+    await publishNextChannelSnapshot(channel);
     await expect(
-      publishChannelSnapshot({
+      publishNextChannelSnapshot({
         ...channel,
         offers: channel.offers.map((offer, index) => ({
           ...offer,
@@ -1056,7 +1135,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       Date.now() - 40 * 24 * 3600000,
     ).toISOString();
     snapshot.offers[0].observedAt = snapshot.offers[0].lastSeenAt;
-    const published = await publishChannelSnapshot(snapshot);
+    const published = await publishNextChannelSnapshot(snapshot);
     const read = await loadChannelSnapshotFromDatabase(connection.database);
     expect(read?.offers[0].sourceHealth).toBe("unknown");
     expect(isOfferEligibleForLowestPrice(read!.offers[0])).toBe(false);
@@ -1077,9 +1156,9 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     const tiny = transit();
     tiny.offers[0].rechargeCoefficient = 1e-8;
     tiny.offers[0].modelMultiplier = 1e-8;
-    await expect(publishTransitSnapshot(tiny)).rejects.toThrow();
+    await expect(publishNextTransitSnapshot(tiny)).rejects.toThrow();
     tiny.offers[0].rechargeRatio = "1:10000000000";
-    await expect(publishTransitSnapshot(tiny)).rejects.toThrow();
+    await expect(publishNextTransitSnapshot(tiny)).rejects.toThrow();
     const read = normalizeTransitDatabaseSnapshot(
       await loadTransitSnapshotFromDatabase(connection.database),
     );
