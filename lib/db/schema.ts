@@ -880,11 +880,14 @@ export const channelOfferObservations = pgTable(
   "channel_offer_observations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    offerId: text("offer_id")
-      .references(() => channelPublicOffers.id, { onDelete: "cascade" })
-      .notNull(),
+    // Stable external offer key, independent of replaceable current rows.
+    offerId: text("offer_id").notNull(),
     generationId: uuid("generation_id")
-      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .references(() => publicDataGenerations.id, { onDelete: "restrict" })
+      .notNull(),
+    offerSnapshot: jsonb("offer_snapshot")
+      .$type<Record<string, unknown>>()
+      .default({})
       .notNull(),
     priceMinor: numeric("price_minor", {
       precision: 20,

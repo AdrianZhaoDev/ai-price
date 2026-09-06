@@ -148,7 +148,6 @@ async function clearChannelRows(
     Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
   >[0],
 ) {
-  await tx.delete(channelOfferObservations);
   await tx.delete(channelPublicOffers);
   await tx.delete(channelProducts);
   await tx.delete(channelMerchants);
@@ -388,20 +387,39 @@ export async function publishChannelSnapshot(
           updatedAt: new Date(snapshot.generatedAt),
         })),
       );
-      await insertRows(
-        tx,
-        channelOfferObservations,
-        snapshot.offers.map((offer) => ({
-          offerId: offer.id,
-          generationId,
-          priceMinor: offer.priceMinor,
-          currency: offer.currency,
-          availability: offer.availability,
-          stockCount: offer.stockCount ?? null,
-          observedAt: new Date(offer.observedAt),
-          rawHash: contentHash(offer),
-        })),
+      const merchantNames = new Map(
+        snapshot.merchants.map((merchant) => [merchant.id, merchant.name]),
       );
+      const productNames = new Map(
+        snapshot.products.map((product) => [product.id, product.displayName]),
+      );
+      const observations = snapshot.offers.map((offer) => ({
+        offerId: offer.id,
+        generationId,
+        offerSnapshot: {
+          ...offer,
+          merchantName: merchantNames.get(offer.merchantId),
+          productName: productNames.get(offer.productId),
+        },
+        priceMinor: offer.priceMinor,
+        currency: offer.currency,
+        availability: offer.availability,
+        stockCount: offer.stockCount ?? null,
+        observedAt: new Date(offer.observedAt),
+        rawHash: contentHash(offer),
+      }));
+      for (let offset = 0; offset < observations.length; offset += 500) {
+        await tx
+          .insert(channelOfferObservations)
+          .values(observations.slice(offset, offset + 500))
+          .onConflictDoNothing({
+            target: [
+              channelOfferObservations.offerId,
+              channelOfferObservations.observedAt,
+              channelOfferObservations.rawHash,
+            ],
+          });
+      }
     }
     await tx
       .update(publicDataGenerations)

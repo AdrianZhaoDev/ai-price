@@ -10,6 +10,40 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("expires embedded aggregates on successful reads and uses fresh sample evidence", () => {
+    const now = new Date("2026-09-06T12:00:00Z");
+    const station = getSyntheticTransitStations()[0];
+    const expired = {
+      ...station.availability,
+      sevenDayRate: 1,
+      sevenDaySamples: 10,
+      firstCheckedAt: "2026-09-06T00:00:00Z",
+      lastCheckedAt: "2026-09-06T00:00:00Z",
+      expiresAt: "2026-09-06T01:00:00Z",
+    };
+    station.availability = expired;
+    station.offers = [{ ...station.offers[0], availability: expired }];
+    const empty = normalizeTransitDatabaseSnapshot(
+      { generatedAt: now.toISOString(), stations: [station] },
+      { now },
+    );
+    expect(empty?.stations[0].availability.sevenDaySamples).toBe(0);
+    expect(empty?.stations[0].offers[0].availability.sevenDaySamples).toBe(0);
+    const fallback = normalizeTransitAvailability({
+      ...expired,
+      sevenDayRate: 0.5,
+      sevenDaySamples: 2,
+      expiresAt: "2026-09-06T13:00:00Z",
+    });
+    const offer = normalizeTransitOffer(
+      station.offers[0],
+      station.id,
+      fallback,
+      now,
+    );
+    expect(offer?.availability.sevenDayRate).toBe(0.5);
+    expect(offer?.availability.sevenDaySamples).toBe(2);
+  });
   it("preserves availability counts for the complete accepted sample corpus", () => {
     expect(
       normalizeTransitAvailability({ sevenDayRate: 1, sevenDaySamples: 100001 })

@@ -389,6 +389,20 @@ function expireAvailability(
   return availability;
 }
 
+function freshAvailability(
+  input: unknown,
+  fallback: TransitAvailability,
+  now: Date,
+): TransitAvailability {
+  const embedded = expireAvailability(
+    normalizeTransitAvailability(input, fallback),
+    now,
+  );
+  return embedded.sevenDaySamples > 0
+    ? embedded
+    : expireAvailability(fallback, now);
+}
+
 export function normalizeTransitOffer(
   input: unknown,
   stationId: string,
@@ -561,9 +575,10 @@ export function normalizeTransitOffer(
         "observed_at",
       ),
     ),
-    availability: normalizeTransitAvailability(
+    availability: freshAvailability(
       pick(row, "availability"),
       fallbackAvailability,
+      now,
     ),
     status: enumValue(
       pick(row, "status"),
@@ -663,7 +678,10 @@ export function aggregateAvailability(
   normalized.sort((left, right) =>
     left.checkedAt.localeCompare(right.checkedAt),
   );
-  const latest = normalized.at(-1)!;
+  const latest = normalized.findLast(
+    (item) => item.sourceType !== "public_model_catalog",
+  );
+  if (!latest) return EMPTY_AVAILABILITY;
   // A reporting source is one evidence stream; never silently merge another
   // operator's monitor into a claim labelled as this stream.
   const seen = new Set<string>();
@@ -869,9 +887,10 @@ export function normalizeTransitDatabaseSnapshot(
       offerIds.add(candidate.id);
       offers.push(candidate);
     }
-    const explicitAvailability = normalizeTransitAvailability(
+    const explicitAvailability = freshAvailability(
       pick(row, "availability"),
       stationFallback,
+      now,
     );
     const dataStatus = enumValue(
       pick(row, "dataStatus", "data_status", "recordStatus", "record_status"),

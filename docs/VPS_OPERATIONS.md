@@ -245,7 +245,17 @@ chmod 700 /tmp/ai-price-vps-install.sh
 新增 `0009` migration 仅增加 `public_data_generations`、`channel_*` 和 `transit_*`
 表，不改动官方价格和订阅数据。仍须由标准发布脚本在 migration 前备份 VPS 数据库。
 `0010` 去掉这些表 B-tree 索引中的长 search_text，只保留 generation_id，不删除数据。
+`0011` 解除历史观测对当前报价行的级联删除引用、将观测对 generation 的引用改为
+RESTRICT，并新增公开 offer_snapshot 上下文；不删除现有观测。当前报价仍可替换，
+观测按 offer_id、observed_at、raw_hash 去重追加，重放旧批次不覆盖历史。迁移前已有的
+观测上下文默认为空对象，不伪造已丢失信息。暂不自动清理历史；新增来源前须评估增长量
+并制定保留策略，生产历史删除另行授权。
 回滚代码可保留这些新增表；不得为回滚代码而删除表或恢复覆盖整个生产库。
+若回滚公共采集器，不得使用 `0011` 之前会删除观测的版本；先关闭 GitHub 采集开关。
+写入账号对 channel_offer_observations 仅授予 SELECT、INSERT，对
+public_data_generations 授予 SELECT、INSERT、UPDATE，其余六张公共当前数据表才授予
+SELECT、INSERT、UPDATE、DELETE。只读 Web 账号仅授予八张公共表的 SELECT。
+不要授予 TRUNCATE、DDL、旧业务表访问或额外角色成员资格。
 
 暂无获准来源时，可在用户明确批准后仅发布“待收录/暂无已核验数据”的只读栏目：
 `PUBLIC_DATA_INDEXING_ENABLED` 保持 false，GitHub Variable

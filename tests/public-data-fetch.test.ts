@@ -64,6 +64,26 @@ describe("availability evidence windows", () => {
     );
     expect(summary.expiresAt).toBe(later);
   });
+  it("does not let newer catalogue metadata suppress monitoring evidence", () => {
+    const result = aggregateAvailability(
+      [
+        { ...sample, id: "monitor" },
+        {
+          ...sample,
+          id: "catalog",
+          checkedAt: "2026-09-06T23:00:00Z",
+          sourceType: "public_model_catalog",
+          sourceUrl: "https://example.com/models",
+        },
+      ],
+      "s",
+      "o",
+      now,
+    );
+    expect(result.sevenDaySamples).toBe(1);
+    expect(result.sourceType).toBe("public_status");
+    expect(result.sourceUrl).toBe("https://example.com/status");
+  });
   it("excludes stale/future/wrong-scope evidence and deduplicates samples", () => {
     const evidence = aggregateAvailability(
       [

@@ -150,12 +150,60 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     for (const statement of indexMigration.split("--> statement-breakpoint")) {
       if (statement.trim()) await connection.client.unsafe(statement);
     }
+    const [historyColumn] =
+      await connection.client`select count(*)::int as count from information_schema.columns where table_schema='public' and table_name='channel_offer_observations' and column_name='offer_snapshot'`;
+    if (!historyColumn.count) {
+      const migration = await readFile(
+        new URL(
+          "../drizzle/0011_preserve_channel_observations.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      for (const statement of migration.split("--> statement-breakpoint")) {
+        if (statement.trim()) await connection.client.unsafe(statement);
+      }
+    }
     await connection.client`truncate channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
   });
   afterAll(async () => {
     await closeDatabase();
     await connection?.client.end({ timeout: 5 });
     vi.unstubAllEnvs();
+  });
+
+  it("retains immutable offer history through replacement, removal, and replay", async () => {
+    const a = channels();
+    a.offers[0].id = "history-offer";
+    const first = await publishChannelSnapshot(a);
+    const b = channels();
+    b.offers[0].id = "history-offer";
+    b.offers[0].priceMinor = 1290;
+    await publishChannelSnapshot(b);
+    await publishChannelSnapshot(a);
+    const replacement = channels();
+    replacement.offers[0].id = "replacement-offer";
+    await publishChannelSnapshot(replacement);
+    const current =
+      await connection.client`select id from channel_public_offers where id='history-offer'`;
+    expect(current).toHaveLength(0);
+    const history =
+      await connection.client`select price_minor, generation_id, offer_snapshot from channel_offer_observations where offer_id='history-offer' order by price_minor`;
+    expect(history).toHaveLength(2);
+    expect(history.map((row) => Number(row.price_minor))).toEqual([990, 1290]);
+    expect(history[0].generation_id).toBe(first.generationId);
+    expect(history[0].offer_snapshot).toMatchObject({
+      title: "Test monthly",
+      merchantName: "Test merchant",
+      productName: "Test subscription",
+      offerUrl: "https://example.com/buy",
+    });
+    await expect(
+      connection.client`delete from public_data_generations where id=${first.generationId}`,
+    ).rejects.toMatchObject({ code: "23001" });
+    expect(
+      await connection.client`select id from channel_offer_observations where offer_id='history-offer'`,
+    ).toHaveLength(2);
   });
 
   it("round-trips nullable channel fields, keeps repeat imports idempotent, and restores A after B", async () => {

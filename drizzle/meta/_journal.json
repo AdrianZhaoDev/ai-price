@@ -78,6 +78,13 @@
       "when": 1788713882665,
       "tag": "0010_fine_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788724397999,
+      "tag": "0011_preserve_channel_observations",
+      "breakpoints": true
     }
   ]
 }
