@@ -10,6 +10,47 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("does not refresh old offer verification just by rebuilding its generation", () => {
+    const now = new Date();
+    const station = getSyntheticTransitStations()[0];
+    station.dataStatus = "verified";
+    station.offers = [
+      {
+        ...station.offers[0],
+        lastVerifiedAt: new Date(
+          now.getTime() - 40 * 24 * 3600000,
+        ).toISOString(),
+      },
+    ];
+    station.prices = station.offers;
+    const model = normalizeTransitDatabaseSnapshot(
+      { stations: [station], generatedAt: now.toISOString() },
+      { now },
+    );
+    expect(model?.stations[0].offers[0].status).toBe("unknown");
+  });
+  it("bounds list previews while preserving full detail catalogues and matching offers", async () => {
+    const station = getSyntheticTransitStations()[0];
+    station.offers = Array.from({ length: 100 }, (_, index) => ({
+      ...station.offers[0],
+      id: `offer-${index}`,
+      standardModelId: `model-${index}`,
+      standardModelLabel: `Model ${index}`,
+    }));
+    station.prices = station.offers;
+    const repository = createTransitRepository({ fixture: [station] });
+    const list = await repository.list();
+    expect(list.items[0].offers).toHaveLength(5);
+    expect(list.items[0].prices).toHaveLength(5);
+    expect(list.items[0].offerCount).toBe(100);
+    expect(list.items[0].offersTruncated).toBe(true);
+    expect((await repository.getBySlug(station.slug))?.offers).toHaveLength(
+      100,
+    );
+    expect(
+      (await repository.list({ model: "model-99" })).items[0].offers[0].id,
+    ).toBe("offer-99");
+  });
   it("retains explicit degraded status and independently marks old generations stale", () => {
     const stations = [
       { ...getSyntheticTransitStations()[0], dataStatus: "verified" },

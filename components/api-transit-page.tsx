@@ -586,6 +586,18 @@ export async function ApiTransitPage({
                   </p>
 
                   <div className={styles.stationOfferList}>
+                    {station.offersTruncated ? (
+                      <p className={styles.small}>
+                        {isEnglish
+                          ? `Showing ${station.offers.length} of ${station.offerCount} public offers. `
+                          : `展示 ${station.offerCount} 条公开报价中的前 ${station.offers.length} 条。`}
+                        <Link
+                          href={`${isEnglish ? "/en" : ""}/api-transit/${station.slug}`}
+                        >
+                          {isEnglish ? "View full catalogue" : "查看完整价目"}
+                        </Link>
+                      </p>
+                    ) : null}
                     {station.offers.length ? (
                       station.offers.map((offer) => (
                         <div className={styles.stationOffer} key={offer.id}>

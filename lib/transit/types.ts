@@ -12,6 +12,7 @@ import { isSafePublicHttpUrl } from "@/lib/public-data/urls";
  */
 
 export const TRANSIT_SOURCE_POLICY_VERSION = "transit-policy-v1";
+export const TRANSIT_LIST_OFFER_LIMIT = 5;
 
 export const TRANSIT_STATION_STATUSES = [
   "active",
@@ -324,6 +325,8 @@ export const transitStationSchema = z
     sourceUrl: publicUrl.nullable(),
     sourceLabel: z.string().trim().max(200).nullable(),
     offers: z.array(transitOfferSchema).max(2_000),
+    offerCount: z.number().int().nonnegative().max(2_000).optional(),
+    offersTruncated: z.boolean().optional(),
     /** Compatibility alias for consumers that call offers "prices". */
     prices: z.array(transitOfferSchema).max(2_000),
     synthetic: z.boolean(),

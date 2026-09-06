@@ -235,7 +235,10 @@ function normalized(value: string | undefined): string {
   return value?.trim().toLocaleLowerCase("en-US") ?? "";
 }
 
-function offerMatches(offer: TransitOffer, query: TransitListQuery): boolean {
+export function offerMatches(
+  offer: TransitOffer,
+  query: TransitListQuery,
+): boolean {
   if (query.family && normalized(offer.family) !== normalized(query.family)) {
     return false;
   }

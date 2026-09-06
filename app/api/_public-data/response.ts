@@ -13,7 +13,10 @@ import type {
   TransitStation,
 } from "@/lib/transit/types";
 import { safePublicHttpUrl } from "@/lib/public-data/urls";
-import { isTransitStationPublic } from "@/lib/transit/types";
+import {
+  isTransitStationPublic,
+  TRANSIT_LIST_OFFER_LIMIT,
+} from "@/lib/transit/types";
 
 /**
  * Preserve the production rule that all /api endpoints are private/no-store.
@@ -598,12 +601,12 @@ export function publicTransitOffer(
 
 export function publicTransitStation(
   station: TransitStation,
+  options: { offerLimit?: number } = {},
 ): Record<string, unknown> {
-  const offers = station.offers
-    .filter(
-      (offer) => offer.status === undefined || offer.status === "verified",
-    )
-    .map(publicTransitOffer);
+  const allOffers = station.offers.filter(
+    (offer) => offer.status === undefined || offer.status === "verified",
+  );
+  const offers = allOffers.slice(0, options.offerLimit).map(publicTransitOffer);
   return {
     id: text(station.id, 160),
     slug: text(station.slug, 100),
@@ -651,6 +654,9 @@ export function publicTransitStation(
     sourceLabel: nullableText(station.sourceLabel, 200),
     offers,
     prices: offers,
+    offerCount: integer(station.offerCount ?? allOffers.length),
+    offersTruncated:
+      station.offersTruncated === true || offers.length < allOffers.length,
     synthetic: bool(station.synthetic),
   };
 }
@@ -677,7 +683,9 @@ export function publicTransitList(
     .filter((station) =>
       isTransitStationPublic(station, { includeSample: result.isSynthetic }),
     )
-    .map(publicTransitStation);
+    .map((station) =>
+      publicTransitStation(station, { offerLimit: TRANSIT_LIST_OFFER_LIMIT }),
+    );
   const warning = publicTransitWarning(result);
   return {
     ok: true,

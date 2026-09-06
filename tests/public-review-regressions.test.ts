@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { getDefaultChannelRepository } from "@/lib/channels/repository";
+import {
+  getDefaultChannelRepository,
+  createChannelRepository,
+} from "@/lib/channels/repository";
 import { handleChannelDetailGet } from "@/app/api/_public-data/handlers";
 import { GET as channelsGet } from "@/app/api/channels/route";
 import { GET as offerDetailGet } from "@/app/api/channels/offers/[id]/route";
@@ -12,6 +15,8 @@ import {
   transitOfferSnapshotSchema,
   transitAvailabilitySnapshotSchema,
   transitStationSnapshotSchema,
+  channelSnapshotSchema,
+  transitSnapshotSchema,
 } from "@/lib/public-data/snapshot";
 import { isPrivateOrReservedHostname } from "@/lib/public-data/urls";
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
@@ -20,6 +25,56 @@ import { isTransitStationPublic } from "@/lib/transit/types";
 import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("rejects future generations and storage-overflowing channel values", () => {
+    const future = new Date(Date.now() + 3600000).toISOString();
+    expect(
+      channelSnapshotSchema.shape.generatedAt.safeParse(future).success,
+    ).toBe(false);
+    expect(
+      transitSnapshotSchema.shape.generatedAt.safeParse(future).success,
+    ).toBe(false);
+    for (const field of [
+      channelOfferSnapshotSchema.shape.stockCount,
+      channelOfferSnapshotSchema.shape.minOrderQuantity,
+    ]) {
+      expect(field.safeParse(2147483647).success).toBe(true);
+      expect(field.safeParse(2147483648).success).toBe(false);
+    }
+    expect(
+      channelOfferSnapshotSchema.shape.priceMinor.safeParse(99999999999999)
+        .success,
+    ).toBe(true);
+    expect(
+      channelOfferSnapshotSchema.shape.priceMinor.safeParse(100000000000000)
+        .success,
+    ).toBe(false);
+  });
+  it("uses the same canonical dedupe set for offers, summaries, and totals", async () => {
+    const snapshot = createSyntheticChannelSnapshot();
+    snapshot.offers = [
+      {
+        ...snapshot.offers[0],
+        id: "winner",
+        rawTitle: "Winning title",
+        labels: [],
+        classificationConfidence: 1,
+      },
+      {
+        ...snapshot.offers[0],
+        id: "loser",
+        rawTitle: "unique-losing-needle",
+        labels: [],
+        classificationConfidence: 0.1,
+      },
+    ];
+    const repository = createChannelRepository();
+    vi.spyOn(repository, "load").mockResolvedValue(snapshot);
+    const result = await repository.list({ q: "unique-losing-needle" });
+    expect(result.offers).toEqual([]);
+    expect(result.totalOffers).toBe(0);
+    expect(result.products).toEqual([]);
+    expect(result.merchants).toEqual([]);
+  });
   it("indexes product metadata once for complete summary sets", () => {
     const template = createSyntheticChannelSnapshot();
     let productKeyReads = 0;

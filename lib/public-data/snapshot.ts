@@ -17,6 +17,10 @@ const httpUrl = z
   .transform((value) => safePublicHttpUrl(value)!);
 
 const isoDate = z.string().datetime({ offset: true });
+const observedDate = isoDate.refine(
+  (value) => Date.parse(value) <= Date.now() + 5 * 60 * 1000,
+  { message: "Timestamp exceeds the five-minute clock-skew allowance." },
+);
 const safeId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,119}$/i);
 const publicText = z.string().max(4000);
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
@@ -84,11 +88,23 @@ export const channelOfferSnapshotSchema = z.object({
   sourceUrl: httpUrl,
   title: boundedText(320),
   offerUrl: httpUrl,
-  priceMinor: z.number().int().nonnegative().nullable(),
+  priceMinor: z.number().int().nonnegative().max(99_999_999_999_999).nullable(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   availability: z.enum(["in_stock", "out_of_stock", "unknown", "expired"]),
-  stockCount: z.number().int().nonnegative().nullable().optional(),
-  minOrderQuantity: z.number().int().positive().nullable().optional(),
+  stockCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(2_147_483_647)
+    .nullable()
+    .optional(),
+  minOrderQuantity: z
+    .number()
+    .int()
+    .positive()
+    .max(2_147_483_647)
+    .nullable()
+    .optional(),
   bulkPricingTiers: z
     .array(
       z
@@ -104,16 +120,16 @@ export const channelOfferSnapshotSchema = z.object({
   tags,
   riskLabels: tags,
   status: z.enum(["verified", "pending_review", "suspended"]),
-  observedAt: isoDate,
-  lastSeenAt: isoDate,
+  observedAt: observedDate,
+  lastSeenAt: observedDate,
   expiresAt: isoDate.nullable().optional(),
-  verifiedAt: isoDate.nullable().optional(),
+  verifiedAt: observedDate.nullable().optional(),
 });
 
 export const channelSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   domain: z.literal("channels"),
-  generatedAt: isoDate,
+  generatedAt: observedDate,
   sourceCount: z.number().int().nonnegative().max(10_000),
   merchants: z.array(channelMerchantSnapshotSchema).max(100_000),
   products: z.array(channelProductSnapshotSchema).max(100_000),
@@ -144,7 +160,7 @@ export const transitAvailabilitySnapshotSchema = z.object({
   latencyMs: z.number().int().nonnegative().max(300_000).nullable().optional(),
   sampleCount: z.number().int().positive().max(100_000).default(1),
   sevenDayRate: z.number().finite().min(0).max(1).nullable().optional(),
-  checkedAt: isoDate,
+  checkedAt: observedDate,
   expiresAt: isoDate.nullable().optional(),
   note: z.string().max(500).nullable().optional(),
 });
@@ -183,7 +199,7 @@ export const transitOfferSnapshotSchema = z.object({
   channelType: z.string().max(80).nullable().optional(),
   priceSourceUrl: httpUrl.nullable().optional(),
   priceSourceLabel: z.string().max(200).nullable().optional(),
-  lastVerifiedAt: isoDate.nullable().optional(),
+  lastVerifiedAt: observedDate.nullable().optional(),
   availability: publicPayload.default({}),
   status: z.enum(["verified", "pending_review", "unavailable", "unknown"]),
   payload: publicPayload.default({}),
@@ -218,8 +234,8 @@ export const transitStationSnapshotSchema = z.object({
   usageAdvice: z.union([boundedText(80), transitTags]).optional(),
   sourceType: z.string().min(1).max(80),
   sourceUrl: httpUrl,
-  lastUpdatedAt: isoDate.nullable().optional(),
-  lastCollectedAt: isoDate.nullable().optional(),
+  lastUpdatedAt: observedDate.nullable().optional(),
+  lastCollectedAt: observedDate.nullable().optional(),
   payload: publicPayload.default({}),
 });
 
@@ -227,7 +243,7 @@ export const transitSnapshotSchema = z
   .object({
     schemaVersion: z.literal(1),
     domain: z.literal("transit"),
-    generatedAt: isoDate,
+    generatedAt: observedDate,
     sourceCount: z.number().int().nonnegative().max(10_000),
     stations: z.array(transitStationSnapshotSchema).max(20_000),
     offers: z.array(transitOfferSnapshotSchema).max(500_000),

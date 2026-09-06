@@ -258,6 +258,15 @@ chmod 700 /tmp/ai-price-vps-install.sh
 不得把 GitHub 的写入密钥复制给 Web，不得改变官方价格的本地读写与 Neon 同步目标。
 新表不在官方 DATA_SYNC 的镜像表清单中，不能将其加入旧镜像后覆盖独立维护的数据。
 
+迁移目标必须显式核对：Drizzle 只读取 `DIRECT_DATABASE_URL`，其次 `DATABASE_URL`，
+不会读取 `PUBLIC_DATA_DIRECT_DATABASE_URL`。当前公共表与既有 Neon 同库时，标准
+`vps-install.sh` 先按原设置迁移本地库，再在独立子进程将上述两个变量映射为
+`REMOTE_DATABASE_URL`（必要时取 `DATA_SYNC_TARGET_URL`）并迁移远端；远端备份须在
+运行标准发布脚本前完成。不要在标准发布前另行手工执行相同 DDL，也不要更改环境文件
+中的官方读写目标。若以后改用另一独立公共库，先备份并核对目标，再在一次性迁移进程
+中将 `DIRECT_DATABASE_URL` 和 `DATABASE_URL` 同时指向该库的迁移账号，执行并核验
+`npm run db:migrate` 后退出；仅设置 PUBLIC_DATA_* 变量不能选择迁移目标。
+
 先手工触发 `collect-public-data.yml`，确认 published generation 的数据可与原站核验，
 再开启 PUBLIC_DATA_COLLECTION_ENABLED。Web/API 请求不能抓上游；API 保持
 private/no-store，HTML 沿用源站 15 分钟微缓存，读模型进程缓存 30 秒。

@@ -3,6 +3,7 @@ import {
   calculateRechargeCoefficient,
   filterTransitStations,
   isTransitOfferPublic,
+  offerMatches,
   paginateTransitStations,
   parseTransitListQuery,
   sortTransitStations,
@@ -29,6 +30,7 @@ import {
   transitReadModelSchema,
   transitStationSchema,
   TRANSIT_SOURCE_POLICY_VERSION,
+  TRANSIT_LIST_OFFER_LIMIT,
   type TransitAvailability,
   type TransitDatabaseLoader,
   type TransitDatabaseSnapshotInput,
@@ -353,6 +355,7 @@ export function normalizeTransitOffer(
   input: unknown,
   stationId: string,
   fallbackAvailability: TransitAvailability = EMPTY_AVAILABILITY,
+  now: Date = new Date(),
 ): TransitOffer | null {
   const row = asRecord(input);
   if (!row) return null;
@@ -530,6 +533,11 @@ export function normalizeTransitOffer(
       "verified",
     ),
   } satisfies TransitOffer;
+  if (candidate.status === "verified" && candidate.lastVerifiedAt) {
+    const age = now.getTime() - Date.parse(candidate.lastVerifiedAt);
+    if (age > 36 * 60 * 60 * 1000 || age < -5 * 60 * 1000)
+      candidate.status = "unknown";
+  }
   const parsed = transitOfferSchema.safeParse(candidate);
   return parsed.success ? parsed.data : null;
 }
@@ -806,6 +814,7 @@ export function normalizeTransitDatabaseSnapshot(
           rawOfferId,
           now,
         ),
+        now,
       );
       if (!candidate || offerIds.has(candidate.id)) continue;
       offerIds.add(candidate.id);
@@ -908,6 +917,7 @@ export function normalizeTransitDatabaseSnapshot(
     : null;
   const dataStatus =
     (root && pick(root, "dataStatus", "data_status") === "degraded") ||
+    Date.parse(generatedAt) - now.getTime() > 5 * 60 * 1000 ||
     now.getTime() - Date.parse(generatedAt) > 36 * 60 * 60 * 1000
       ? "degraded"
       : rootStatus?.success && rootStatus.data !== "unpublished"
@@ -1080,15 +1090,30 @@ function cloneReadModel(model: TransitReadModel): TransitReadModel {
 export function publicStationView(
   station: TransitStation,
   includeUnpublished: boolean,
+  offerLimit?: number,
 ): TransitStation {
-  if (includeUnpublished) return structuredClone(station);
-  const cloned = structuredClone(station);
-  const offers = cloned.offers.filter(isTransitOfferPublic);
-  return {
-    ...cloned,
+  const allOffers = includeUnpublished
+    ? station.offers
+    : station.offers.filter(isTransitOfferPublic);
+  const offers = allOffers.slice(0, offerLimit).map((offer) =>
+    offerLimit === undefined
+      ? offer
+      : {
+          ...offer,
+          availability: { ...offer.availability, recentSamples: [] },
+        },
+  );
+  return structuredClone({
+    ...station,
+    availability:
+      offerLimit === undefined
+        ? station.availability
+        : { ...station.availability, recentSamples: [] },
     offers,
     prices: offers,
-  };
+    offerCount: allOffers.length,
+    offersTruncated: offers.length < allOffers.length,
+  });
 }
 
 function fixtureReadModel(
@@ -1275,14 +1300,42 @@ export class TransitRepository {
     const filtered = filterTransitStations(model.stations, query, {
       includeSample: model.isSynthetic,
     });
-    const visible = filtered.map((station) =>
-      publicStationView(station, query.includeUnpublished),
-    );
+    const visible = filtered.map((station) => {
+      const offers = query.includeUnpublished
+        ? station.offers
+        : station.offers.filter(isTransitOfferPublic);
+      return { ...station, offers, prices: offers };
+    });
     const sorted = sortTransitStations(visible, query.sort);
     const page = paginateTransitStations(sorted, query);
+    const items = page.items.map((station) => {
+      const q = query.q?.toLocaleLowerCase("en-US");
+      const preferred = station.offers.filter(
+        (offer) =>
+          offerMatches(offer, query) &&
+          (!q ||
+            [offer.standardModelId, offer.standardModelLabel, offer.groupName]
+              .join(" ")
+              .toLocaleLowerCase("en-US")
+              .includes(q)),
+      );
+      const preferredIds = new Set(preferred.map((offer) => offer.id));
+      return publicStationView(
+        {
+          ...station,
+          offers: [
+            ...preferred,
+            ...station.offers.filter((offer) => !preferredIds.has(offer.id)),
+          ],
+        },
+        query.includeUnpublished,
+        TRANSIT_LIST_OFFER_LIMIT,
+      );
+    });
     return {
       ...page,
-      stations: page.items,
+      items,
+      stations: items,
       generatedAt: model.generatedAt,
       generationId: model.generationId,
       sourcePolicyVersion: model.sourcePolicyVersion,

@@ -35,8 +35,9 @@ URL/file 互斥。可先执行 `npm run collect:public -- --domain=all --dry-run
   的 `PUBLIC_DATA_DATABASE_URL`。空结果、结构变化或写入失败不会清空上一有效 generation；
   本轮失败由下一次定时运行或人工 `workflow_dispatch` 重试。
 - 首次启用前必须由受控发布流程完成公开表的 migration、备份和回滚准备；定时 workflow
-  不执行 `db:migrate`。`PUBLIC_DATA_DIRECT_DATABASE_URL` 仅可在该受控 migration 步骤
-  临时使用，不能作为定时采集凭据。
+  不执行 `db:migrate`。迁移实际使用 `DIRECT_DATABASE_URL` / `DATABASE_URL`，远端目标
+  映射按 `VPS_OPERATIONS.md` 执行；PUBLIC_DATA_* 变量不改变 Drizzle 的迁移目标，
+  迁移账号不能作为定时采集凭据。
 - VPS 继续运行官方价格 collector 和既有 timer；网页及公开栏目页面只读已发布 generation，
   请求期间不访问上游，也不因上游慢或失败增加 VPS 负载。
 - `PUBLIC_DATA_INDEXING_ENABLED` 是 Web 侧 SEO 门禁；公开表 migration、首轮健康快照和

@@ -15,6 +15,7 @@ import type {
   TransitReadModel,
   TransitStation,
 } from "@/lib/transit/types";
+import { TRANSIT_LIST_OFFER_LIMIT } from "@/lib/transit/types";
 
 /** Public JSON contract version.  Increment when a field is removed/changed. */
 export const PUBLIC_DATA_API_VERSION = 1;
@@ -298,10 +299,12 @@ export function serializeTransitOffer(offer: TransitOffer) {
 
 export function serializeTransitStation(
   station: TransitStation,
-  options: { includeOffers?: boolean } = {},
+  options: { includeOffers?: boolean; offerLimit?: number } = {},
 ) {
   const includeOffers = options.includeOffers ?? true;
-  const offers = includeOffers ? station.offers.map(serializeTransitOffer) : [];
+  const offers = includeOffers
+    ? station.offers.slice(0, options.offerLimit).map(serializeTransitOffer)
+    : [];
   return {
     id: station.id,
     slug: station.slug,
@@ -334,11 +337,16 @@ export function serializeTransitStation(
     availability: serializeTransitAvailability(station.availability),
     offers,
     prices: offers,
+    offerCount: station.offerCount ?? station.offers.length,
+    offersTruncated:
+      station.offersTruncated === true || offers.length < station.offers.length,
   };
 }
 
 export function serializeTransitList(result: TransitListResult) {
-  const items = result.items.map((station) => serializeTransitStation(station));
+  const items = result.items.map((station) =>
+    serializeTransitStation(station, { offerLimit: TRANSIT_LIST_OFFER_LIMIT }),
+  );
   return {
     apiVersion: PUBLIC_DATA_API_VERSION,
     schemaVersion: 1,

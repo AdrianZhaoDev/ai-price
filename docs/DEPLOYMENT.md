@@ -67,8 +67,9 @@ GitHub 的 `PUBLIC_DATA_DATABASE_URL` 必须指向远程 public-data PostgreSQL�
 Web 使用同库只读账号。未批准来源时保持 GitHub Variable
 `PUBLIC_DATA_COLLECTION_ENABLED=false`，定时任务将跳过；人工 dispatch 仍检查配置并
 在缺失时失败，不会自动迁移或写入本地数据库。
-`PUBLIC_DATA_DIRECT_DATABASE_URL` 不属于定时 workflow secrets；仅在受控 migration
-步骤中临时使用，并按 VPS 运维流程保护和清理。
+迁移由 VPS 标准发布流程执行，Drizzle 实际读取 `DIRECT_DATABASE_URL` / `DATABASE_URL`。
+不要配置未被读取的 `PUBLIC_DATA_DIRECT_DATABASE_URL`；远程目标的显式映射、备份和
+迁移顺序见 `VPS_OPERATIONS.md`，定时 workflow 不持有迁移账号。
 
 `PUBLIC_DATA_INDEXING_ENABLED` 不应放入定时采集步骤。保持 `false` 时，两个公开栏目
 仍可供人工核对，但页面 metadata 返回 `noindex, follow` 且 sitemap 不列出栏目；只有
@@ -136,8 +137,8 @@ HTTPS；采集器还会拒绝凭据、私有主机、重定向和超大响应。
 migration，并完成备份/回滚准备。workflow 有意不自动执行 `db:migrate`，防止
 定时任务在发布并发时扩大数据库权限；migration 未完成时应保持 schedule 关闭或
 接受任务失败告警。
-`PUBLIC_DATA_DIRECT_DATABASE_URL` 如需使用，应在上述受控 migration 步骤中作为
-一次性直连配置，不放入定时 workflow；完成后移除临时暴露。
+不要单独设置一个未接线的 public-data 直连变量后执行 migration；必须按 VPS 运维流程
+在受控迁移子进程显式设置 Drizzle 实际读取的两个数据库变量，完成后退出该子进程。
 
 ### 官方价格 collector 与 VPS timer
 

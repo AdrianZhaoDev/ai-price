@@ -16,7 +16,10 @@ import {
   loadTransitSnapshotFromDatabase,
   normalizeTransitDatabaseSnapshot,
 } from "@/lib/transit/repository";
-import { isOfferAvailable } from "@/lib/channels/ranking";
+import {
+  isOfferAvailable,
+  isOfferEligibleForLowestPrice,
+} from "@/lib/channels/ranking";
 
 const testUrl = process.env.TEST_PUBLIC_DATA_DATABASE_URL;
 const now = new Date().toISOString();
@@ -309,6 +312,26 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       await loadTransitSnapshotFromDatabase(connection.database),
     );
     expect(read?.stations[0].offers).toHaveLength(10);
+  });
+  it("keeps stale channel observations out of current lowest-price rankings", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].lastSeenAt = new Date(
+      Date.now() - 40 * 24 * 3600000,
+    ).toISOString();
+    snapshot.offers[0].observedAt = snapshot.offers[0].lastSeenAt;
+    const published = await publishChannelSnapshot(snapshot);
+    const read = await loadChannelSnapshotFromDatabase(connection.database);
+    expect(read?.offers[0].sourceHealth).toBe("unknown");
+    expect(isOfferEligibleForLowestPrice(read!.offers[0])).toBe(false);
+    snapshot.generatedAt = new Date(Date.now() + 3600000).toISOString();
+    await expect(publishChannelSnapshot(snapshot)).rejects.toThrow();
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(published.generationId);
+    const futureTransit = transit();
+    futureTransit.generatedAt = snapshot.generatedAt;
+    await expect(publishTransitSnapshot(futureTransit)).rejects.toThrow();
   });
   it("rejects computed or textual ratios that would round to zero before replacement", async () => {
     const prior = normalizeTransitDatabaseSnapshot(

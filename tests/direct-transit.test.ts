@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   collectDirectTransit,
   directTransitSources,
@@ -58,6 +58,11 @@ const parse = (value: unknown) =>
   parseDirectTransit(value, directTransitSources[0], now);
 
 describe("original station adapter", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
   it("converts credit prices to CNY per million without claiming official multiplier or uptime", () => {
     const result = parse(fixture());
     expect(result.offers[0]).toMatchObject({

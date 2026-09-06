@@ -16,13 +16,14 @@ import {
   buildChannelMerchantSummaries,
   buildChannelProductSummaries,
   filterChannelOffers,
-  rankChannelOffers,
+  sortChannelOffers,
   dedupeChannelOffers,
 } from "./ranking";
 import {
   channelMerchantSchema,
   channelProductSchema,
   parseChannelOffer,
+  parseChannelOfferFilters,
   type ChannelDataStatus,
   type ChannelMerchant,
   type ChannelOffer,
@@ -115,7 +116,9 @@ function dataStatusForGeneration(
   now: Date,
 ): ChannelDataStatus {
   const age = now.getTime() - new Date(generatedAt).getTime();
-  return Number.isFinite(age) && age > 36 * 60 * 60 * 1000
+  return !Number.isFinite(age) ||
+    age < -5 * 60 * 1000 ||
+    age > 36 * 60 * 60 * 1000
     ? "stale"
     : "published";
 }
@@ -242,7 +245,9 @@ async function readChannelSnapshot(
         classificationConfidence: 1,
         sourceHealth:
           status === "verified" &&
-          dataStatusForGeneration(generatedAt, new Date()) !== "stale"
+          dataStatusForGeneration(generatedAt, new Date()) !== "stale" &&
+          dataStatusForGeneration(row.lastSeenAt.toISOString(), new Date()) !==
+            "stale"
             ? "healthy"
             : "unknown",
         accessMode: "public",
@@ -461,9 +466,14 @@ export class ChannelRepository {
     filters: Partial<ChannelOfferFilters> | unknown = {},
   ): Promise<ChannelListResult> {
     const snapshot = await this.load();
-    const filtered = filterChannelOffers(snapshot.offers, filters);
-    const filteredUnique = dedupeChannelOffers(filtered, { now: this.now() });
-    const offers = rankChannelOffers(snapshot.offers, filters);
+    const parsedFilters = parseChannelOfferFilters(filters);
+    const canonical = dedupeChannelOffers(snapshot.offers, { now: this.now() });
+    const filteredUnique = filterChannelOffers(canonical, parsedFilters);
+    const offers = sortChannelOffers(filteredUnique, {
+      by: parsedFilters.sort,
+      direction: parsedFilters.direction,
+      query: parsedFilters.query,
+    }).slice(parsedFilters.offset, parsedFilters.offset + parsedFilters.limit);
     const products = buildChannelProductSummaries(filteredUnique, {
       products: snapshot.products,
     });
