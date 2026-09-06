@@ -143,7 +143,7 @@ export async function PricingPage({
           providers={clientCatalog.providers}
           deferredProviderIds={clientCatalog.deferredProviderIds}
           rankingChanges={rankingChanges}
-          contactEmail={process.env.CONTACT_EMAIL ?? "price@example.com"}
+          contactEmail={process.env.CONTACT_EMAIL ?? "adriandev555@gmail.com"}
           dataVersion={lastCheckedAt ?? null}
           initialQuery={query}
           priceIndexLinks={priceIndexLinks}

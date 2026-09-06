@@ -127,6 +127,12 @@ test("publishes distinct indexable pricing pages and structured data", async ({
         await expect(
           page.locator('.price-index-links a[href="/gemini-pro-price"]'),
         ).toBeVisible();
+        await expect(
+          page.getByRole("link", { name: "数据纠错" }),
+        ).toHaveAttribute(
+          "href",
+          "mailto:adriandev555@gmail.com?subject=%E6%95%B0%E6%8D%AE%E7%BA%A0%E9%94%99",
+        );
       }
     }
   }
