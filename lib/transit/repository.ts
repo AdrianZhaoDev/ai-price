@@ -22,6 +22,8 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 import { isPrivateOrReservedHostname } from "@/lib/public-data/urls";
+import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
+import { assertPublicReadCapacity } from "@/lib/public-data/read-capacity";
 import {
   isTransitStationPublic,
   transitAvailabilitySchema,
@@ -396,14 +398,18 @@ function freshAvailability(
   input: unknown,
   fallback: TransitAvailability,
   now: Date,
+  scope: "station" | "offer",
 ): TransitAvailability {
-  const embedded = expireAvailability(
-    normalizeTransitAvailability(input, fallback),
-    now,
-  );
-  return embedded.sevenDaySamples > 0
-    ? embedded
-    : expireAvailability(fallback, now);
+  const validate = (value: TransitAvailability) =>
+    value.sourceType !== "public_model_catalog" &&
+    value.sourceType !== "unknown" &&
+    value.scope === scope &&
+    (value.matchLevel === "exact" ||
+      (scope === "station" && value.matchLevel === "station"))
+      ? expireAvailability(value, now)
+      : EMPTY_AVAILABILITY;
+  const embedded = validate(normalizeTransitAvailability(input, fallback));
+  return embedded.sevenDaySamples > 0 ? embedded : validate(fallback);
 }
 
 export function normalizeTransitOffer(
@@ -582,6 +588,7 @@ export function normalizeTransitOffer(
       pick(row, "availability"),
       fallbackAvailability,
       now,
+      "offer",
     ),
     status: enumValue(
       pick(row, "status"),
@@ -814,6 +821,19 @@ export function normalizeTransitDatabaseSnapshot(
         "samples",
       ) as unknown[] | undefined) ?? [])
     : [];
+  if (
+    stationRows.length > PUBLIC_DATA_LIMITS.stations ||
+    offerRows.length > PUBLIC_DATA_LIMITS.transitOffers ||
+    sampleRows.length > PUBLIC_DATA_LIMITS.samples
+  )
+    return null;
+  let nestedOfferCount = offerRows.length;
+  for (const item of stationRows) {
+    const row = asRecord(item);
+    const nested = row ? pick(row, "offers", "prices") : null;
+    if (Array.isArray(nested)) nestedOfferCount += nested.length;
+    if (nestedOfferCount > PUBLIC_DATA_LIMITS.transitOffers) return null;
+  }
   const samplesByScope = new Map<string, UnknownRecord[]>();
   const sampleKey = (stationId: string, offerId?: string | null) =>
     JSON.stringify([stationId, offerId ?? null]);
@@ -894,6 +914,7 @@ export function normalizeTransitDatabaseSnapshot(
       pick(row, "availability"),
       stationFallback,
       now,
+      "station",
     );
     const dataStatus = enumValue(
       pick(row, "dataStatus", "data_status", "recordStatus", "record_status"),
@@ -1059,20 +1080,32 @@ async function readTransitSnapshot(
     .orderBy(desc(publicDataGenerations.publishedAt))
     .limit(1);
   if (!generation) return null;
+  await assertPublicReadCapacity(database, "transit", generation.id);
   const [stationRows, offerRows, sampleRows] = await Promise.all([
     database
       .select()
       .from(transitStations)
-      .where(eq(transitStations.generationId, generation.id)),
+      .where(eq(transitStations.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.stations + 1),
     database
       .select()
       .from(transitOffers)
-      .where(eq(transitOffers.generationId, generation.id)),
+      .where(eq(transitOffers.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.transitOffers + 1),
     database
       .select()
       .from(transitAvailabilitySamples)
-      .where(eq(transitAvailabilitySamples.generationId, generation.id)),
+      .where(eq(transitAvailabilitySamples.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.samples + 1),
   ]);
+  if (
+    stationRows.length > PUBLIC_DATA_LIMITS.stations ||
+    offerRows.length > PUBLIC_DATA_LIMITS.transitOffers ||
+    sampleRows.length > PUBLIC_DATA_LIMITS.samples
+  )
+    throw new Error(
+      "Public snapshot capacity exceeded; no partial data served.",
+    );
   return {
     generationId: generation.id,
     generatedAt: generation.generatedAt,

@@ -9,6 +9,62 @@ vi.mock("@/components/site-header", () => ({
 }));
 
 describe("transit detail rendering", () => {
+  it.each(["en", "zh-CN"] as const)(
+    "renders evidence source, scope and UTC time alongside rates in %s",
+    (locale) => {
+      const station = getSyntheticTransitStations()[0];
+      station.availability = {
+        ...station.availability,
+        sevenDaySamples: 10,
+        sevenDayRate: 0.8,
+        sourceType: "merchant_reported",
+        sourceLabel: "Operator heartbeat",
+        sourceUrl: "https://example.com/status",
+        scope: "station",
+        matchLevel: "station",
+        lastCheckedAt: "2026-09-06T01:00:00Z",
+      };
+      station.offers = [
+        {
+          ...station.offers[0],
+          availability: {
+            ...station.availability,
+            sourceType: "authorized_probe",
+            sourceLabel: "Exact model probe",
+            scope: "offer",
+            matchLevel: "exact",
+          },
+        },
+      ];
+      const page = new DOMParser().parseFromString(
+        renderToStaticMarkup(
+          createElement(ApiTransitDetailPage, {
+            locale,
+            station,
+            degraded: false,
+          }),
+        ),
+        "text/html",
+      );
+      const evidence = [
+        ...page.querySelectorAll("[data-availability-evidence]"),
+      ];
+      expect(evidence).toHaveLength(2);
+      expect(evidence[0].textContent).toContain(
+        locale === "en" ? "Merchant reported" : "商家自报",
+      );
+      expect(evidence[1].textContent).toContain(
+        locale === "en" ? "This offer" : "该报价",
+      );
+      expect(evidence[1].textContent).toContain("Exact model probe");
+      expect(evidence[1].querySelector("time")?.dateTime).toBe(
+        "2026-09-06T01:00:00.000Z",
+      );
+      expect(evidence[1].querySelector("a")?.href).toBe(
+        "https://example.com/status",
+      );
+    },
+  );
   it.each([0, 0.1, 1])(
     "does not turn sample presence into a health endorsement at rate %s",
     (sevenDayRate) => {

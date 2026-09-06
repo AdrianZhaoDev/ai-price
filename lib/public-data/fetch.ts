@@ -1,8 +1,9 @@
 import { lookup } from "node:dns/promises";
 import { Agent, fetch } from "undici";
 import { isPrivateOrReservedHostname } from "./urls";
+import { PUBLIC_DATA_LIMITS } from "./limits";
 
-export const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+export const MAX_SNAPSHOT_BYTES = PUBLIC_DATA_LIMITS.snapshotBytes;
 
 /** Enforce the cap while reading, not after buffering an unbounded response. */
 export async function readBoundedText(

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
+import { assertPublicReadCapacity } from "@/lib/public-data/read-capacity";
 import {
   getPublicDataDatabase,
   isPublicDataDatabaseConfigured,
@@ -120,15 +122,17 @@ function cloneSnapshot(snapshot: ChannelSnapshot): ChannelSnapshot {
  */
 export async function loadChannelSnapshotFromDatabase(
   database: Database = getPublicDataDatabase(),
+  now: Date = new Date(),
 ): Promise<ChannelSnapshot | null> {
   return database.transaction(
-    async (tx) => readChannelSnapshot(tx as unknown as Database),
+    async (tx) => readChannelSnapshot(tx as unknown as Database, now),
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
 
 async function readChannelSnapshot(
   database: Database,
+  now: Date,
 ): Promise<ChannelSnapshot | null> {
   const [generation] = await database
     .select()
@@ -142,21 +146,33 @@ async function readChannelSnapshot(
     .orderBy(desc(publicDataGenerations.publishedAt))
     .limit(1);
   if (!generation) return null;
+  await assertPublicReadCapacity(database, "channels", generation.id);
 
   const [merchantRows, productRows, offerRows] = await Promise.all([
     database
       .select()
       .from(channelMerchants)
-      .where(eq(channelMerchants.generationId, generation.id)),
+      .where(eq(channelMerchants.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.merchants + 1),
     database
       .select()
       .from(channelProducts)
-      .where(eq(channelProducts.generationId, generation.id)),
+      .where(eq(channelProducts.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.products + 1),
     database
       .select()
       .from(channelPublicOffers)
-      .where(eq(channelPublicOffers.generationId, generation.id)),
+      .where(eq(channelPublicOffers.generationId, generation.id))
+      .limit(PUBLIC_DATA_LIMITS.channelOffers + 1),
   ]);
+  if (
+    merchantRows.length > PUBLIC_DATA_LIMITS.merchants ||
+    productRows.length > PUBLIC_DATA_LIMITS.products ||
+    offerRows.length > PUBLIC_DATA_LIMITS.channelOffers
+  )
+    throw new Error(
+      "Public snapshot capacity exceeded; no partial data served.",
+    );
 
   const generatedAt = generation.generatedAt.toISOString();
   const merchants: ChannelMerchant[] = merchantRows.flatMap((row) => {
@@ -232,9 +248,8 @@ async function readChannelSnapshot(
         classificationConfidence: 1,
         sourceHealth:
           status === "verified" &&
-          dataStatusForGeneration(generatedAt, new Date()) !== "stale" &&
-          dataStatusForGeneration(row.lastSeenAt.toISOString(), new Date()) !==
-            "stale"
+          dataStatusForGeneration(generatedAt, now) !== "stale" &&
+          dataStatusForGeneration(row.lastSeenAt.toISOString(), now) !== "stale"
             ? "healthy"
             : "unknown",
         accessMode: "public",
@@ -246,7 +261,7 @@ async function readChannelSnapshot(
       return [];
     }
   });
-  const dataStatus = dataStatusForGeneration(generatedAt, new Date());
+  const dataStatus = dataStatusForGeneration(generatedAt, now);
   return {
     domain: "channels",
     generationId: generation.id,
@@ -300,11 +315,10 @@ export class ChannelRepository {
       options.allowSyntheticFixture ?? process.env.NODE_ENV !== "production";
   }
 
-  private fallback(reason: string): ChannelSnapshot {
+  private fallback(reason: string, now: Date): ChannelSnapshot {
     if (this.lastGood) {
       const degraded = cloneSnapshot(this.lastGood);
       degraded.dataStatus = "degraded";
-      const now = this.now();
       const generationStale =
         dataStatusForGeneration(degraded.generatedAt, now) === "stale";
       for (const offer of degraded.offers) {
@@ -327,7 +341,7 @@ export class ChannelRepository {
     if (!this.allowSyntheticFixture || configuredReader) {
       return {
         domain: "channels",
-        generatedAt: this.now().toISOString(),
+        generatedAt: now.toISOString(),
         dataStatus: "degraded",
         dataSource: "database",
         offers: [],
@@ -346,9 +360,10 @@ export class ChannelRepository {
   }
 
   async load(
-    options: { forceRefresh?: boolean } = {},
+    options: { forceRefresh?: boolean; now?: Date } = {},
   ): Promise<ChannelSnapshot> {
-    const nowMs = this.now().getTime();
+    const now = options.now ?? this.now();
+    const nowMs = now.getTime();
     if (
       !options.forceRefresh &&
       this.cacheTtlMs > 0 &&
@@ -361,11 +376,11 @@ export class ChannelRepository {
       const raw = this.loader
         ? await this.loader({ domain: "channels" })
         : this.database
-          ? await loadChannelSnapshotFromDatabase(this.database)
+          ? await loadChannelSnapshotFromDatabase(this.database, now)
           : configuredPublicDatabase()
-            ? await loadChannelSnapshotFromDatabase()
+            ? await loadChannelSnapshotFromDatabase(undefined, now)
             : null;
-      const snapshot = this.normalizeLoaded(raw);
+      const snapshot = this.normalizeLoaded(raw, now);
       const usable = snapshot && snapshot.offers.length > 0 ? snapshot : null;
       const resolved =
         usable ??
@@ -373,6 +388,7 @@ export class ChannelRepository {
           this.explicitlyConfigured === true && !this.loader && !this.database
             ? "Database reader is wired but no loader is configured."
             : "No published channels snapshot is available.",
+          now,
         );
       this.cached = { snapshot: resolved, cachedAt: nowMs };
       if (usable) this.lastGood = cloneSnapshot(usable);
@@ -392,13 +408,14 @@ export class ChannelRepository {
           : "";
       const resolved = this.fallback(
         `Channels data is temporarily unavailable${hint}; the last safe snapshot may be shown.`,
+        now,
       );
       this.cached = { snapshot: resolved, cachedAt: nowMs };
       return cloneSnapshot(resolved);
     }
   }
 
-  private normalizeLoaded(raw: unknown): ChannelSnapshot | null {
+  private normalizeLoaded(raw: unknown, now: Date): ChannelSnapshot | null {
     if (!raw) return null;
     const outer =
       raw && typeof raw === "object" && !Array.isArray(raw)
@@ -416,6 +433,7 @@ export class ChannelRepository {
         ? (nested as Record<string, unknown>)
         : null;
     if (!source || !Array.isArray(source.offers)) return null;
+    if (source.offers.length > PUBLIC_DATA_LIMITS.channelOffers) return null;
     const offers: ChannelOffer[] = [];
     let rejected = 0;
     for (const input of source.offers) {
@@ -429,7 +447,7 @@ export class ChannelRepository {
     const generatedAt =
       typeof source.generatedAt === "string"
         ? source.generatedAt
-        : this.now().toISOString();
+        : now.toISOString();
     const snapshot: ChannelSnapshot = {
       domain: "channels",
       generationId:
@@ -437,9 +455,9 @@ export class ChannelRepository {
           ? source.generationId
           : undefined,
       generatedAt,
-      dataStatus: dataStatusForGeneration(generatedAt, this.now()),
+      dataStatus: dataStatusForGeneration(generatedAt, now),
       dataSource: "database",
-      offers: dedupeChannelOffers(offers, { now: this.now() }),
+      offers: dedupeChannelOffers(offers, { now }),
       merchants: Array.isArray(source.merchants)
         ? source.merchants.flatMap((item) => {
             const parsed = channelMerchantSchema.safeParse(item);
@@ -463,19 +481,27 @@ export class ChannelRepository {
   async list(
     filters: Partial<ChannelOfferFilters> | unknown = {},
   ): Promise<ChannelListResult> {
-    const snapshot = await this.load();
+    const now = this.now();
+    const snapshot = await this.load({ now });
     const parsedFilters = parseChannelOfferFilters(filters);
-    const canonical = dedupeChannelOffers(snapshot.offers, { now: this.now() });
-    const filteredUnique = filterChannelOffers(canonical, parsedFilters);
-    const offers = sortChannelOffers(filteredUnique, {
-      by: parsedFilters.sort,
-      direction: parsedFilters.direction,
-      query: parsedFilters.query,
-    }).slice(parsedFilters.offset, parsedFilters.offset + parsedFilters.limit);
+    const canonical = dedupeChannelOffers(snapshot.offers, { now });
+    const filteredUnique = filterChannelOffers(canonical, parsedFilters, {
+      now,
+    });
+    const offers = sortChannelOffers(
+      filteredUnique,
+      {
+        by: parsedFilters.sort,
+        direction: parsedFilters.direction,
+        query: parsedFilters.query,
+      },
+      { now },
+    ).slice(parsedFilters.offset, parsedFilters.offset + parsedFilters.limit);
     const products = buildChannelProductSummaries(filteredUnique, {
       products: snapshot.products,
+      now,
     });
-    const merchants = buildChannelMerchantSummaries(filteredUnique);
+    const merchants = buildChannelMerchantSummaries(filteredUnique, { now });
     return {
       offers,
       products,

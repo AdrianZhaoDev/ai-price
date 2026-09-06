@@ -7,6 +7,34 @@ import {
 import { syntheticChannelOffers } from "@/lib/channels/fixture";
 
 describe("ChannelRepository", () => {
+  it("uses one injected clock for freshness, filtering, sorting and summaries", async () => {
+    let calls = 0;
+    const now = new Date("2026-09-06T01:00:00Z");
+    const repository = new ChannelRepository({
+      now: () => {
+        calls++;
+        return now;
+      },
+      loadPublishedOffers: async () => ({
+        generatedAt: now.toISOString(),
+        offers: [
+          {
+            ...syntheticChannelOffers[0],
+            lastSeenAt: "2026-09-05T01:00:00Z",
+            expiresAt: "2026-09-06T02:00:00Z",
+          },
+        ],
+      }),
+    });
+    const result = await repository.list({
+      availability: "in_stock",
+      sort: "availability",
+    });
+    expect(calls).toBe(1);
+    expect(result.offers).toHaveLength(1);
+    expect(result.products[0].availableOfferCount).toBe(1);
+    expect(result.merchants[0].availableOfferCount).toBe(1);
+  });
   it("reloads with zero TTL even when the clock has not advanced", async () => {
     let calls = 0;
     const now = new Date();

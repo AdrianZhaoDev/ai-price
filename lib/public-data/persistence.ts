@@ -21,6 +21,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { PgTable, PgInsertValue } from "drizzle-orm/pg-core";
 import { calculateRechargeCoefficient } from "@/lib/transit/ranking";
 import { isTransitStationPublic } from "@/lib/transit/types";
+import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
 import {
   loadOfferBaselines,
   saveOfferBaselines,
@@ -40,6 +41,16 @@ function assertFreshGeneration(generatedAt: string) {
   if (Date.now() - Date.parse(generatedAt) > 36 * 60 * 60 * 1000)
     throw new Error(
       "Snapshot generation is stale; previous published generation retained.",
+    );
+}
+
+function assertSnapshotCapacity(snapshot: ChannelSnapshot | TransitSnapshot) {
+  if (
+    Buffer.byteLength(JSON.stringify(snapshot), "utf8") >
+    PUBLIC_DATA_LIMITS.snapshotBytes
+  )
+    throw new Error(
+      "Combined snapshot exceeds the size limit; previous snapshot retained.",
     );
 }
 
@@ -255,6 +266,7 @@ export async function publishChannelSnapshot(
   snapshot: ChannelSnapshot,
 ): Promise<PublicPublishResult> {
   snapshot = channelSnapshotSchema.parse(snapshot);
+  assertSnapshotCapacity(snapshot);
   assertFreshGeneration(snapshot.generatedAt);
   // An empty feed is almost always an upstream outage or parser regression.
   // Reject before opening a transaction so the last published generation and
@@ -718,6 +730,7 @@ export async function publishTransitSnapshot(
   snapshot: TransitSnapshot,
 ): Promise<PublicPublishResult> {
   snapshot = transitSnapshotSchema.parse(snapshot);
+  assertSnapshotCapacity(snapshot);
   assertFreshGeneration(snapshot.generatedAt);
   for (const offer of snapshot.offers) {
     transitRechargeRatio(offer);

@@ -14,6 +14,7 @@ import {
   type TransitStation,
 } from "@/lib/transit/types";
 import { SiteFooter, SiteHeader } from "./site-header";
+import { TransitAvailabilityEvidence } from "./transit-availability-evidence";
 import type { PublicDirectorySearchParams } from "./channels-page";
 import styles from "./public-data-directory.module.css";
 
@@ -580,6 +581,10 @@ export async function ApiTransitPage({
                     {isEnglish ? "Observed availability" : "观测可用性"}:{" "}
                     {availabilityCopy(station.availability, locale)}
                   </p>
+                  <TransitAvailabilityEvidence
+                    availability={station.availability}
+                    locale={locale}
+                  />
                   <p className={styles.small}>
                     {isEnglish ? "Updated" : "更新"}:{" "}
                     {formatDate(station.lastUpdatedAt, locale)}
@@ -616,6 +621,10 @@ export async function ApiTransitPage({
                           <p className={styles.rateNote}>
                             {availabilityCopy(offer.availability, locale)}
                           </p>
+                          <TransitAvailabilityEvidence
+                            availability={offer.availability}
+                            locale={locale}
+                          />
                           {offer.priceSourceUrl ? (
                             <a
                               className={styles.sourceLink}

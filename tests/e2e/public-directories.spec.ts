@@ -1,6 +1,44 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("public channel and API transit directories", () => {
+  test("keeps attributed monitoring evidence readable on small and landscape screens", async ({
+    page,
+    request,
+  }) => {
+    test.skip(
+      process.env.EXPECT_PUBLIC_MONITORING_FIXTURE !== "true",
+      "Requires an isolated database with explicitly synthetic monitoring samples.",
+    );
+    const body = await (await request.get("/api/v1/transit?limit=1")).json();
+    const slug = body.items[0].slug;
+    for (const locale of ["", "/en"]) {
+      for (const viewport of [
+        { width: 375, height: 812 },
+        { width: 812, height: 375 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.goto(`${locale}/api-transit/${slug}`);
+        const evidence = page.locator("[data-availability-evidence]").first();
+        await expect(evidence).toBeVisible();
+        await expect(evidence).toContainText(
+          locale ? "Synthetic sample" : "演示样本",
+        );
+        await expect(evidence.locator("time")).toContainText("UTC");
+        await expect(evidence.getByRole("link")).toHaveAttribute(
+          "rel",
+          "nofollow noopener noreferrer",
+        );
+        expect(
+          await page.evaluate(
+            () =>
+              document.documentElement.scrollWidth <=
+              document.documentElement.clientWidth,
+          ),
+        ).toBe(true);
+      }
+    }
+  });
   test("supports index pages, shareable filters, and bilingual routes", async ({
     page,
     isMobile,

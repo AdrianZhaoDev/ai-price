@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { PUBLIC_DATA_LIMITS } from "./limits";
 import { isSafePublicHttpUrl, safePublicHttpUrl } from "@/lib/public-data/urls";
 
 /**
@@ -145,9 +146,15 @@ export const channelSnapshotSchema = z.object({
   domain: z.literal("channels"),
   generatedAt: observedDate,
   sourceCount: z.number().int().nonnegative().max(10_000),
-  merchants: z.array(channelMerchantSnapshotSchema).max(100_000),
-  products: z.array(channelProductSnapshotSchema).max(100_000),
-  offers: z.array(channelOfferSnapshotSchema).max(500_000),
+  merchants: z
+    .array(channelMerchantSnapshotSchema)
+    .max(PUBLIC_DATA_LIMITS.merchants),
+  products: z
+    .array(channelProductSnapshotSchema)
+    .max(PUBLIC_DATA_LIMITS.products),
+  offers: z
+    .array(channelOfferSnapshotSchema)
+    .max(PUBLIC_DATA_LIMITS.channelOffers),
 });
 
 export const transitAvailabilitySnapshotSchema = z
@@ -285,11 +292,15 @@ export const transitSnapshotSchema = z
     domain: z.literal("transit"),
     generatedAt: observedDate,
     sourceCount: z.number().int().nonnegative().max(10_000),
-    stations: z.array(transitStationSnapshotSchema).max(20_000),
-    offers: z.array(transitOfferSnapshotSchema).max(500_000),
+    stations: z
+      .array(transitStationSnapshotSchema)
+      .max(PUBLIC_DATA_LIMITS.stations),
+    offers: z
+      .array(transitOfferSnapshotSchema)
+      .max(PUBLIC_DATA_LIMITS.transitOffers),
     availabilitySamples: z
       .array(transitAvailabilitySnapshotSchema)
-      .max(1_000_000),
+      .max(PUBLIC_DATA_LIMITS.samples),
   })
   .superRefine((snapshot, context) => {
     const counts = new Map<string, number>();

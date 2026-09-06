@@ -7,6 +7,7 @@ import type {
   TransitStation,
 } from "@/lib/transit/types";
 import { SiteFooter, SiteHeader } from "./site-header";
+import { TransitAvailabilityEvidence } from "./transit-availability-evidence";
 import styles from "./public-data-directory.module.css";
 
 function formatDate(value: string | null | undefined, locale: Locale): string {
@@ -149,6 +150,10 @@ export function ApiTransitDetailPage({
               {isEnglish ? "Attributed availability" : "可归因可用性"}:{" "}
               {rateCopy(station.availability, locale)}
             </p>
+            <TransitAvailabilityEvidence
+              availability={station.availability}
+              locale={locale}
+            />
           </div>
         </section>
 
@@ -267,17 +272,23 @@ export function ApiTransitDetailPage({
                       <span>{offer.priceSourceLabel}</span>
                     ) : null}
                   </div>
-                  <span
-                    className={styles.pill}
-                    data-tone={
-                      offer.availability.sevenDaySamples > 0 &&
-                      offer.availability.sevenDayRate === 0
-                        ? "warning"
-                        : undefined
-                    }
-                  >
-                    {rateCopy(offer.availability, locale)}
-                  </span>
+                  <div>
+                    <span
+                      className={styles.pill}
+                      data-tone={
+                        offer.availability.sevenDaySamples > 0 &&
+                        offer.availability.sevenDayRate === 0
+                          ? "warning"
+                          : undefined
+                      }
+                    >
+                      {rateCopy(offer.availability, locale)}
+                    </span>
+                    <TransitAvailabilityEvidence
+                      availability={offer.availability}
+                      locale={locale}
+                    />
+                  </div>
                   {offer.priceSourceUrl ? (
                     <a
                       className={styles.sourceLink}

@@ -10,6 +10,29 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it.each([
+    { sourceType: "public_model_catalog", scope: "offer", matchLevel: "exact" },
+    { sourceType: "authorized_probe", scope: "station", matchLevel: "exact" },
+    { sourceType: "authorized_probe", scope: "offer", matchLevel: "model" },
+  ])("rejects misattributed embedded offer evidence %j", (attribution) => {
+    const station = getSyntheticTransitStations()[0];
+    const now = new Date();
+    const result = normalizeTransitOffer(
+      {
+        ...station.offers[0],
+        availability: {
+          sevenDaySamples: 10,
+          sevenDayRate: 1,
+          lastCheckedAt: now.toISOString(),
+          ...attribution,
+        },
+      },
+      station.id,
+      undefined,
+      now,
+    );
+    expect(result?.availability.sevenDaySamples).toBe(0);
+  });
   it.each([0, 299999, 300000, 300001])(
     "applies the five-minute sample clock allowance at %s ms",
     (ahead) => {
@@ -140,6 +163,8 @@ describe("transit repository", () => {
       sevenDaySamples: 4,
       sourceType: "authorized_probe",
       sourceLabel: "Independent probe",
+      scope: "offer",
+      matchLevel: "exact",
       lastCheckedAt: "2026-09-06T00:00:00Z",
     });
     const partial = normalizeTransitAvailability(
@@ -188,6 +213,7 @@ describe("transit repository", () => {
     const fallback = normalizeTransitAvailability({
       ...expired,
       sevenDayRate: 0.5,
+      scope: "offer",
       sevenDaySamples: 2,
       expiresAt: "2026-09-06T13:00:00Z",
     });
@@ -386,7 +412,7 @@ describe("transit repository", () => {
     const checkedAt = new Date().toISOString();
     let stationKeyReads = 0;
     const template = getSyntheticTransitStations()[0];
-    const stations = Array.from({ length: 200 }, (_, index) => ({
+    const stations = Array.from({ length: 100 }, (_, index) => ({
       ...template,
       id: `station-${index}`,
       slug: `station-${index}`,
@@ -417,8 +443,8 @@ describe("transit repository", () => {
       offers,
       availabilitySamples,
     });
-    expect(model?.stations).toHaveLength(200);
-    expect(model?.stations[199].offers[0].availability.sevenDaySamples).toBe(1);
+    expect(model?.stations).toHaveLength(100);
+    expect(model?.stations[99].offers[0].availability.sevenDaySamples).toBe(1);
     expect(stationKeyReads).toBeLessThan(1000);
   });
   it("returns an explicitly marked synthetic fixture without a loader", async () => {

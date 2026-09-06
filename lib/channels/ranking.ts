@@ -273,7 +273,9 @@ function normalizedSearchText(offer: ChannelOffer): string {
 export function filterChannelOffers(
   offers: readonly ChannelOffer[],
   input: Partial<ChannelOfferFilters> | unknown = {},
+  options: OfferAvailabilityOptions = {},
 ): ChannelOffer[] {
+  const now = asDate(options.now);
   const filters = parseChannelOfferFilters(input);
   const query = filters.query?.trim().toLocaleLowerCase();
   return offers.filter((offer) => {
@@ -303,7 +305,7 @@ export function filterChannelOffers(
     }
     if (
       filters.availability !== "all" &&
-      effectiveChannelAvailability(offer) !== filters.availability
+      effectiveChannelAvailability(offer, now) !== filters.availability
     ) {
       return false;
     }
@@ -325,7 +327,7 @@ export function filterChannelOffers(
 
 export const filterOffers = filterChannelOffers;
 
-function availabilityRank(offer: ChannelOffer): number {
+function availabilityRank(offer: ChannelOffer, now: Date): number {
   const ranks: Record<string, number> = {
     in_stock: 0,
     unknown: 1,
@@ -333,7 +335,7 @@ function availabilityRank(offer: ChannelOffer): number {
     expired: 3,
     unavailable: 4,
   };
-  return ranks[effectiveChannelAvailability(offer)] ?? 9;
+  return ranks[effectiveChannelAvailability(offer, now)] ?? 9;
 }
 
 function priceCompare(left: ChannelOffer, right: ChannelOffer): number {
@@ -396,7 +398,9 @@ function resolveSort(input: ChannelSortInput | undefined): {
 export function sortChannelOffers(
   offers: readonly ChannelOffer[],
   input: ChannelSortInput = "price_asc",
+  options: OfferAvailabilityOptions = {},
 ): ChannelOffer[] {
+  const now = asDate(options.now);
   const sort = resolveSort(input);
   const sign = sort.direction === "asc" ? 1 : -1;
   return [...offers].sort((left, right) => {
@@ -404,7 +408,8 @@ export function sortChannelOffers(
     // remain visible in the all-offers view, but an in-stock row is always
     // presented first unless the caller explicitly filters availability.
     if (sort.by === "price" || sort.by === "relevance") {
-      const availability = availabilityRank(left) - availabilityRank(right);
+      const availability =
+        availabilityRank(left, now) - availabilityRank(right, now);
       if (availability) return availability;
     }
     let primary = 0;
@@ -422,7 +427,7 @@ export function sortChannelOffers(
         primary = compareText(left.productName, right.productName);
         break;
       case "availability":
-        primary = availabilityRank(left) - availabilityRank(right);
+        primary = availabilityRank(left, now) - availabilityRank(right, now);
         break;
       case "relevance":
         primary =
@@ -459,12 +464,16 @@ export function rankChannelOffers(
     options.dedupe === false
       ? [...offers]
       : dedupeChannelOffers(offers, { now: options.now });
-  const filtered = filterChannelOffers(source, filters);
-  const sorted = sortChannelOffers(filtered, {
-    by: filters.sort,
-    direction: filters.direction,
-    query: filters.query,
-  });
+  const filtered = filterChannelOffers(source, filters, options);
+  const sorted = sortChannelOffers(
+    filtered,
+    {
+      by: filters.sort,
+      direction: filters.direction,
+      query: filters.query,
+    },
+    options,
+  );
   return sorted.slice(filters.offset, filters.offset + filters.limit);
 }
 
@@ -480,7 +489,7 @@ export function selectLowestAvailableOffer(
   });
   if (new Set(eligible.map((offer) => offer.currency)).size > 1)
     return undefined;
-  return sortChannelOffers(eligible, "price_asc")[0];
+  return sortChannelOffers(eligible, "price_asc", options)[0];
 }
 
 function maxSeenAt(offers: readonly ChannelOffer[]): string | undefined {
@@ -590,7 +599,10 @@ export function buildChannelMerchantSummaries(
     if (new Set(eligible.map((offer) => offer.currency)).size > 1) continue;
     const lowest = selectLowestAvailableOffer(group, { now: options.now });
     if (lowest) lowestIds.add(lowest.id);
-    for (const offer of sortChannelOffers(eligible, "price_asc").slice(0, 5)) {
+    for (const offer of sortChannelOffers(eligible, "price_asc", options).slice(
+      0,
+      5,
+    )) {
       topFiveIds.add(offer.id);
     }
   }

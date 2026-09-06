@@ -20,6 +20,7 @@ import {
   publishTransitSnapshot,
 } from "@/lib/public-data/persistence";
 import { loadChannelSnapshotFromDatabase } from "@/lib/channels/repository";
+import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
 import {
   loadTransitSnapshotFromDatabase,
   normalizeTransitDatabaseSnapshot,
@@ -421,6 +422,37 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       /price anomaly/i,
     );
   });
+  it("rejects oversized generations before publication or full hydration", async () => {
+    const channel = channels();
+    const oversizedChannel = {
+      ...channel,
+      offers: Array(PUBLIC_DATA_LIMITS.channelOffers + 1).fill(
+        channel.offers[0],
+      ),
+    };
+    expect(channelSnapshotSchema.safeParse(oversizedChannel).success).toBe(
+      false,
+    );
+    const model = transit();
+    expect(
+      transitSnapshotSchema.safeParse({
+        ...model,
+        availabilitySamples: Array(PUBLIC_DATA_LIMITS.samples + 1).fill(
+          model.availabilitySamples[0],
+        ),
+      }).success,
+    ).toBe(false);
+    await publishChannelSnapshot(channel);
+    await publishTransitSnapshot(model);
+    await connection.client`insert into channel_public_offers select (jsonb_populate_record(null::channel_public_offers, to_jsonb(o) || jsonb_build_object('id', 'extra-' || n))).* from channel_public_offers o cross join generate_series(1, ${PUBLIC_DATA_LIMITS.channelOffers}) n where o.id='offer'`;
+    await connection.client`insert into transit_offers select (jsonb_populate_record(null::transit_offers, to_jsonb(o) || jsonb_build_object('id', 'extra-' || n))).* from transit_offers o cross join generate_series(1, ${PUBLIC_DATA_LIMITS.transitOffers}) n where o.id='model-offer'`;
+    await expect(
+      loadChannelSnapshotFromDatabase(connection.database),
+    ).rejects.toThrow(/capacity exceeded/);
+    await expect(
+      loadTransitSnapshotFromDatabase(connection.database),
+    ).rejects.toThrow(/capacity exceeded/);
+  }, 30000);
   it("backfills retained baselines for absent channel offers and current transit offers", async () => {
     const first = channels();
     first.offers.push({
