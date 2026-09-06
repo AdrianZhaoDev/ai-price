@@ -92,6 +92,13 @@
       "when": 1788725812605,
       "tag": "0012_channel_source_type",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788731127142,
+      "tag": "0013_channel_first_seen_lineage",
+      "breakpoints": true
     }
   ]
 }

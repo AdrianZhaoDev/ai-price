@@ -8,10 +8,9 @@ import {
   channelMerchants,
   channelProducts,
   channelPublicOffers,
-  channelOfferObservations,
   publicDataGenerations,
 } from "@/lib/db/schema";
-import { and, desc, eq, min } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { createSyntheticChannelSnapshot } from "./fixture";
 import {
   buildChannelMerchantSummaries,
@@ -144,36 +143,20 @@ async function readChannelSnapshot(
     .limit(1);
   if (!generation) return null;
 
-  const [merchantRows, productRows, offerRows, firstObservations] =
-    await Promise.all([
-      database
-        .select()
-        .from(channelMerchants)
-        .where(eq(channelMerchants.generationId, generation.id)),
-      database
-        .select()
-        .from(channelProducts)
-        .where(eq(channelProducts.generationId, generation.id)),
-      database
-        .select()
-        .from(channelPublicOffers)
-        .where(eq(channelPublicOffers.generationId, generation.id)),
-      database
-        .select({
-          offerId: channelOfferObservations.offerId,
-          firstSeenAt: min(channelOfferObservations.observedAt),
-        })
-        .from(channelOfferObservations)
-        .innerJoin(
-          channelPublicOffers,
-          eq(channelOfferObservations.offerId, channelPublicOffers.id),
-        )
-        .where(eq(channelPublicOffers.generationId, generation.id))
-        .groupBy(channelOfferObservations.offerId),
-    ]);
-  const firstSeenById = new Map(
-    firstObservations.map((row) => [row.offerId, row.firstSeenAt]),
-  );
+  const [merchantRows, productRows, offerRows] = await Promise.all([
+    database
+      .select()
+      .from(channelMerchants)
+      .where(eq(channelMerchants.generationId, generation.id)),
+    database
+      .select()
+      .from(channelProducts)
+      .where(eq(channelProducts.generationId, generation.id)),
+    database
+      .select()
+      .from(channelPublicOffers)
+      .where(eq(channelPublicOffers.generationId, generation.id)),
+  ]);
 
   const generatedAt = generation.generatedAt.toISOString();
   const merchants: ChannelMerchant[] = merchantRows.flatMap((row) => {
@@ -240,7 +223,7 @@ async function readChannelSnapshot(
         labels: asStringArray(row.tags),
         riskLabels: asStringArray(row.riskLabels),
         expiresAt: row.expiresAt?.toISOString() ?? null,
-        firstSeenAt: firstSeenById.get(row.id) ?? row.observedAt.toISOString(),
+        firstSeenAt: row.firstSeenAt.toISOString(),
         lastSeenAt: row.lastSeenAt.toISOString(),
         observedAt: row.observedAt.toISOString(),
         publicDedupeKey: createHash("sha256")

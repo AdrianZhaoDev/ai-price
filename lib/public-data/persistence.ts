@@ -378,6 +378,7 @@ export async function publishChannelSnapshot(
             productId: channelPublicOffers.productId,
             offerUrl: channelPublicOffers.offerUrl,
             bulkPricingTiers: channelPublicOffers.bulkPricingTiers,
+            firstSeenAt: channelPublicOffers.firstSeenAt,
             priceMinor: channelPublicOffers.priceMinor,
             currency: channelPublicOffers.currency,
           })
@@ -425,6 +426,43 @@ export async function publishChannelSnapshot(
           "Bulk tier identity overlap collapsed; previous snapshot retained for review.",
         );
     }
+    const unmatchedIds = snapshot.offers
+      .filter((offer) => !matches.has(offer.id))
+      .map((offer) => offer.id);
+    const historicalFirstSeen = unmatchedIds.length
+      ? await tx
+          .select({
+            offerId: channelOfferObservations.offerId,
+            firstSeenAt:
+              sql`min(least(${channelOfferObservations.observedAt}, (${channelOfferObservations.offerSnapshot}->>'firstSeenAt')::timestamptz))`.mapWith(
+                channelPublicOffers.firstSeenAt,
+              ),
+          })
+          .from(channelOfferObservations)
+          // IDs are schema-validated ASCII identifiers; this is a bound text-array
+          // parameter, not interpolated SQL or one bind parameter per offer.
+          .where(
+            sql`${channelOfferObservations.offerId} = any(${`{${unmatchedIds.join(",")}}`}::text[])`,
+          )
+          .groupBy(channelOfferObservations.offerId)
+      : [];
+    const historicalById = new Map(
+      historicalFirstSeen.map((row) => [row.offerId, row.firstSeenAt]),
+    );
+    const firstSeenById = new Map(
+      snapshot.offers.map((offer) => [
+        offer.id,
+        new Date(
+          Math.min(
+            Date.parse(offer.observedAt),
+            previousPrices
+              .get(matches.get(offer.id) ?? "")
+              ?.firstSeenAt.getTime() ?? Infinity,
+            historicalById.get(offer.id)?.getTime() ?? Infinity,
+          ),
+        ),
+      ]),
+    );
     await clearChannelRows(tx);
     const offerCounts = new Map<
       string,
@@ -556,6 +594,7 @@ export async function publishChannelSnapshot(
           riskLabels: offer.riskLabels,
           status: offer.status,
           observedAt: new Date(offer.observedAt),
+          firstSeenAt: firstSeenById.get(offer.id)!,
           lastSeenAt: new Date(offer.lastSeenAt),
           expiresAt: toDate(offer.expiresAt),
           verifiedAt: toDate(offer.verifiedAt),
@@ -582,6 +621,7 @@ export async function publishChannelSnapshot(
           ...offer,
           merchantName: merchantNames.get(offer.merchantId),
           productName: productNames.get(offer.productId),
+          firstSeenAt: firstSeenById.get(offer.id)!.toISOString(),
         },
         priceMinor: offer.priceMinor,
         currency: offer.currency,

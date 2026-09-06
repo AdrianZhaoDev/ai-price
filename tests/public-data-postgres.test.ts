@@ -182,6 +182,19 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
           "utf8",
         ),
       );
+    const [lineageColumn] =
+      await connection.client`select count(*)::int as count from information_schema.columns where table_schema='public' and table_name='channel_public_offers' and column_name='first_seen_at'`;
+    if (!lineageColumn.count) {
+      const migration = await readFile(
+        new URL(
+          "../drizzle/0013_channel_first_seen_lineage.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      for (const statement of migration.split("--> statement-breakpoint"))
+        if (statement.trim()) await connection.client.unsafe(statement);
+    }
   });
   beforeEach(async () => {
     await connection.client`truncate channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
@@ -231,6 +244,64 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect(
       await connection.client`select id from channel_offer_observations where offer_id='history-offer'`,
     ).toHaveLength(2);
+  });
+  it("preserves first-seen lineage across repeated accepted rekeys and reappearance", async () => {
+    const first = channels();
+    first.offers[0].observedAt = new Date(
+      Date.parse(now) - 3600000,
+    ).toISOString();
+    await publishChannelSnapshot(first);
+    for (const id of ["rekey-one", "rekey-two", "offer"]) {
+      const next = channels();
+      next.offers[0].id = id;
+      await publishChannelSnapshot(next);
+      const result = await loadChannelSnapshotFromDatabase(connection.database);
+      expect(result?.offers[0].firstSeenAt).toBe(first.offers[0].observedAt);
+      expect(result?.offers[0].observedAt).toBe(now);
+    }
+    const current = channels();
+    current.offers.push({
+      ...current.offers[0],
+      id: "anchor",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishChannelSnapshot(current);
+    await publishChannelSnapshot({ ...current, offers: [current.offers[1]] });
+    // The old ID has no current predecessor; recover its retained lineage.
+    await publishChannelSnapshot(current);
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))?.offers.find(
+        (offer) => offer.id === "offer",
+      )?.firstSeenAt,
+    ).toBe(first.offers[0].observedAt);
+  });
+  it("backfills first-seen from pre-migration stable-identity history", async () => {
+    const first = channels();
+    first.offers[0].observedAt = new Date(
+      Date.parse(now) - 3600000,
+    ).toISOString();
+    await publishChannelSnapshot(first);
+    const next = channels();
+    next.offers[0].id = "migrated-rekey";
+    await publishChannelSnapshot(next);
+    const migration = await readFile(
+      new URL(
+        "../drizzle/0013_channel_first_seen_lineage.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    // This connection is restricted above to the disposable loopback test DB.
+    await connection.client.begin(async (tx) => {
+      await tx`alter table channel_public_offers drop column first_seen_at`;
+      for (const statement of migration.split("--> statement-breakpoint"))
+        if (statement.trim()) await tx.unsafe(statement);
+      const [row] =
+        await tx`select first_seen_at from channel_public_offers where id='migrated-rekey'`;
+      expect(new Date(row.first_seen_at).toISOString()).toBe(
+        first.offers[0].observedAt,
+      );
+    });
   });
 
   it("preserves explicit source types independent of source labels", async () => {

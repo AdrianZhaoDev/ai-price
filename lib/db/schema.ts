@@ -844,6 +844,7 @@ export const channelPublicOffers = pgTable(
     tags: jsonb("tags").$type<string[]>().default([]).notNull(),
     riskLabels: jsonb("risk_labels").$type<string[]>().default([]).notNull(),
     status: text("status").default("pending_review").notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
