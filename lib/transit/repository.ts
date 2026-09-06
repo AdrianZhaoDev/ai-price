@@ -382,7 +382,7 @@ function expireAvailability(
   // changes, clear the aggregate rather than inventing a recomputed rate.
   if (
     !Number.isFinite(age) ||
-    age < 0 ||
+    age < -5 * 60 * 1000 ||
     age >= 7 * 86400000 ||
     oldestAge >= 7 * 86400000 ||
     (availability.expiresAt &&
@@ -649,7 +649,7 @@ export function aggregateAvailability(
     const age = now.getTime() - Date.parse(checkedAt);
     const expiresAt = dateString(pick(sample, "expiresAt", "expires_at"));
     if (
-      age < 0 ||
+      age < -5 * 60 * 1000 ||
       age >= 7 * 24 * 60 * 60 * 1000 ||
       (expiresAt && Date.parse(expiresAt) <= now.getTime())
     )

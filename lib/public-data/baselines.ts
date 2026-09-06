@@ -20,13 +20,16 @@ export async function loadOfferBaselines<T extends Record<string, unknown>>(
   const incomingSources = new Map(
     incoming.map((row) => [row.id, row.identity[0]]),
   );
+  const incomingIdentities = new Map(
+    incoming.map((row) => [row.id, row.identity]),
+  );
   const input = sql`jsonb_to_recordset(${JSON.stringify(incoming)}::jsonb) as incoming(id text, identity jsonb)`;
   // Separate equijoins preserve indexed/hashable lookup paths. The hash only
   // bounds index keys; exact JSON equality also guards against collisions.
-  for (const predicate of [
+  for (const [lookup, predicate] of [
     sql`${publicOfferBaselines.offerId} = incoming.id`,
     sql`md5(${publicOfferBaselines.identity}::text) = md5(incoming.identity::text) and ${publicOfferBaselines.identity} = incoming.identity`,
-  ]) {
+  ].entries()) {
     const rows = await tx
       .select({
         id: sql<string>`incoming.id`,
@@ -43,6 +46,15 @@ export async function loadOfferBaselines<T extends Record<string, unknown>>(
       .innerJoin(input, predicate)
       .where(eq(publicOfferBaselines.domain, domain));
     for (const row of rows) {
+      if (
+        lookup === 0 &&
+        row.identity[0] != null &&
+        JSON.stringify(row.identity) !==
+          JSON.stringify(incomingIdentities.get(row.id))
+      )
+        throw new Error(
+          "Offer stable identity changed; previous snapshot retained for review.",
+        );
       if (
         row.identity[0] != null &&
         row.identity[0] !== incomingSources.get(row.id)
@@ -88,7 +100,6 @@ export async function saveOfferBaselines(
       .onConflictDoUpdate({
         target: [publicOfferBaselines.domain, publicOfferBaselines.offerId],
         set: {
-          identity: sql`excluded.identity`,
           payload: sql`excluded.payload`,
           firstSeenAt: sql`least(${publicOfferBaselines.firstSeenAt}, excluded.first_seen_at)`,
           updatedAt: sql`excluded.updated_at`,

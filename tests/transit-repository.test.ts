@@ -10,6 +10,94 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it.each([0, 299999, 300000, 300001])(
+    "applies the five-minute sample clock allowance at %s ms",
+    (ahead) => {
+      const station = getSyntheticTransitStations()[0];
+      station.availability = normalizeTransitAvailability({});
+      const now = new Date("2026-09-06T05:00:00Z");
+      const model = normalizeTransitDatabaseSnapshot(
+        {
+          generatedAt: now.toISOString(),
+          stations: [station],
+          availabilitySamples: [
+            {
+              id: "clock",
+              stationId: station.id,
+              scope: "station",
+              matchLevel: "exact",
+              sourceType: "authorized_probe",
+              success: true,
+              checkedAt: new Date(now.getTime() + ahead).toISOString(),
+            },
+          ],
+        },
+        { now },
+      );
+      expect(model?.stations[0].availability.sevenDaySamples).toBe(
+        ahead <= 300000 ? 1 : 0,
+      );
+      const embedded = normalizeTransitDatabaseSnapshot(
+        {
+          generatedAt: now.toISOString(),
+          stations: [
+            {
+              ...station,
+              availability: {
+                sevenDaySamples: 1,
+                sevenDayRate: 1,
+                sourceType: "authorized_probe",
+                lastCheckedAt: new Date(now.getTime() + ahead).toISOString(),
+              },
+            },
+          ],
+        },
+        { now },
+      );
+      expect(embedded?.stations[0].availability.sevenDaySamples).toBe(
+        ahead <= 300000 ? 1 : 0,
+      );
+    },
+  );
+  it("normalizes offset timestamps before selecting the latest evidence stream", () => {
+    const station = getSyntheticTransitStations()[0];
+    station.availability = normalizeTransitAvailability({});
+    const now = new Date("2026-09-06T06:00:00Z");
+    const model = normalizeTransitDatabaseSnapshot(
+      {
+        generatedAt: now.toISOString(),
+        stations: [station],
+        availabilitySamples: [
+          {
+            id: "older",
+            stationId: station.id,
+            scope: "station",
+            matchLevel: "exact",
+            sourceType: "authorized_probe",
+            sourceUrl: "https://example.com/older",
+            success: false,
+            checkedAt: "2026-09-06T12:00:00+08:00",
+          },
+          {
+            id: "newer",
+            stationId: station.id,
+            scope: "station",
+            matchLevel: "exact",
+            sourceType: "authorized_probe",
+            sourceUrl: "https://example.com/newer",
+            success: true,
+            checkedAt: "2026-09-06T05:00:00Z",
+          },
+        ],
+      },
+      { now },
+    );
+    expect(model?.stations[0].availability).toMatchObject({
+      sevenDayRate: 1,
+      lastCheckedAt: "2026-09-06T05:00:00.000Z",
+      sourceUrl: "https://example.com/newer",
+    });
+  });
   it("keeps structured matches visible when free text matches a different offer", async () => {
     const station = getSyntheticTransitStations()[0];
     const now = new Date();

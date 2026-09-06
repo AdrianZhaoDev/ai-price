@@ -370,6 +370,57 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       });
     },
   );
+  it("rejects same-ID channel and transit identity reassignment before baselines can be overwritten", async () => {
+    const first = channels();
+    first.offers.push({
+      ...first.offers[0],
+      id: "anchor",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishChannelSnapshot(first);
+    const changed = structuredClone(first);
+    changed.offers[0].offerUrl = "https://example.com/changed";
+    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+      /stable identity changed/,
+    );
+    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+      /stable identity changed/,
+    );
+    changed.offers[0] = {
+      ...first.offers[0],
+      id: "new-return",
+      priceMinor: 99900,
+    };
+    await expect(publishChannelSnapshot(changed)).rejects.toThrow(
+      /price anomaly/i,
+    );
+    const model = transit();
+    model.availabilitySamples = [];
+    model.offers.push({
+      ...model.offers[0],
+      id: "anchor-model",
+      standardModel: "anchor",
+    });
+    await publishTransitSnapshot(model);
+    const moved = structuredClone(model);
+    moved.offers[0].groupName = "moved-group";
+    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+      /stable identity changed/,
+    );
+    await publishTransitSnapshot({ ...model, offers: [model.offers[1]] });
+    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+      /stable identity changed/,
+    );
+    moved.offers[0] = {
+      ...model.offers[0],
+      id: "new-return",
+      modelMultiplier: 999,
+    };
+    await expect(publishTransitSnapshot(moved)).rejects.toThrow(
+      /price anomaly/i,
+    );
+  });
   it("backfills retained baselines for absent channel offers and current transit offers", async () => {
     const first = channels();
     first.offers.push({

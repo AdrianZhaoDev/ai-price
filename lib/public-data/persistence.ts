@@ -87,6 +87,10 @@ function matchOfferIdentities(
       throw new Error(
         "Offer source identity changed; previous snapshot retained for review.",
       );
+    if (prior.key !== row.key)
+      throw new Error(
+        "Offer stable identity changed; previous snapshot retained for review.",
+      );
     matches.set(row.id, prior.id);
     const ids = retained.get(row.source) ?? new Set<string>();
     ids.add(prior.id);

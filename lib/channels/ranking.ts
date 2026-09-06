@@ -62,6 +62,14 @@ export function effectiveChannelAvailability(
     offer.stockQuantity <= 0
   )
     return "out_of_stock";
+  const age = now.getTime() - timestamp(offer.lastSeenAt);
+  if (
+    availabilityOf(offer) === "in_stock" &&
+    (age > 36 * 60 * 60 * 1000 ||
+      age < -5 * 60 * 1000 ||
+      sourceHealthOf(offer) === "failed")
+  )
+    return "unknown";
   return availabilityOf(offer) as ChannelOffer["availabilityStatus"];
 }
 

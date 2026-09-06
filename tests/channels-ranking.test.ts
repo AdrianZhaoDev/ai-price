@@ -31,6 +31,23 @@ function offer(overrides: Partial<ChannelOffer> = {}): ChannelOffer {
 }
 
 describe("channel availability and ranking", () => {
+  it("does not label or count stale inventory as currently available", () => {
+    const stale = offer({
+      lastSeenAt: "2026-09-01T00:00:00Z",
+      sourceHealth: "unknown",
+      availabilityStatus: "in_stock",
+    });
+    expect(effectiveChannelAvailability(stale, referenceNow)).toBe("unknown");
+    expect(isOfferAvailable(stale, referenceNow)).toBe(false);
+    expect(
+      buildChannelProductSummaries([stale], { now: referenceNow })[0]
+        .availableOfferCount,
+    ).toBe(0);
+    expect(
+      buildChannelMerchantSummaries([stale], { now: referenceNow })[0]
+        .availableOfferCount,
+    ).toBe(0);
+  });
   it("prefers healthy sources on price ties before recency or source type", () => {
     const healthy = offer({
       id: "healthy",
