@@ -1,16 +1,11 @@
 import Link from "next/link";
 import type { Locale } from "@/lib/i18n";
 import { absoluteUrl, metadataForDocument } from "@/lib/seo";
-import {
-  publicStationView,
-  loadTransitReadModel,
-} from "@/lib/transit/repository";
 import type {
   TransitAvailability,
   TransitOffer,
   TransitStation,
 } from "@/lib/transit/types";
-import { isTransitStationPublic } from "@/lib/transit/types";
 import { SiteFooter, SiteHeader } from "./site-header";
 import styles from "./public-data-directory.module.css";
 
@@ -40,7 +35,7 @@ function rateCopy(availability: TransitAvailability, locale: Locale): string {
 
 function offerRate(offer: TransitOffer, locale: Locale): string {
   if (offer.billingMode === "token" && offer.combinedRate !== null) {
-    return `${offer.combinedRate.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}×`;
+    return `${offer.combinedRate.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}×`;
   }
   if (offer.fixedPrice !== null) {
     const unit = offer.fixedPriceUnit ? ` / ${offer.fixedPriceUnit}` : "";
@@ -79,26 +74,15 @@ export const apiTransitDetailMetadata = (locale: Locale, slug: string) =>
     locale,
   });
 
-export async function ApiTransitDetailPage({
+export function ApiTransitDetailPage({
   locale,
-  slug,
+  station,
+  degraded,
 }: {
   locale: Locale;
-  slug: string;
+  station: TransitStation;
+  degraded: boolean;
 }) {
-  const model = await loadTransitReadModel();
-  const candidate = model.stations.find(
-    (item) => item.slug === slug.toLowerCase(),
-  );
-  if (
-    !candidate ||
-    !isTransitStationPublic(candidate, { includeSample: model.isSynthetic })
-  ) {
-    // Importing `notFound` here would make this reusable component harder to
-    // test; the route wrapper handles the null case and renders its 404.
-    return null;
-  }
-  const station = publicStationView(candidate, false);
   const isEnglish = locale === "en";
   const path = isEnglish
     ? `/en/api-transit/${station.slug}`
@@ -255,7 +239,7 @@ export async function ApiTransitDetailPage({
                         {isEnglish ? "Input" : "输入"}:{" "}
                         {offer.inputPrice.toLocaleString(
                           isEnglish ? "en-US" : "zh-CN",
-                          { maximumFractionDigits: 6 },
+                          { maximumFractionDigits: 8 },
                         )}{" "}
                         {offer.currency} /{" "}
                         {isEnglish ? "1M tokens" : "百万 tokens"}
@@ -267,7 +251,7 @@ export async function ApiTransitDetailPage({
                         {isEnglish ? "Output" : "输出"}:{" "}
                         {offer.outputPrice.toLocaleString(
                           isEnglish ? "en-US" : "zh-CN",
-                          { maximumFractionDigits: 6 },
+                          { maximumFractionDigits: 8 },
                         )}{" "}
                         {offer.currency} /{" "}
                         {isEnglish ? "1M tokens" : "百万 tokens"}
@@ -379,7 +363,7 @@ export async function ApiTransitDetailPage({
           {isEnglish
             ? "This page reads the latest published snapshot only. It does not send requests through the station or claim that a third-party status page covers every model."
             : "本页只读取最近发布的快照，不会通过中转站发起请求，也不会把第三方状态页描述成覆盖全部模型。"}
-          {model.degraded
+          {degraded
             ? ` ${isEnglish ? "The snapshot is currently degraded." : "当前快照处于降级状态。"}`
             : ""}
         </p>

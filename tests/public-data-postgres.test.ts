@@ -310,4 +310,19 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     );
     expect(read?.stations[0].offers).toHaveLength(10);
   });
+  it("rejects computed or textual ratios that would round to zero before replacement", async () => {
+    const prior = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    const tiny = transit();
+    tiny.offers[0].rechargeCoefficient = 1e-8;
+    tiny.offers[0].modelMultiplier = 1e-8;
+    await expect(publishTransitSnapshot(tiny)).rejects.toThrow();
+    tiny.offers[0].rechargeRatio = "1:10000000000";
+    await expect(publishTransitSnapshot(tiny)).rejects.toThrow();
+    const read = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    expect(read?.generationId).toBe(prior?.generationId);
+  });
 });

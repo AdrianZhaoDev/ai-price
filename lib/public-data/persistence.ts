@@ -2,6 +2,7 @@ import {
   contentHash,
   channelSnapshotSchema,
   transitSnapshotSchema,
+  transitPositiveDecimalSchema,
   type ChannelSnapshot,
   type TransitSnapshot,
 } from "@/lib/public-data/snapshot";
@@ -425,13 +426,13 @@ export async function publishChannelSnapshot(
 function transitRechargeRatio(
   offer: TransitSnapshot["offers"][number],
 ): number | null {
-  return (
+  const ratio =
     finiteNumber(offer.rechargeRatio) ??
     calculateRechargeCoefficient(offer.rechargeRatioRaw) ??
     calculateRechargeCoefficient(
       typeof offer.rechargeRatio === "string" ? offer.rechargeRatio : null,
-    )
-  );
+    );
+  return ratio === null ? null : transitPositiveDecimalSchema.parse(ratio);
 }
 
 function transitCombinedMultiplier(
@@ -454,13 +455,17 @@ function transitCombinedMultiplier(
   )
     return null;
   const combined = recharge * model;
-  return Number.isFinite(combined) && combined > 0 ? combined : null;
+  return transitPositiveDecimalSchema.parse(combined);
 }
 
 export async function publishTransitSnapshot(
   snapshot: TransitSnapshot,
 ): Promise<PublicPublishResult> {
   snapshot = transitSnapshotSchema.parse(snapshot);
+  for (const offer of snapshot.offers) {
+    transitRechargeRatio(offer);
+    transitCombinedMultiplier(offer);
+  }
   // A directory with no stations is not a valid refresh.  Keep the previous
   // generation instead of clearing all public rows on an upstream outage.
   if (snapshot.stations.length === 0) {
@@ -532,16 +537,27 @@ export async function publishTransitSnapshot(
     }
     // Native adapters must not silently publish a truncated model catalogue.
     // Check under the same domain lock/transaction as the replacement.
+    const baselineRows = await tx
+      .select({
+        stationId: transitOffers.stationId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(transitOffers)
+      .groupBy(transitOffers.stationId);
+    const baselineCounts = new Map(
+      baselineRows.map((row) => [row.stationId, row.count]),
+    );
+    const incomingCounts = new Map<string, number>();
+    for (const offer of snapshot.offers)
+      incomingCounts.set(
+        offer.stationId,
+        (incomingCounts.get(offer.stationId) ?? 0) + 1,
+      );
     for (const station of snapshot.stations) {
       if (station.payload.adapterVersion !== "sub2api-public-v1") continue;
-      const [baseline] = await tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(transitOffers)
-        .where(eq(transitOffers.stationId, station.id));
-      const nextCount = snapshot.offers.filter(
-        (offer) => offer.stationId === station.id,
-      ).length;
-      if (baseline.count - nextCount >= 2 && nextCount < baseline.count * 0.7)
+      const baseline = baselineCounts.get(station.id) ?? 0;
+      const nextCount = incomingCounts.get(station.id) ?? 0;
+      if (baseline - nextCount >= 2 && nextCount < baseline * 0.7)
         throw new Error(
           "Original model count collapsed; previous snapshot retained.",
         );

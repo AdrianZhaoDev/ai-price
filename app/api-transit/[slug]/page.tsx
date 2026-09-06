@@ -4,7 +4,7 @@ import {
   ApiTransitDetailPage,
   apiTransitDetailMetadata,
 } from "@/components/api-transit-detail-page";
-import { getTransitStationBySlug } from "@/lib/transit/repository";
+import { loadTransitDetail } from "@/lib/transit/detail";
 import { isPublicDirectoryIndexingEnabled } from "@/lib/public-data/indexing";
 
 export const revalidate = 300;
@@ -15,9 +15,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const station = await getTransitStationBySlug(slug);
-  if (!station) return {};
-  const metadata = apiTransitDetailMetadata("zh-CN", station.slug);
+  const detail = await loadTransitDetail(slug);
+  if (!detail) return {};
+  const metadata = apiTransitDetailMetadata("zh-CN", detail.station.slug);
   return isPublicDirectoryIndexingEnabled()
     ? metadata
     : { ...metadata, robots: { index: false, follow: true } };
@@ -29,7 +29,7 @@ export default async function ApiTransitDetailRoute({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const station = await getTransitStationBySlug(slug);
-  if (!station) notFound();
-  return <ApiTransitDetailPage locale="zh-CN" slug={station.slug} />;
+  const detail = await loadTransitDetail(slug);
+  if (!detail) notFound();
+  return <ApiTransitDetailPage locale="zh-CN" {...detail} />;
 }

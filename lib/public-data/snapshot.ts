@@ -22,6 +22,16 @@ const publicText = z.string().max(4000);
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
 const tags = z.array(boundedText(80)).max(64).default([]);
 const transitTags = z.array(boundedText(80)).max(30).default([]);
+// Match numeric(20, 8): never let a positive amount silently round to free.
+export const transitPositiveDecimalSchema = z
+  .number()
+  .finite()
+  .min(1e-8)
+  .max(999_999_999_999);
+const transitPriceSchema = z.union([
+  z.literal(0),
+  transitPositiveDecimalSchema,
+]);
 const sensitiveKey =
   /token|secret|password|passwd|authorization|credential|session|cookie|api[-_]?key|signature|bearer/i;
 
@@ -149,20 +159,20 @@ export const transitOfferSnapshotSchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/),
   /** Numeric paid/credited ratio, retained for backwards-compatible feeds. */
   rechargeRatio: z
-    .union([z.number().finite().positive(), z.string().trim().max(100)])
+    .union([transitPositiveDecimalSchema, z.string().trim().max(100)])
     .nullable()
     .optional(),
   rechargeRatioRaw: z.string().trim().max(100).nullable().optional(),
-  rechargeCoefficient: z.number().finite().positive().nullable().optional(),
-  modelMultiplier: z.number().finite().positive().nullable().optional(),
-  stationGroupMultiplier: z.number().finite().positive().nullable().optional(),
-  combinedMultiplier: z.number().finite().positive().nullable().optional(),
-  inputPrice: z.number().finite().nonnegative().nullable().optional(),
-  outputPrice: z.number().finite().nonnegative().nullable().optional(),
-  cacheReadPrice: z.number().finite().nonnegative().nullable().optional(),
-  cacheWritePrice: z.number().finite().nonnegative().nullable().optional(),
-  imageOutputPrice: z.number().finite().nonnegative().nullable().optional(),
-  fixedPrice: z.number().finite().nonnegative().nullable().optional(),
+  rechargeCoefficient: transitPositiveDecimalSchema.nullable().optional(),
+  modelMultiplier: transitPositiveDecimalSchema.nullable().optional(),
+  stationGroupMultiplier: transitPositiveDecimalSchema.nullable().optional(),
+  combinedMultiplier: transitPositiveDecimalSchema.nullable().optional(),
+  inputPrice: transitPriceSchema.nullable().optional(),
+  outputPrice: transitPriceSchema.nullable().optional(),
+  cacheReadPrice: transitPriceSchema.nullable().optional(),
+  cacheWritePrice: transitPriceSchema.nullable().optional(),
+  imageOutputPrice: transitPriceSchema.nullable().optional(),
+  fixedPrice: transitPriceSchema.nullable().optional(),
   fixedPriceCurrency: z
     .string()
     .regex(/^[A-Z]{3}$/)

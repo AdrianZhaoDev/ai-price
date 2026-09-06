@@ -453,18 +453,15 @@ function maxSeenAt(offers: readonly ChannelOffer[]): string | undefined {
   }, undefined);
 }
 
-function productMetadata(
-  productId: string,
-  products: readonly ChannelProduct[] | undefined,
-): ChannelProduct | undefined {
-  return products?.find((product) => product.id === productId);
-}
-
 /** Build canonical-product rows for the standard-product view. */
 export function buildChannelProductSummaries(
   offers: readonly ChannelOffer[],
   options: { now?: Date; products?: readonly ChannelProduct[] } = {},
 ): ChannelProductSummary[] {
+  const productsById = new Map<string, ChannelProduct>();
+  for (const product of options.products ?? []) {
+    if (!productsById.has(product.id)) productsById.set(product.id, product);
+  }
   const deduped = dedupeChannelOffers(offers, { now: options.now });
   const groups = new Map<string, ChannelOffer[]>();
   for (const offer of deduped) {
@@ -474,7 +471,7 @@ export function buildChannelProductSummaries(
   }
   const summaries = [...groups.entries()].map(([productId, group]) => {
     const first = group[0];
-    const metadata = productMetadata(productId, options.products);
+    const metadata = productsById.get(productId);
     const available = group.filter((offer) =>
       isOfferAvailable(offer, { now: options.now }),
     );

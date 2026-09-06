@@ -17,8 +17,44 @@ import { isPrivateOrReservedHostname } from "@/lib/public-data/urls";
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 import { filterTransitStations } from "@/lib/transit/ranking";
 import { isTransitStationPublic } from "@/lib/transit/types";
+import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("indexes product metadata once for complete summary sets", () => {
+    const template = createSyntheticChannelSnapshot();
+    let productKeyReads = 0;
+    const products = Array.from({ length: 200 }, (_, index) => ({
+      ...template.products![0],
+      get id() {
+        productKeyReads++;
+        return `product-${index}`;
+      },
+    }));
+    const offers = products.map((_, index) => ({
+      ...template.offers[0],
+      id: `offer-${index}`,
+      productId: `product-${index}`,
+      publicDedupeKey: `dedupe-${index}`,
+    }));
+    expect(buildChannelProductSummaries(offers, { products })).toHaveLength(
+      200,
+    );
+    expect(productKeyReads).toBeLessThan(1000);
+  });
+  it("rejects positive prices and multipliers below stored precision", () => {
+    for (const schema of [
+      transitOfferSnapshotSchema.shape.rechargeCoefficient,
+      transitOfferSnapshotSchema.shape.modelMultiplier,
+      transitOfferSnapshotSchema.shape.combinedMultiplier,
+      transitOfferSnapshotSchema.shape.inputPrice,
+    ]) {
+      expect(schema.safeParse(1e-10).success).toBe(false);
+      expect(schema.safeParse(1e-8).success).toBe(true);
+    }
+    expect(
+      transitOfferSnapshotSchema.shape.inputPrice.safeParse(0).success,
+    ).toBe(true);
+  });
   it("keeps public input text and array limits within the read schemas", () => {
     const limits = [
       [channelMerchantSnapshotSchema.shape.name, 160],

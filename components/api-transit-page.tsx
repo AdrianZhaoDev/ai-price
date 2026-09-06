@@ -101,7 +101,7 @@ function formatDate(value: string | null | undefined, locale: Locale): string {
 
 function decimal(value: number): string {
   return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 4,
+    maximumFractionDigits: 8,
   }).format(value);
 }
 
@@ -110,7 +110,7 @@ function formatAmount(value: number, currency: string, locale: Locale): string {
     return new Intl.NumberFormat(locale === "en" ? "en-US" : "zh-CN", {
       style: "currency",
       currency,
-      maximumFractionDigits: 4,
+      maximumFractionDigits: 8,
     }).format(value);
   } catch {
     return `${currency} ${decimal(value)}`;

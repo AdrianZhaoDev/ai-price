@@ -10,6 +10,80 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("retains explicit degraded status and independently marks old generations stale", () => {
+    const stations = [
+      { ...getSyntheticTransitStations()[0], dataStatus: "verified" },
+    ];
+    const now = new Date();
+    for (const input of [
+      { stations, generatedAt: now.toISOString(), dataStatus: "degraded" },
+      {
+        stations,
+        generatedAt: new Date(now.getTime() - 37 * 3600000).toISOString(),
+        dataStatus: "verified",
+      },
+    ]) {
+      const model = normalizeTransitDatabaseSnapshot(input, { now });
+      expect(model?.dataStatus).toBe("degraded");
+      expect(model?.degraded).toBe(true);
+      expect(model?.warning).toContain("outdated");
+    }
+  });
+  it("keeps station ID and slug namespaces separate", () => {
+    const template = getSyntheticTransitStations()[0];
+    const model = normalizeTransitDatabaseSnapshot({
+      stations: [
+        {
+          ...template,
+          id: "alpha",
+          slug: "first",
+          dataStatus: "pending_review",
+        },
+        { ...template, id: "second", slug: "alpha", dataStatus: "verified" },
+      ],
+    });
+    expect(model?.stations).toHaveLength(2);
+    expect(model?.stations[1].slug).toBe("alpha");
+  });
+  it("indexes availability scopes in linear passes instead of scanning every sample per offer", () => {
+    const checkedAt = new Date().toISOString();
+    let stationKeyReads = 0;
+    const template = getSyntheticTransitStations()[0];
+    const stations = Array.from({ length: 200 }, (_, index) => ({
+      ...template,
+      id: `station-${index}`,
+      slug: `station-${index}`,
+      offers: [],
+      prices: [],
+    }));
+    const offers = stations.map((station, index) => ({
+      ...template.offers[0],
+      id: `offer-${index}`,
+      stationId: station.id,
+      availability: undefined,
+    }));
+    const availabilitySamples = stations.map((station, index) => ({
+      get stationId() {
+        stationKeyReads++;
+        return station.id;
+      },
+      offerId: `offer-${index}`,
+      scope: "offer",
+      matchLevel: "exact",
+      success: true,
+      checkedAt,
+      sourceType: "authorized_probe",
+      sourceUrl: "https://example.com/status",
+    }));
+    const model = normalizeTransitDatabaseSnapshot({
+      stations,
+      offers,
+      availabilitySamples,
+    });
+    expect(model?.stations).toHaveLength(200);
+    expect(model?.stations[199].offers[0].availability.sevenDaySamples).toBe(1);
+    expect(stationKeyReads).toBeLessThan(1000);
+  });
   it("returns an explicitly marked synthetic fixture without a loader", async () => {
     const repository = createTransitRepository({
       now: () => new Date("2026-02-01T00:00:00.000Z"),

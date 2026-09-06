@@ -54,7 +54,8 @@ function asRecord(value: unknown): UnknownRecord | null {
 
 function pick(record: UnknownRecord, ...keys: string[]): unknown {
   for (const key of keys) {
-    if (record[key] !== undefined && record[key] !== null) return record[key];
+    const value = record[key];
+    if (value !== undefined && value !== null) return value;
   }
   return undefined;
 }
@@ -735,10 +736,19 @@ export function normalizeTransitDatabaseSnapshot(
         "samples",
       ) as unknown[] | undefined) ?? [])
     : [];
-  const sampleRecords = sampleRows.flatMap((item) => {
+  const samplesByScope = new Map<string, UnknownRecord[]>();
+  const sampleKey = (stationId: string, offerId?: string | null) =>
+    JSON.stringify([stationId, offerId ?? null]);
+  for (const item of sampleRows) {
     const row = asRecord(item);
-    return row ? [row] : [];
-  });
+    if (!row) continue;
+    const stationId = text(pick(row, "stationId", "station_id"));
+    if (!stationId) continue;
+    const key = sampleKey(stationId, text(pick(row, "offerId", "offer_id")));
+    const bucket = samplesByScope.get(key) ?? [];
+    bucket.push(row);
+    samplesByScope.set(key, bucket);
+  }
   const offersByStation = new Map<string, unknown[]>();
   for (const rawOffer of offerRows) {
     const row = asRecord(rawOffer);
@@ -754,7 +764,8 @@ export function normalizeTransitDatabaseSnapshot(
     dateString(root ? pick(root, "generatedAt", "generated_at") : null) ??
     now.toISOString();
   const stations: TransitStation[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
   for (const rawStation of stationRows) {
     const row = asRecord(rawStation);
     if (!row) continue;
@@ -763,9 +774,9 @@ export function normalizeTransitDatabaseSnapshot(
     const stationSlug = name ? explicitOrDerivedSlug(row, name) : null;
     const websiteUrl = urlString(pick(row, "websiteUrl", "website_url", "url"));
     if (!id || !name || !stationSlug || !websiteUrl) continue;
-    if (seen.has(id) || seen.has(stationSlug)) continue;
+    if (seenIds.has(id) || seenSlugs.has(stationSlug)) continue;
     const stationFallback = aggregateAvailability(
-      sampleRecords,
+      samplesByScope.get(sampleKey(id)) ?? [],
       id,
       undefined,
       now,
@@ -779,17 +790,20 @@ export function normalizeTransitDatabaseSnapshot(
     const offers: TransitOffer[] = [];
     const offerIds = new Set<string>();
     for (const rawOffer of rawOffers) {
+      const offerRow = asRecord(rawOffer);
+      const rawOfferId = offerRow
+        ? (text(pick(offerRow, "id", "offerId", "offer_id")) ?? undefined)
+        : undefined;
+      if (rawOfferId && offerIds.has(rawOfferId)) continue;
       const candidate = normalizeTransitOffer(
         rawOffer,
         id,
         aggregateAvailability(
-          sampleRecords,
+          rawOfferId
+            ? (samplesByScope.get(sampleKey(id, rawOfferId)) ?? [])
+            : [],
           id,
-          text(
-            asRecord(rawOffer)
-              ? pick(asRecord(rawOffer)!, "id", "offerId", "offer_id")
-              : null,
-          ) ?? undefined,
+          rawOfferId,
           now,
         ),
       );
@@ -884,8 +898,8 @@ export function normalizeTransitDatabaseSnapshot(
     } satisfies TransitStation;
     const parsed = transitStationSchema.safeParse(candidate);
     if (!parsed.success) continue;
-    seen.add(id);
-    seen.add(stationSlug);
+    seenIds.add(id);
+    seenSlugs.add(stationSlug);
     stations.push(parsed.data);
   }
   if (!stations.length) return null;
@@ -893,9 +907,12 @@ export function normalizeTransitDatabaseSnapshot(
     ? transitDataStatusSchema.safeParse(pick(root, "dataStatus", "data_status"))
     : null;
   const dataStatus =
-    rootStatus?.success && rootStatus.data !== "unpublished"
-      ? rootStatus.data
-      : statusFromRows(stations);
+    (root && pick(root, "dataStatus", "data_status") === "degraded") ||
+    now.getTime() - Date.parse(generatedAt) > 36 * 60 * 60 * 1000
+      ? "degraded"
+      : rootStatus?.success && rootStatus.data !== "unpublished"
+        ? rootStatus.data
+        : statusFromRows(stations);
   const rootGeneration = root
     ? text(pick(root, "generationId", "generation_id"))
     : null;
@@ -921,6 +938,10 @@ export function normalizeTransitDatabaseSnapshot(
     degraded: dataStatus === "degraded",
     dataStatus,
     fallbackReason: null,
+    warning:
+      dataStatus === "degraded"
+        ? "The public transit snapshot is stale or degraded; prices may be outdated."
+        : undefined,
     stations,
   } satisfies TransitReadModel;
   const parsed = transitReadModelSchema.safeParse(candidate);
