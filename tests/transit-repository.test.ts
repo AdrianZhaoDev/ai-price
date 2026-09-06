@@ -393,6 +393,38 @@ describe("transit repository", () => {
     expect(failed.fallbackReason).toBe("database_unavailable");
   });
 
+  it("expires verification in last-good fallbacks during prolonged outages", async () => {
+    let now = new Date("2026-09-06T00:00:00Z");
+    let unavailable = false;
+    const station = getSyntheticTransitStations()[0];
+    station.synthetic = false;
+    station.dataStatus = "verified";
+    station.offers = [
+      {
+        ...station.offers[0],
+        status: "verified",
+        lastVerifiedAt: now.toISOString(),
+      },
+    ];
+    const repository = createTransitRepository({
+      cacheTtlMs: 0,
+      now: () => now,
+      databaseLoader: async () => {
+        if (unavailable) throw new Error("offline");
+        return { generatedAt: now.toISOString(), stations: [station] };
+      },
+    });
+    expect((await repository.load()).stations[0].offers[0].status).toBe(
+      "verified",
+    );
+    unavailable = true;
+    now = new Date("2026-09-08T00:00:00Z");
+    const fallback = await repository.load();
+    expect(fallback.degraded).toBe(true);
+    expect(fallback.stations[0].offers[0].status).toBe("unknown");
+    expect((await repository.list()).items[0].offers).toEqual([]);
+  });
+
   it("can disable synthetic fallback for a production-only route", async () => {
     const repository = createTransitRepository({
       allowSyntheticFixture: false,

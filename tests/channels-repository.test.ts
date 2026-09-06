@@ -7,6 +7,33 @@ import {
 import { syntheticChannelOffers } from "@/lib/channels/fixture";
 
 describe("ChannelRepository", () => {
+  it("ages cached last-good offer health during a prolonged database outage", async () => {
+    let now = new Date("2026-09-06T00:00:00Z");
+    let unavailable = false;
+    const repository = new ChannelRepository({
+      cacheTtlMs: 0,
+      now: () => now,
+      loadPublishedOffers: async () => {
+        if (unavailable) throw new Error("offline");
+        return {
+          generatedAt: now.toISOString(),
+          offers: [
+            {
+              ...syntheticChannelOffers[0],
+              lastSeenAt: now.toISOString(),
+              sourceHealth: "healthy",
+            },
+          ],
+        };
+      },
+    });
+    expect((await repository.load()).offers[0].sourceHealth).toBe("healthy");
+    unavailable = true;
+    now = new Date("2026-09-08T00:00:00Z");
+    const fallback = await repository.load();
+    expect(fallback.dataStatus).toBe("degraded");
+    expect(fallback.offers[0].sourceHealth).toBe("unknown");
+  });
   it("returns a clearly labelled synthetic snapshot without a database", async () => {
     const repository = new ChannelRepository({ databaseConfigured: false });
     const snapshot = await repository.getSnapshot();

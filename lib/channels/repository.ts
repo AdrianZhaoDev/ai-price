@@ -317,6 +317,16 @@ export class ChannelRepository {
     if (this.lastGood) {
       const degraded = cloneSnapshot(this.lastGood);
       degraded.dataStatus = "degraded";
+      const now = this.now();
+      const generationStale =
+        dataStatusForGeneration(degraded.generatedAt, now) === "stale";
+      for (const offer of degraded.offers) {
+        if (
+          generationStale ||
+          dataStatusForGeneration(offer.lastSeenAt, now) === "stale"
+        )
+          offer.sourceHealth = "unknown";
+      }
       degraded.warning = `${reason} Serving the last published snapshot.`;
       return degraded;
     }

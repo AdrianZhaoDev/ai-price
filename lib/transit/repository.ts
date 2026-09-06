@@ -351,6 +351,16 @@ export function normalizeTransitAvailability(
   return parsed.success ? parsed.data : structuredClone(fallback);
 }
 
+function freshVerification(
+  value: string | null | undefined,
+  now: Date,
+): boolean {
+  const age = value ? now.getTime() - Date.parse(value) : Infinity;
+  return (
+    Number.isFinite(age) && age <= 36 * 60 * 60 * 1000 && age >= -5 * 60 * 1000
+  );
+}
+
 export function normalizeTransitOffer(
   input: unknown,
   stationId: string,
@@ -533,13 +543,11 @@ export function normalizeTransitOffer(
       "verified",
     ),
   } satisfies TransitOffer;
-  if (candidate.status === "verified") {
-    const age = candidate.lastVerifiedAt
-      ? now.getTime() - Date.parse(candidate.lastVerifiedAt)
-      : Infinity;
-    if (age > 36 * 60 * 60 * 1000 || age < -5 * 60 * 1000)
-      candidate.status = "unknown";
-  }
+  if (
+    candidate.status === "verified" &&
+    !freshVerification(candidate.lastVerifiedAt, now)
+  )
+    candidate.status = "unknown";
   const parsed = transitOfferSchema.safeParse(candidate);
   return parsed.success ? parsed.data : null;
 }
@@ -1220,6 +1228,17 @@ export class TransitRepository {
   private fallback(reason: TransitFallbackReason): TransitReadModel {
     if (this.lastGood) {
       const degraded = cloneReadModel(this.lastGood);
+      const now = this.now();
+      for (const station of degraded.stations) {
+        for (const offer of station.offers) {
+          if (
+            offer.status === "verified" &&
+            !freshVerification(offer.lastVerifiedAt, now)
+          )
+            offer.status = "unknown";
+        }
+        station.prices = station.offers;
+      }
       degraded.degraded = true;
       degraded.dataStatus = "degraded";
       degraded.fallbackReason = reason;

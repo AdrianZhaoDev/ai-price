@@ -25,6 +25,58 @@ import { isTransitStationPublic } from "@/lib/transit/types";
 import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("preserves safe snapshot metadata on all channel detail kinds", async () => {
+    const snapshot = createSyntheticChannelSnapshot();
+    snapshot.dataStatus = "degraded";
+    snapshot.dataSource = "database";
+    snapshot.warning = "private adapter exception must not leak";
+    const spy = vi
+      .spyOn(getDefaultChannelRepository(), "getSnapshot")
+      .mockResolvedValue(snapshot);
+    try {
+      for (const id of [
+        snapshot.offers[0].id,
+        snapshot.products![0].id,
+        snapshot.merchants![0].id,
+      ]) {
+        const response = await handleChannelDetailGet(
+          new Request(`http://localhost/api/channels/${id}`),
+          { params: Promise.resolve({ id }) },
+        );
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body).toMatchObject({
+          generatedAt: snapshot.generatedAt,
+          dataStatus: "degraded",
+          degraded: true,
+        });
+        expect(body.warning).toContain("temporarily unavailable");
+        expect(JSON.stringify(body)).not.toContain("private adapter");
+        expect(response.headers.get("cache-control")).toContain("no-store");
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it("can page through the complete accepted channel corpus", async () => {
+    const template = createSyntheticChannelSnapshot();
+    template.offers = Array.from({ length: 10101 }, (_, index) => ({
+      ...template.offers[0],
+      id: `offer-${index}`,
+      publicDedupeKey: `dedupe-${index}`,
+    }));
+    const repository = createChannelRepository();
+    vi.spyOn(repository, "load").mockResolvedValue(template);
+    const result = await repository.list({ offset: 10100, limit: 100 });
+    expect(result.totalOffers).toBe(10101);
+    expect(result.offers).toHaveLength(1);
+    expect(
+      channelOfferFiltersSchema.safeParse({ offset: 500000 }).success,
+    ).toBe(true);
+    expect(
+      channelOfferFiltersSchema.safeParse({ offset: 500001 }).success,
+    ).toBe(false);
+  });
   it("rejects future generations and storage-overflowing channel values", () => {
     const future = new Date(Date.now() + 3600000).toISOString();
     expect(
@@ -206,7 +258,7 @@ describe("public review regressions", () => {
       }),
     ).toBe(false);
   });
-  it.each(["products", "merchants"])(
+  it.each(["all", "offers", "products", "merchants"])(
     "paginates %s independently",
     async (view) => {
       const first = await (
@@ -224,6 +276,15 @@ describe("public review regressions", () => {
       expect(first.items).toHaveLength(1);
       expect(next.items).toHaveLength(1);
       expect(first.items[0]).not.toEqual(next.items[0]);
+      const countField =
+        view === "products"
+          ? "totalProducts"
+          : view === "merchants"
+            ? "totalMerchants"
+            : "totalOffers";
+      expect(first.total).toBe(first[countField]);
+      expect(first.total).toBeGreaterThan(1);
+      expect(next.total).toBe(first.total);
     },
   );
   it("rejects unknown query keys and retains documented aliases", async () => {
@@ -276,5 +337,20 @@ describe("public review regressions", () => {
     expect(filterTransitStations([station], { q: "private-needle" })).toEqual(
       [],
     );
+    const offer = station.offers[0];
+    for (const query of [
+      { model: offer.standardModelId },
+      { family: offer.family },
+      { channel: offer.channelType },
+      { pool: offer.accountPool },
+    ]) {
+      expect(filterTransitStations([station], query)).toEqual([]);
+      expect(
+        filterTransitStations([station], {
+          ...query,
+          includeUnpublished: true,
+        }),
+      ).toHaveLength(1);
+    }
   });
 });

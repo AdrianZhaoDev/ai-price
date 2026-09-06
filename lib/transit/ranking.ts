@@ -293,7 +293,7 @@ export function transitStationMatchesQuery(
     if (
       !station.offers.some(
         (offer) =>
-          isTransitOfferPublic(offer) &&
+          (includeUnpublished || isTransitOfferPublic(offer)) &&
           offerMatches(offer, query as TransitListQuery),
       )
     ) {

@@ -14,6 +14,7 @@ import {
   publicChannelMerchant,
   publicChannelOffer,
   publicChannelProduct,
+  publicChannelSnapshotMetadata,
   isPublicChannelOffer,
   publicError,
   publicJson,
@@ -156,6 +157,7 @@ export async function handleChannelDetailGet(
   try {
     const repository = getDefaultChannelRepository();
     const snapshot = await repository.getSnapshot();
+    const metadata = publicChannelSnapshotMetadata(snapshot);
     const offer = snapshot.offers.find(
       (candidate) => candidate.id === id && isPublicChannelOffer(candidate),
     );
@@ -163,6 +165,7 @@ export async function handleChannelDetailGet(
       return publicJson({
         ok: true,
         domain: "channels",
+        ...metadata,
         offer: publicChannelOffer(offer),
       });
     }
@@ -175,6 +178,7 @@ export async function handleChannelDetailGet(
       return publicJson({
         ok: true,
         domain: "channels",
+        ...metadata,
         product: publicChannelProduct(product),
       });
     }
@@ -185,6 +189,7 @@ export async function handleChannelDetailGet(
       return publicJson({
         ok: true,
         domain: "channels",
+        ...metadata,
         merchant: publicChannelMerchant(merchant),
       });
     }

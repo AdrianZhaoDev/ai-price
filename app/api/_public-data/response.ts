@@ -389,6 +389,27 @@ function publicChannelWarning(
 
 export type ChannelResponseView = "all" | "offers" | "products" | "merchants";
 
+export function publicChannelSnapshotMetadata(
+  result: Pick<
+    ChannelListResult,
+    "generatedAt" | "generationId" | "dataStatus" | "dataSource"
+  >,
+): Record<string, unknown> {
+  const warning = publicChannelWarning(result);
+  return {
+    generatedAt: date(result.generatedAt),
+    generationId: nullableText(result.generationId, 200),
+    dataStatus: enumValue(result.dataStatus, channelDataStatuses),
+    dataSource: enumValue(result.dataSource, channelDataSources),
+    synthetic:
+      result.dataStatus === "synthetic" ||
+      result.dataSource === "synthetic" ||
+      result.dataSource === "synthetic_fixture",
+    degraded: result.dataStatus === "degraded",
+    ...(warning ? { warning } : {}),
+  };
+}
+
 export function publicChannelList(
   result: ChannelListResult,
   view: ChannelResponseView = "all",
@@ -417,23 +438,18 @@ export function publicChannelList(
     schemaVersion: 1,
     domain: "channels",
     view,
-    total: integer(items.length),
+    total: integer(
+      view === "products"
+        ? result.products.length
+        : view === "merchants"
+          ? result.merchants.length
+          : result.totalOffers,
+    ),
     totalOffers: integer(result.totalOffers),
     totalProducts: integer(result.products.length),
     totalMerchants: integer(result.merchants.length),
     items,
-    generatedAt: date(result.generatedAt),
-    generationId: nullableText(result.generationId, 200),
-    dataStatus: enumValue(result.dataStatus, channelDataStatuses),
-    dataSource: enumValue(result.dataSource, channelDataSources),
-    synthetic:
-      result.dataStatus === "synthetic" ||
-      result.dataSource === "synthetic" ||
-      result.dataSource === "synthetic_fixture",
-    degraded: result.dataStatus === "degraded",
-    ...(publicChannelWarning(result)
-      ? { warning: publicChannelWarning(result) }
-      : {}),
+    ...publicChannelSnapshotMetadata(result),
     policy: {
       readOnly: true,
       requestTimeCollection: false,

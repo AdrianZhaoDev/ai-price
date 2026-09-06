@@ -56,7 +56,7 @@ function boundedLimit(value: string | undefined): number | undefined {
 function channelFiltersFromParams(
   params: Record<string, string | string[] | undefined>,
 ): Partial<ChannelOfferFilters> {
-  const query = firstValue(params.q ?? params.search);
+  const query = firstValue(params.q ?? params.search)?.slice(0, 120);
   const availabilityValue = firstValue(params.availability ?? params.status);
   const sortValue = firstValue(params.sort);
   const availability = channelAvailabilityValues.includes(
@@ -422,9 +422,8 @@ export async function ChannelsPage({
               id="channel-query"
               name="q"
               type="search"
-              defaultValue={
-                searchValue(params, "q") || searchValue(params, "search")
-              }
+              defaultValue={filters.query ?? ""}
+              maxLength={120}
               placeholder={
                 isEnglish ? "Product, merchant, platform" : "产品、商户或平台"
               }

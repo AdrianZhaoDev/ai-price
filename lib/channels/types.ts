@@ -116,7 +116,7 @@ const boundedLimit = z.preprocess((value) => {
 const boundedOffset = z.preprocess((value) => {
   if (typeof value === "string" && value.trim() !== "") return Number(value);
   return value;
-}, z.number().finite().int().min(0).max(10_000));
+}, z.number().finite().int().min(0).max(500_000));
 
 const confidence = z.preprocess((value) => {
   if (typeof value === "string" && value.trim() !== "") return Number(value);
