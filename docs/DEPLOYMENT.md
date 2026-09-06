@@ -171,7 +171,7 @@ CI 构建与普通检查不应获得 VPS 生产数据库、SMTP 或同步密钥�
 - 数据库迁移成功。
 - public-data 远程库已单独备份并完成 `public_data_generations`、`channel_*`、
   `transit_*` migration；定时 workflow 未获得迁移权限。
-- 至少一个公开快照 URL 与 `PUBLIC_DATA_DATABASE_URL` 已配置；从 `main` 手工触发
+- 至少一个公开快照 URL 或 DIRECT_SOURCES 原站 ID，以及 `PUBLIC_DATA_DATABASE_URL` 已配置；从 `main` 手工触发
   `collect-public-data.yml` 成功，日志不含连接串、查询参数或其他密钥。
 - 远程库存在最新 `published` generation；对应公开页面只读该 generation，普通
   页面/API 请求不会触发上游抓取。

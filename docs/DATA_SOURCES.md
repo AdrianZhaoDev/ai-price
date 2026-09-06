@@ -279,7 +279,7 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 ## 刷新计划
 
 - 官方订阅与 API 价格：VPS `ai-price-collect.timer` 每 4 小时。
-- 公开栏目快照：GitHub Actions 每 4 小时；至少有一个已审核快照 URL 才会运行采集。
+- 公开栏目快照：GitHub Actions 每 4 小时；至少配置一个已审核快照 URL 或 DIRECT_SOURCES 原站 ID。
 - 汇率：与价格任务同轮更新。
 - 官方价格失败重试：15 分钟、1 小时、6 小时。
 - 每周人工抽查四个海外产品和三个国内来源。

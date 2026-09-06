@@ -51,7 +51,7 @@ GitHub Actions 在远程数据库上发布，二者不是迁移或互相替代�
   空数据或失败不会清空上一批已发布数据；
 - 领域依次处理，并发上限为 1；上游请求使用 30 秒超时、10 MiB 响应上限、
   HTTPS、禁止凭据/私有主机和重定向，GitHub runner 直连且不使用 VPS/WARP 代理；
-- 缺少 `PUBLIC_DATA_DATABASE_URL` 或所有快照 URL 时，任务明确失败，不回退到本地
+- 缺少 `PUBLIC_DATA_DATABASE_URL` 或所有快照 URL/DIRECT_SOURCES 时，任务明确失败，不回退到本地
   数据库；未配置的单个领域会跳过，已配置领域仍按独立结果报告；
 - 该入口不发送 SMTP 告警、不执行 `DATA_SYNC`，也不调用既有 `collect` 命令。
 

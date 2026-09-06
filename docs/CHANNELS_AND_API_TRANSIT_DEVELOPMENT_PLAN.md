@@ -456,7 +456,7 @@ docs/
 
 实现边界与低资源策略：
 
-- GitHub Actions 每 4 小时串行拉取已配置的公开快照 URL，校验协议、域名、DNS、重定向、超时和响应体大小后写入专用远程 `PUBLIC_DATA_DATABASE_URL`；VPS 不执行这类复杂采集。
+- GitHub Actions 每 4 小时串行拉取已配置的公开快照 URL 或已审核原站 DIRECT_SOURCES，校验协议、域名、DNS、重定向、超时和响应体大小后写入专用远程 `PUBLIC_DATA_DATABASE_URL`；VPS 不执行这类复杂采集。
 - workflow 使用最小权限、step 级 secrets、无代理和 `PUBLIC_DATA_CONCURRENCY=1`；失败、空快照或结构变化保留上一份已发布 generation。
 - 页面/API 只查询已发布读模型，进程内缓存 30 秒；API 遵守 VPS 的 private/no-store 规则，请求期间不访问用户提供 URL、不触发上游探测。
 - `PUBLIC_DATA_DATABASE_URL` 未配置时，生产 collector 明确失败；生产页面只允许最后有效数据或明确的空/降级状态，合成 fixture 仅用于开发。
