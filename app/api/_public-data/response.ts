@@ -1,5 +1,6 @@
 import type { ChannelListResult } from "@/lib/channels/repository";
 import { effectiveChannelAvailability } from "@/lib/channels/ranking";
+import { channelSourceTypes } from "@/lib/channels/types";
 import type {
   ChannelMerchant,
   ChannelMerchantSummary,
@@ -234,6 +235,7 @@ export function publicChannelOffer(
     specification: safeRecordText(offer.specification),
     rawTitle: text(offer.rawTitle, 320),
     sourceUrl: publicUrl(offer.sourceUrl),
+    sourceType: enumValue(offer.sourceType, channelSourceTypes),
     offerUrl: publicUrl(offer.offerUrl),
     priceMinor: integer(offer.priceMinor),
     currency: currency(offer.currency),

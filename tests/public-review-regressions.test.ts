@@ -12,6 +12,7 @@ import { GET as channelsGet } from "@/app/api/channels/route";
 import { GET as offerDetailGet } from "@/app/api/channels/offers/[id]/route";
 import { createSyntheticChannelSnapshot } from "@/lib/channels/fixture";
 import { channelOfferFiltersSchema } from "@/lib/channels/types";
+import { publicChannelOffer } from "@/app/api/_public-data/response";
 import {
   channelOfferSnapshotSchema,
   channelMerchantSnapshotSchema,
@@ -29,6 +30,17 @@ import { isTransitStationPublic } from "@/lib/transit/types";
 import { buildChannelProductSummaries } from "@/lib/channels/ranking";
 
 describe("public review regressions", () => {
+  it("exposes explicit source types through the shared public offer serializer", () => {
+    const offer = createSyntheticChannelSnapshot().offers[0];
+    for (const sourceType of [
+      "public_api",
+      "manual_snapshot",
+      "authorized_feed",
+    ] as const)
+      expect(publicChannelOffer({ ...offer, sourceType })).toMatchObject({
+        sourceType,
+      });
+  });
   it("returns successful empty queries from nonempty last-good snapshots", async () => {
     const channelSnapshot = createSyntheticChannelSnapshot();
     channelSnapshot.dataStatus = "degraded";

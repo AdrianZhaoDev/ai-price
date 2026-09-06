@@ -409,25 +409,60 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     expect(retained?.generationId).toBe(published.generationId);
   });
 
-  it("retains original-source rows when a later catalogue collapses", async () => {
-    const snapshot = transit();
-    snapshot.stations[0].payload.adapterVersion = "sub2api-public-v1";
-    snapshot.availabilitySamples = [];
-    snapshot.offers = Array.from({ length: 10 }, (_, index) => ({
-      ...snapshot.offers[0],
-      id: `native-${index}`,
-    }));
-    await publishTransitSnapshot(snapshot);
+  it.each(["sub2api-public-v1", "imported-feed"])(
+    "retains %s rows when a later catalogue collapses or omits a source",
+    async (adapterVersion) => {
+      const snapshot = transit();
+      snapshot.stations[0].payload.adapterVersion = adapterVersion;
+      snapshot.availabilitySamples = [];
+      snapshot.offers = Array.from({ length: 10 }, (_, index) => ({
+        ...snapshot.offers[0],
+        id: `native-${index}`,
+      }));
+      await publishTransitSnapshot(snapshot);
+      await expect(
+        publishTransitSnapshot({
+          ...snapshot,
+          offers: snapshot.offers.slice(0, 5),
+        }),
+      ).rejects.toThrow("collapsed");
+      await expect(
+        publishTransitSnapshot({ ...snapshot, offers: [] }),
+      ).rejects.toThrow("collapsed");
+      await expect(
+        publishTransitSnapshot({
+          ...snapshot,
+          stations: [{ ...snapshot.stations[0], id: "other-station" }],
+          offers: [],
+        }),
+      ).rejects.toThrow("collapsed");
+      const read = normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      );
+      expect(read?.stations[0].offers).toHaveLength(10);
+    },
+  );
+  it("rejects stale imported generations without replacing either domain", async () => {
+    const channel = channels();
+    const station = transit();
+    const channelResult = await publishChannelSnapshot(channel);
+    const transitResult = await publishTransitSnapshot(station);
+    const generatedAt = new Date(Date.now() - 37 * 3600000).toISOString();
     await expect(
-      publishTransitSnapshot({
-        ...snapshot,
-        offers: snapshot.offers.slice(0, 5),
-      }),
-    ).rejects.toThrow("collapsed");
-    const read = normalizeTransitDatabaseSnapshot(
-      await loadTransitSnapshotFromDatabase(connection.database),
-    );
-    expect(read?.stations[0].offers).toHaveLength(10);
+      publishChannelSnapshot({ ...channel, generatedAt }),
+    ).rejects.toThrow("stale");
+    await expect(
+      publishTransitSnapshot({ ...station, generatedAt }),
+    ).rejects.toThrow("stale");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(channelResult.generationId);
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(transitResult.generationId);
   });
   it("keeps stale channel observations out of current lowest-price rankings", async () => {
     const snapshot = channels();

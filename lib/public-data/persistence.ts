@@ -32,6 +32,13 @@ export type PublicPublishResult = {
   published: boolean;
 };
 
+function assertFreshGeneration(generatedAt: string) {
+  if (Date.now() - Date.parse(generatedAt) > 36 * 60 * 60 * 1000)
+    throw new Error(
+      "Snapshot generation is stale; previous published generation retained.",
+    );
+}
+
 type PublishTransaction = Parameters<
   Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
 >[0];
@@ -167,6 +174,7 @@ export async function publishChannelSnapshot(
   snapshot: ChannelSnapshot,
 ): Promise<PublicPublishResult> {
   snapshot = channelSnapshotSchema.parse(snapshot);
+  assertFreshGeneration(snapshot.generatedAt);
   // An empty feed is almost always an upstream outage or parser regression.
   // Reject before opening a transaction so the last published generation and
   // its rows remain available to the web reader.
@@ -504,6 +512,7 @@ export async function publishTransitSnapshot(
   snapshot: TransitSnapshot,
 ): Promise<PublicPublishResult> {
   snapshot = transitSnapshotSchema.parse(snapshot);
+  assertFreshGeneration(snapshot.generatedAt);
   for (const offer of snapshot.offers) {
     transitRechargeRatio(offer);
     transitCombinedMultiplier(offer);
@@ -577,31 +586,32 @@ export async function publishTransitSnapshot(
         );
       }
     }
-    // Native adapters must not silently publish a truncated model catalogue.
+    // All adapters and imported feeds must retain complete source coverage.
     // Check under the same domain lock/transaction as the replacement.
     const baselineRows = await tx
       .select({
-        stationId: transitOffers.stationId,
-        count: sql<number>`count(*)::int`,
+        stationId: transitStations.id,
+        count: sql<number>`count(${transitOffers.id})::int`,
       })
-      .from(transitOffers)
-      .groupBy(transitOffers.stationId);
-    const baselineCounts = new Map(
-      baselineRows.map((row) => [row.stationId, row.count]),
-    );
+      .from(transitStations)
+      .leftJoin(transitOffers, eq(transitStations.id, transitOffers.stationId))
+      .groupBy(transitStations.id);
     const incomingCounts = new Map<string, number>();
     for (const offer of snapshot.offers)
       incomingCounts.set(
         offer.stationId,
         (incomingCounts.get(offer.stationId) ?? 0) + 1,
       );
-    for (const station of snapshot.stations) {
-      if (station.payload.adapterVersion !== "sub2api-public-v1") continue;
-      const baseline = baselineCounts.get(station.id) ?? 0;
-      const nextCount = incomingCounts.get(station.id) ?? 0;
-      if (baseline - nextCount >= 2 && nextCount < baseline * 0.7)
+    for (const station of baselineRows) {
+      const baseline = station.count;
+      const nextCount = incomingCounts.get(station.stationId) ?? 0;
+      if (
+        !stationIds.has(station.stationId) ||
+        (baseline > 0 && nextCount === 0) ||
+        (baseline - nextCount >= 2 && nextCount < baseline * 0.7)
+      )
         throw new Error(
-          "Original model count collapsed; previous snapshot retained.",
+          "Transit source coverage or model count collapsed; previous snapshot retained.",
         );
     }
     await clearTransitRows(tx);
