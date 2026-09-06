@@ -316,6 +316,30 @@ systemctl status ai-price.service --no-pager
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
 ```
 
+### 5.1 更新网站公开联系邮箱
+
+当前网站公开联系邮箱应为 `adriandev555@gmail.com`。只更新该项时，先按本节开头的
+要求备份 `/etc/ai-price.env`，然后使用以下命令替换或补充 `CONTACT_EMAIL`；命令不会
+输出环境变量文件中的其他配置或密钥：
+
+```bash
+if grep -q '^CONTACT_EMAIL=' /etc/ai-price.env; then
+  sed -i 's/^CONTACT_EMAIL=.*/CONTACT_EMAIL=adriandev555@gmail.com/' \
+    /etc/ai-price.env
+else
+  printf '%s\n' 'CONTACT_EMAIL=adriandev555@gmail.com' >> /etc/ai-price.env
+fi
+chown root:ai-price /etc/ai-price.env
+chmod 0640 /etc/ai-price.env
+systemctl restart ai-price.service
+systemctl is-active ai-price.service
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
+```
+
+随后访问中英文价格页，确认页脚“数据纠错”/“Data correction”链接指向
+`mailto:adriandev555@gmail.com`。如需回滚，恢复本次操作前的确切备份文件，再执行
+相同的属主、权限、服务重启和 HTTP 验证步骤。
+
 SMTP 的具体值和测试步骤只按 [`SMTP_SETUP.md`](SMTP_SETUP.md) 执行。
 
 `COLLECTOR_PROXY_URL` 只影响采集 HTTP 请求。采集器优先使用代理；代理失败时会
