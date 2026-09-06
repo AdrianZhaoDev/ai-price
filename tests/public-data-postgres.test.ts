@@ -638,6 +638,33 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         ?.generationId,
     ).toBe(initial.generationId);
   });
+  it("rejects a single renamed boundary in a multi-tier offer", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].bulkPricingTiers = [
+      { minQuantity: 10, priceMinor: 900, currency: "CNY" },
+      { minQuantity: 20, priceMinor: 800, currency: "CNY" },
+    ];
+    const initial = await publishChannelSnapshot(snapshot);
+    for (const tier of [
+      { minQuantity: 30, priceMinor: 8000, currency: "CNY" },
+      { minQuantity: 30, priceMinor: 800, currency: "USD" },
+    ])
+      await expect(
+        publishChannelSnapshot({
+          ...snapshot,
+          offers: [
+            {
+              ...snapshot.offers[0],
+              bulkPricingTiers: [snapshot.offers[0].bulkPricingTiers[0], tier],
+            },
+          ],
+        }),
+      ).rejects.toThrow("Bulk tier identity");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(initial.generationId);
+  });
   it("rejects disappearance of publishable offers even when raw counts stay constant", async () => {
     const snapshot = transit();
     snapshot.availabilitySamples = [];

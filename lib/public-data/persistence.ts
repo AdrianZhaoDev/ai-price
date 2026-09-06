@@ -420,7 +420,7 @@ export async function publishChannelSnapshot(
           );
         assertStablePrice(finiteNumber(old.priceMinor), tier.priceMinor);
       }
-      if (countCollapsed(oldTiers.size, matchedTiers))
+      if (matchedTiers !== oldTiers.size)
         throw new Error(
           "Bulk tier identity overlap collapsed; previous snapshot retained for review.",
         );
