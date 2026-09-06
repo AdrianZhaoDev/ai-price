@@ -10,6 +10,91 @@ import {
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
 
 describe("transit repository", () => {
+  it("keeps valid raw evidence when an embedded aggregate contains only a count", () => {
+    const station = getSyntheticTransitStations()[0];
+    const now = new Date();
+    const evidence = {
+      sevenDaySamples: 4,
+      sevenDayRate: 0.75,
+      sourceType: "authorized_probe",
+      scope: "offer",
+      matchLevel: "exact",
+      lastCheckedAt: now.toISOString(),
+    };
+    const fallback = normalizeTransitAvailability(evidence);
+    const offer = normalizeTransitOffer(
+      {
+        ...station.offers[0],
+        availability: { ...evidence, sevenDaySamples: 10, sevenDayRate: null },
+      },
+      station.id,
+      fallback,
+      now,
+    );
+    expect(offer?.availability).toMatchObject({
+      sevenDayRate: 0.75,
+      sevenDaySamples: 4,
+    });
+  });
+  it("does not combine independent samples without source identities", () => {
+    const station = getSyntheticTransitStations()[0];
+    station.availability = normalizeTransitAvailability({});
+    const now = new Date();
+    const model = normalizeTransitDatabaseSnapshot(
+      {
+        generatedAt: now.toISOString(),
+        stations: [station],
+        availabilitySamples: [
+          {
+            id: "anonymous-a",
+            stationId: station.id,
+            scope: "station",
+            sourceType: "authorized_probe",
+            success: false,
+            checkedAt: new Date(now.getTime() - 60000).toISOString(),
+            latencyMs: 900,
+          },
+          {
+            id: "anonymous-b",
+            stationId: station.id,
+            scope: "station",
+            sourceType: "authorized_probe",
+            success: true,
+            checkedAt: now.toISOString(),
+            latencyMs: 100,
+          },
+        ],
+      },
+      { now },
+    );
+    expect(model?.stations[0].availability).toMatchObject({
+      sevenDaySamples: 1,
+      sevenDayRate: 1,
+      averageLatency7dMs: 100,
+    });
+  });
+  it("removes signed evidence URLs and fragment values at the read boundary", () => {
+    const evidence = {
+      sevenDaySamples: 1,
+      sevenDayRate: 1,
+      sourceType: "authorized_probe",
+      scope: "offer",
+      matchLevel: "exact",
+      lastCheckedAt: new Date().toISOString(),
+    };
+    expect(
+      normalizeTransitAvailability({
+        ...evidence,
+        sourceUrl: "https://example.com/status?api_key=synthetic-secret",
+      }).sourceUrl,
+    ).toBeNull();
+    expect(
+      normalizeTransitAvailability({
+        ...evidence,
+        sourceUrl: "https://example.com/status#synthetic-fragment",
+      }).sourceUrl,
+    ).toBe("https://example.com/status");
+  });
   it.each([
     { sourceType: "public_model_catalog", scope: "offer", matchLevel: "exact" },
     { sourceType: "authorized_probe", scope: "station", matchLevel: "exact" },

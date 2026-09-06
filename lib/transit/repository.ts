@@ -21,7 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { getSyntheticTransitStations } from "@/lib/transit/fixture";
-import { isPrivateOrReservedHostname } from "@/lib/public-data/urls";
+import { safePublicHttpUrl } from "@/lib/public-data/urls";
 import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
 import { assertPublicReadCapacity } from "@/lib/public-data/read-capacity";
 import {
@@ -105,25 +105,7 @@ function dateString(
 }
 
 function urlString(value: unknown): string | null {
-  const candidate = text(value);
-  if (!candidate) return null;
-  try {
-    const url = new URL(candidate);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    // Public read models must never expose embedded credentials or obvious
-    // loopback/private endpoints.  This is a data-boundary guard, not a
-    // substitute for the SSRF restrictions required by future collectors.
-    if (
-      url.username ||
-      url.password ||
-      isPrivateOrReservedHostname(url.hostname)
-    ) {
-      return null;
-    }
-    return url.toString();
-  } catch {
-    return null;
-  }
+  return safePublicHttpUrl(text(value));
 }
 
 function safeSlug(value: unknown): string | null {
@@ -409,7 +391,9 @@ function freshAvailability(
       ? expireAvailability(value, now)
       : EMPTY_AVAILABILITY;
   const embedded = validate(normalizeTransitAvailability(input, fallback));
-  return embedded.sevenDaySamples > 0 ? embedded : validate(fallback);
+  return embedded.sevenDaySamples > 0 && embedded.sevenDayRate !== null
+    ? embedded
+    : validate(fallback);
 }
 
 export function normalizeTransitOffer(
@@ -696,6 +680,9 @@ export function aggregateAvailability(
   // operator's monitor into a claim labelled as this stream.
   const seen = new Set<string>();
   const evidence = normalized.filter((item) => {
+    // Missing source identities do not establish a shared monitoring stream.
+    // Retain only the latest observation, never blend anonymous monitors.
+    if (!latest.sourceUrl && item !== latest) return false;
     if (
       item.sourceType !== latest.sourceType ||
       item.sourceUrl !== latest.sourceUrl ||

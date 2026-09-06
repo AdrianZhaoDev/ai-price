@@ -9,6 +9,34 @@ vi.mock("@/components/site-header", () => ({
 }));
 
 describe("transit detail rendering", () => {
+  it("never renders signed or fragment-bearing evidence links from supplied props", () => {
+    const station = getSyntheticTransitStations()[0];
+    station.availability = {
+      ...station.availability,
+      sevenDayRate: 1,
+      sevenDaySamples: 1,
+      sourceUrl: "https://example.com/status?api_key=synthetic-secret",
+    };
+    station.offers = [
+      {
+        ...station.offers[0],
+        availability: {
+          ...station.availability,
+          sourceUrl: "https://example.com/status#synthetic-fragment",
+        },
+      },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(ApiTransitDetailPage, {
+        station,
+        locale: "en",
+        degraded: false,
+      }),
+    );
+    expect(html).not.toContain("synthetic-secret");
+    expect(html).not.toContain("synthetic-fragment");
+    expect(html).toContain('href="https://example.com/status"');
+  });
   it.each(["en", "zh-CN"] as const)(
     "renders evidence source, scope and UTC time alongside rates in %s",
     (locale) => {

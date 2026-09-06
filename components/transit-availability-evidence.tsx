@@ -1,5 +1,6 @@
 import type { Locale } from "@/lib/i18n";
 import type { TransitAvailability } from "@/lib/transit/types";
+import { safePublicHttpUrl } from "@/lib/public-data/urls";
 import styles from "./public-data-directory.module.css";
 
 export function TransitAvailabilityEvidence({
@@ -12,6 +13,7 @@ export function TransitAvailabilityEvidence({
   if (availability.sevenDayRate === null || availability.sevenDaySamples < 1)
     return null;
   const en = locale === "en";
+  const sourceUrl = safePublicHttpUrl(availability.sourceUrl);
   const sources = {
     public_status: ["公开状态页", "Public status page"],
     public_model_catalog: [
@@ -72,10 +74,10 @@ export function TransitAvailabilityEvidence({
           "未记录"
         )}
       </div>
-      {availability.sourceUrl ? (
+      {sourceUrl ? (
         <a
           className={styles.sourceLink}
-          href={availability.sourceUrl}
+          href={sourceUrl}
           target="_blank"
           rel="nofollow noopener noreferrer"
         >
