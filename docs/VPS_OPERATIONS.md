@@ -240,6 +240,32 @@ chmod 700 /tmp/ai-price-vps-install.sh
 
 ## 4. 采集任务
 
+### 公开栏目（卡网 / API 中转站）的独立上线门禁
+
+新增 `0009` migration 仅增加 `public_data_generations`、`channel_*` 和 `transit_*`
+表，不改动官方价格和订阅数据。仍须由标准发布脚本在 migration 前备份 VPS 数据库。
+回滚代码可保留这些新增表；不得为回滚代码而删除表或恢复覆盖整个生产库。
+
+暂无获准来源时，可在用户明确批准后仅发布“待收录/暂无已核验数据”的只读栏目：
+`PUBLIC_DATA_INDEXING_ENABLED` 保持 false，GitHub Variable
+`PUBLIC_DATA_COLLECTION_ENABLED` 不设置或设为 false。生产禁止使用 synthetic fixture。
+这不代表真实报价采集已上线，发布记录必须注明该限制。
+
+接入真实来源时，先完成 `docs/DATA_SOURCES.md` 的来源审查，再为远程公共数据表
+单独备份和迁移。GitHub Secret `PUBLIC_DATA_DATABASE_URL` 使用仅能写该领域表的
+账号；Web 同名环境变量使用远程库只读账号，按第 5 节先备份环境文件再修改。
+不得把 GitHub 的写入密钥复制给 Web，不得改变官方价格的本地读写与 Neon 同步目标。
+新表不在官方 DATA_SYNC 的镜像表清单中，不能将其加入旧镜像后覆盖独立维护的数据。
+
+先手工触发 `collect-public-data.yml`，确认 published generation 的数据可与原站核验，
+再开启 PUBLIC_DATA_COLLECTION_ENABLED。Web/API 请求不能抓上游；API 保持
+private/no-store，HTML 沿用源站 15 分钟微缓存，读模型进程缓存 30 秒。
+
+除第 3.3 节验收外，还须检查中英文 `/channels`、`/api-transit` 返回 200、无演示
+商家/站点、canonical 正确；未就绪页面含 noindex 且 sitemap 不包含新栏目。
+有获准真实数据后才检查具体详情、来源和时效，最后开启 SEO 门禁。请求公开 API
+无有效快照时应明确降级或 503，不得返回伪造报价。
+
 查看 timer：
 
 ```bash

@@ -1,0 +1,645 @@
+import {
+  contentHash,
+  type ChannelSnapshot,
+  type TransitSnapshot,
+} from "@/lib/public-data/snapshot";
+import { getPublicDataDatabase } from "@/lib/db/client";
+import {
+  channelMerchants,
+  channelOfferObservations,
+  channelProducts,
+  channelPublicOffers,
+  publicDataGenerations,
+  transitAvailabilitySamples,
+  transitOffers,
+  transitStations,
+} from "@/lib/db/schema";
+import { and, desc, eq, sql } from "drizzle-orm";
+import type { PgTable, PgInsertValue } from "drizzle-orm/pg-core";
+import { calculateRechargeCoefficient } from "@/lib/transit/ranking";
+
+export type PublicPublishResult = {
+  domain: "channels" | "transit";
+  generationId: string;
+  generatedAt: string;
+  recordCount: number;
+  sourceCount: number;
+  contentHash: string;
+  published: boolean;
+};
+
+type PublishTransaction = Parameters<
+  Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+>[0];
+
+async function insertRows<T extends PgTable>(
+  tx: PublishTransaction,
+  table: T,
+  rows: PgInsertValue<T>[],
+): Promise<void> {
+  // PostgreSQL has a per-statement parameter limit; feeds can exceed it.
+  for (let offset = 0; offset < rows.length; offset += 500) {
+    await tx.insert(table).values(rows.slice(offset, offset + 500));
+  }
+}
+
+function searchText(values: Array<string | null | undefined>): string {
+  return values
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ")
+    .toLocaleLowerCase("en-US")
+    .slice(0, 20_000);
+}
+
+function toDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+async function existingGeneration(
+  tx: Parameters<
+    Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+  >[0],
+  domain: "channels" | "transit",
+  hash: string,
+) {
+  // Coordinate CLI/manual publishers as well as scheduled workflow runs.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`public-data:${domain}`}))`,
+  );
+  const [row] = await tx
+    .select()
+    .from(publicDataGenerations)
+    .where(
+      and(
+        eq(publicDataGenerations.domain, domain),
+        eq(publicDataGenerations.contentHash, hash),
+      ),
+    )
+    .orderBy(desc(publicDataGenerations.createdAt))
+    .limit(1);
+  return row;
+}
+
+async function isCurrentGeneration(
+  tx: Parameters<
+    Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+  >[0],
+  domain: "channels" | "transit",
+  id: string,
+): Promise<boolean> {
+  const [latest] = await tx
+    .select({ id: publicDataGenerations.id })
+    .from(publicDataGenerations)
+    .where(
+      and(
+        eq(publicDataGenerations.domain, domain),
+        eq(publicDataGenerations.status, "published"),
+      ),
+    )
+    .orderBy(desc(publicDataGenerations.publishedAt))
+    .limit(1);
+  return latest?.id === id;
+}
+
+async function insertGeneration(
+  tx: Parameters<
+    Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+  >[0],
+  domain: "channels" | "transit",
+  snapshot: ChannelSnapshot | TransitSnapshot,
+  hash: string,
+) {
+  const [generation] = await tx
+    .insert(publicDataGenerations)
+    .values({
+      domain,
+      status: "building",
+      sourceCount: snapshot.sourceCount,
+      recordCount:
+        domain === "channels"
+          ? (snapshot as ChannelSnapshot).offers.length
+          : (snapshot as TransitSnapshot).stations.length,
+      contentHash: hash,
+      generatedAt: new Date(snapshot.generatedAt),
+    })
+    .returning({ id: publicDataGenerations.id });
+  return generation.id;
+}
+
+async function clearChannelRows(
+  tx: Parameters<
+    Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+  >[0],
+) {
+  await tx.delete(channelOfferObservations);
+  await tx.delete(channelPublicOffers);
+  await tx.delete(channelProducts);
+  await tx.delete(channelMerchants);
+}
+
+async function clearTransitRows(
+  tx: Parameters<
+    Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
+  >[0],
+) {
+  await tx.delete(transitAvailabilitySamples);
+  await tx.delete(transitOffers);
+  await tx.delete(transitStations);
+}
+
+export async function publishChannelSnapshot(
+  snapshot: ChannelSnapshot,
+): Promise<PublicPublishResult> {
+  // An empty feed is almost always an upstream outage or parser regression.
+  // Reject before opening a transaction so the last published generation and
+  // its rows remain available to the web reader.
+  if (
+    snapshot.offers.length === 0 ||
+    snapshot.merchants.length === 0 ||
+    snapshot.products.length === 0
+  ) {
+    throw new Error(
+      "Channel snapshot is empty; previous published generation retained.",
+    );
+  }
+  const hash = contentHash(snapshot);
+  const database = getPublicDataDatabase();
+  return database.transaction(async (tx) => {
+    const previous = await existingGeneration(tx, "channels", hash);
+    if (
+      previous?.status === "published" &&
+      (await isCurrentGeneration(tx, "channels", previous.id))
+    ) {
+      return {
+        domain: "channels",
+        generationId: previous.id,
+        generatedAt: snapshot.generatedAt,
+        recordCount: snapshot.offers.length,
+        sourceCount: snapshot.sourceCount,
+        contentHash: hash,
+        published: false,
+      };
+    }
+
+    const generationId =
+      previous?.id ?? (await insertGeneration(tx, "channels", snapshot, hash));
+    if (previous) {
+      await tx
+        .update(publicDataGenerations)
+        .set({
+          status: "building",
+          sourceCount: snapshot.sourceCount,
+          recordCount: snapshot.offers.length,
+          generatedAt: new Date(snapshot.generatedAt),
+          publishedAt: null,
+          error: null,
+        })
+        .where(eq(publicDataGenerations.id, generationId));
+    }
+
+    const merchantIds = new Set(
+      snapshot.merchants.map((merchant) => merchant.id),
+    );
+    const productIds = new Set(snapshot.products.map((product) => product.id));
+    for (const offer of snapshot.offers) {
+      if (
+        !merchantIds.has(offer.merchantId) ||
+        !productIds.has(offer.productId)
+      ) {
+        throw new Error(
+          `Channel offer ${offer.id} references an unknown merchant or product.`,
+        );
+      }
+    }
+
+    await clearChannelRows(tx);
+    const offerCounts = new Map<
+      string,
+      { total: number; inStock: number; latest: Date }
+    >();
+    for (const offer of snapshot.offers) {
+      const current = offerCounts.get(offer.productId) ?? {
+        total: 0,
+        inStock: 0,
+        latest: new Date(offer.lastSeenAt),
+      };
+      current.total += 1;
+      if (offer.availability === "in_stock") current.inStock += 1;
+      current.latest = new Date(
+        Math.max(
+          current.latest.getTime(),
+          new Date(offer.lastSeenAt).getTime(),
+        ),
+      );
+      offerCounts.set(offer.productId, current);
+    }
+    const merchantCounts = new Map<
+      string,
+      { total: number; inStock: number; latest: Date }
+    >();
+    for (const offer of snapshot.offers) {
+      const current = merchantCounts.get(offer.merchantId) ?? {
+        total: 0,
+        inStock: 0,
+        latest: new Date(offer.lastSeenAt),
+      };
+      current.total += 1;
+      if (offer.availability === "in_stock") current.inStock += 1;
+      current.latest = new Date(
+        Math.max(
+          current.latest.getTime(),
+          new Date(offer.lastSeenAt).getTime(),
+        ),
+      );
+      merchantCounts.set(offer.merchantId, current);
+    }
+
+    if (snapshot.merchants.length) {
+      await insertRows(
+        tx,
+        channelMerchants,
+        snapshot.merchants.map((merchant) => {
+          const counts = merchantCounts.get(merchant.id);
+          return {
+            id: merchant.id,
+            generationId,
+            slug: merchant.slug,
+            name: merchant.name,
+            host: merchant.host,
+            websiteUrl: merchant.websiteUrl,
+            status: merchant.status,
+            operatorType: merchant.operatorType ?? null,
+            platforms: merchant.platforms,
+            riskLabels: merchant.riskLabels,
+            offerCount: counts?.total ?? 0,
+            inStockCount: counts?.inStock ?? 0,
+            latestSeenAt: counts?.latest ?? null,
+            searchText: searchText([
+              merchant.name,
+              merchant.host,
+              merchant.slug,
+              ...merchant.platforms,
+              ...merchant.riskLabels,
+            ]),
+            updatedAt: new Date(snapshot.generatedAt),
+          };
+        }),
+      );
+    }
+    if (snapshot.products.length) {
+      await insertRows(
+        tx,
+        channelProducts,
+        snapshot.products.map((product) => {
+          const counts = offerCounts.get(product.id);
+          return {
+            id: product.id,
+            generationId,
+            slug: product.slug,
+            displayName: product.displayName,
+            platform: product.platform,
+            productType: product.productType,
+            spec: product.spec ?? null,
+            summary: product.summary ?? null,
+            aliases: product.aliases,
+            offerCount: counts?.total ?? 0,
+            inStockCount: counts?.inStock ?? 0,
+            latestSeenAt: counts?.latest ?? null,
+            searchText: searchText([
+              product.displayName,
+              product.slug,
+              product.platform,
+              product.productType,
+              product.spec,
+              product.summary,
+              ...product.aliases,
+            ]),
+            updatedAt: new Date(snapshot.generatedAt),
+          };
+        }),
+      );
+    }
+    if (snapshot.offers.length) {
+      await insertRows(
+        tx,
+        channelPublicOffers,
+        snapshot.offers.map((offer) => ({
+          id: offer.id,
+          generationId,
+          merchantId: offer.merchantId,
+          productId: offer.productId,
+          sourceName: offer.sourceName,
+          sourceUrl: offer.sourceUrl,
+          title: offer.title,
+          offerUrl: offer.offerUrl,
+          priceMinor: offer.priceMinor,
+          currency: offer.currency,
+          availability: offer.availability,
+          stockCount: offer.stockCount ?? null,
+          minOrderQuantity: offer.minOrderQuantity ?? null,
+          bulkPricingTiers: offer.bulkPricingTiers,
+          tags: offer.tags,
+          riskLabels: offer.riskLabels,
+          status: offer.status,
+          observedAt: new Date(offer.observedAt),
+          lastSeenAt: new Date(offer.lastSeenAt),
+          expiresAt: toDate(offer.expiresAt),
+          verifiedAt: toDate(offer.verifiedAt),
+          searchText: searchText([
+            offer.title,
+            offer.sourceName,
+            offer.currency,
+            ...offer.tags,
+            ...offer.riskLabels,
+          ]),
+          updatedAt: new Date(snapshot.generatedAt),
+        })),
+      );
+      await insertRows(
+        tx,
+        channelOfferObservations,
+        snapshot.offers.map((offer) => ({
+          offerId: offer.id,
+          generationId,
+          priceMinor: offer.priceMinor,
+          currency: offer.currency,
+          availability: offer.availability,
+          stockCount: offer.stockCount ?? null,
+          observedAt: new Date(offer.observedAt),
+          rawHash: contentHash(offer),
+        })),
+      );
+    }
+    await tx
+      .update(publicDataGenerations)
+      .set({
+        status: "published",
+        publishedAt: sql`clock_timestamp()`,
+        error: null,
+      })
+      .where(eq(publicDataGenerations.id, generationId));
+    return {
+      domain: "channels",
+      generationId,
+      generatedAt: snapshot.generatedAt,
+      recordCount: snapshot.offers.length,
+      sourceCount: snapshot.sourceCount,
+      contentHash: hash,
+      published: true,
+    };
+  });
+}
+
+function transitCombinedMultiplier(
+  offer: TransitSnapshot["offers"][number],
+): number | null {
+  if (offer.billingMode !== "token") return null;
+  if (
+    offer.combinedMultiplier !== undefined &&
+    offer.combinedMultiplier !== null
+  ) {
+    return offer.combinedMultiplier;
+  }
+  const recharge =
+    offer.rechargeCoefficient ??
+    finiteNumber(offer.rechargeRatio) ??
+    calculateRechargeCoefficient(offer.rechargeRatioRaw);
+  const model = offer.stationGroupMultiplier ?? offer.modelMultiplier;
+  if (
+    recharge === undefined ||
+    recharge === null ||
+    model === undefined ||
+    model === null
+  )
+    return null;
+  const combined = recharge * model;
+  return Number.isFinite(combined) && combined > 0 ? combined : null;
+}
+
+export async function publishTransitSnapshot(
+  snapshot: TransitSnapshot,
+): Promise<PublicPublishResult> {
+  // A directory with no stations is not a valid refresh.  Keep the previous
+  // generation instead of clearing all public rows on an upstream outage.
+  if (snapshot.stations.length === 0) {
+    throw new Error(
+      "Transit snapshot is empty; previous published generation retained.",
+    );
+  }
+  const hash = contentHash(snapshot);
+  const database = getPublicDataDatabase();
+  return database.transaction(async (tx) => {
+    const previous = await existingGeneration(tx, "transit", hash);
+    if (
+      previous?.status === "published" &&
+      (await isCurrentGeneration(tx, "transit", previous.id))
+    ) {
+      return {
+        domain: "transit",
+        generationId: previous.id,
+        generatedAt: snapshot.generatedAt,
+        recordCount: snapshot.stations.length,
+        sourceCount: snapshot.sourceCount,
+        contentHash: hash,
+        published: false,
+      };
+    }
+    const generationId =
+      previous?.id ?? (await insertGeneration(tx, "transit", snapshot, hash));
+    if (previous) {
+      await tx
+        .update(publicDataGenerations)
+        .set({
+          status: "building",
+          sourceCount: snapshot.sourceCount,
+          recordCount: snapshot.stations.length,
+          generatedAt: new Date(snapshot.generatedAt),
+          publishedAt: null,
+          error: null,
+        })
+        .where(eq(publicDataGenerations.id, generationId));
+    }
+    const stationIds = new Set(snapshot.stations.map((station) => station.id));
+    for (const offer of snapshot.offers) {
+      if (!stationIds.has(offer.stationId)) {
+        throw new Error(
+          `Transit offer ${offer.id} references an unknown station.`,
+        );
+      }
+    }
+    const offerIds = new Set(snapshot.offers.map((offer) => offer.id));
+    const offerStations = new Map(
+      snapshot.offers.map((offer) => [offer.id, offer.stationId]),
+    );
+    for (const sample of snapshot.availabilitySamples) {
+      if (
+        !stationIds.has(sample.stationId) ||
+        (sample.offerId &&
+          (!offerIds.has(sample.offerId) ||
+            offerStations.get(sample.offerId) !== sample.stationId))
+      ) {
+        throw new Error(
+          `Transit availability sample ${sample.id} references an unknown station or offer.`,
+        );
+      }
+    }
+    await clearTransitRows(tx);
+    const offersByStation = new Map<string, TransitSnapshot["offers"]>();
+    for (const offer of snapshot.offers) {
+      const list = offersByStation.get(offer.stationId) ?? [];
+      list.push(offer);
+      offersByStation.set(offer.stationId, list);
+    }
+    if (snapshot.stations.length) {
+      await insertRows(
+        tx,
+        transitStations,
+        snapshot.stations.map((station) => {
+          const lowest = offersByStation
+            .get(station.id)
+            ?.map(transitCombinedMultiplier)
+            .filter((value): value is number => value !== null)
+            .sort((a, b) => a - b)[0];
+          return {
+            id: station.id,
+            generationId,
+            slug: station.slug,
+            name: station.name,
+            websiteUrl: station.websiteUrl,
+            apiBaseUrl: station.apiBaseUrl ?? null,
+            status: station.status,
+            dataStatus: station.dataStatus,
+            stationSystem: station.stationSystem ?? null,
+            operatorType: station.operatorType ?? null,
+            commercialRelation: station.commercialRelation,
+            summary: station.summary ?? null,
+            channelTypes: station.channelTypes,
+            accountPools: station.accountPools,
+            paymentMethods: station.paymentMethods,
+            riskLabels: station.riskLabels,
+            usageAdvice: Array.isArray(station.usageAdvice)
+              ? station.usageAdvice
+              : station.usageAdvice
+                ? [station.usageAdvice]
+                : [],
+            sourceType: station.sourceType,
+            sourceUrl: station.sourceUrl,
+            lowestMultiplier: lowest ?? null,
+            currency:
+              offersByStation.get(station.id)?.find((offer) => offer.currency)
+                ?.currency ?? null,
+            lastUpdatedAt: toDate(station.lastUpdatedAt),
+            lastCollectedAt: toDate(station.lastCollectedAt),
+            payload: station.payload,
+            searchText: searchText([
+              station.name,
+              station.slug,
+              station.summary,
+              station.stationSystem,
+              station.operatorType,
+              ...station.channelTypes,
+              ...station.accountPools,
+              ...station.riskLabels,
+            ]),
+            updatedAt: new Date(snapshot.generatedAt),
+          };
+        }),
+      );
+    }
+    if (snapshot.offers.length) {
+      await insertRows(
+        tx,
+        transitOffers,
+        snapshot.offers.map((offer) => ({
+          id: offer.id,
+          generationId,
+          stationId: offer.stationId,
+          family: offer.family,
+          standardModel: offer.standardModel,
+          groupName: offer.groupName ?? null,
+          billingMode: offer.billingMode,
+          currency: offer.currency,
+          rechargeRatio:
+            finiteNumber(offer.rechargeRatio) ??
+            calculateRechargeCoefficient(offer.rechargeRatioRaw),
+          rechargeCoefficient: offer.rechargeCoefficient ?? null,
+          modelMultiplier: offer.modelMultiplier ?? null,
+          stationGroupMultiplier: offer.stationGroupMultiplier ?? null,
+          combinedMultiplier: transitCombinedMultiplier(offer),
+          inputPrice: offer.inputPrice ?? null,
+          outputPrice: offer.outputPrice ?? null,
+          cacheReadPrice: offer.cacheReadPrice ?? null,
+          cacheWritePrice: offer.cacheWritePrice ?? null,
+          imageOutputPrice: offer.imageOutputPrice ?? null,
+          fixedPrice: offer.fixedPrice ?? null,
+          fixedPriceCurrency: offer.fixedPriceCurrency ?? null,
+          fixedPriceUnit: offer.fixedPriceUnit ?? null,
+          accountPool: offer.accountPool ?? null,
+          channelType: offer.channelType ?? null,
+          priceSourceUrl: offer.priceSourceUrl ?? null,
+          priceSourceLabel: offer.priceSourceLabel ?? null,
+          lastVerifiedAt: toDate(offer.lastVerifiedAt),
+          availability: offer.availability,
+          status: offer.status,
+          payload: offer.payload,
+          updatedAt: new Date(snapshot.generatedAt),
+        })),
+      );
+    }
+    if (snapshot.availabilitySamples.length) {
+      await insertRows(
+        tx,
+        transitAvailabilitySamples,
+        snapshot.availabilitySamples.map((sample) => ({
+          id: sample.id,
+          generationId,
+          stationId: sample.stationId,
+          offerId: sample.offerId ?? null,
+          scope: sample.scope,
+          standardModel: sample.standardModel ?? null,
+          groupName: sample.groupName ?? null,
+          sourceType: sample.sourceType,
+          sourceUrl: sample.sourceUrl ?? null,
+          matchLevel: sample.matchLevel,
+          success: sample.success,
+          latencyMs: sample.latencyMs ?? null,
+          sampleCount: sample.sampleCount,
+          sevenDayRate: sample.sevenDayRate ?? null,
+          checkedAt: new Date(sample.checkedAt),
+          expiresAt: toDate(sample.expiresAt),
+          note: sample.note ?? null,
+        })),
+      );
+    }
+    await tx
+      .update(publicDataGenerations)
+      .set({
+        status: "published",
+        publishedAt: sql`clock_timestamp()`,
+        error: null,
+      })
+      .where(eq(publicDataGenerations.id, generationId));
+    return {
+      domain: "transit",
+      generationId,
+      generatedAt: snapshot.generatedAt,
+      recordCount: snapshot.stations.length,
+      sourceCount: snapshot.sourceCount,
+      contentHash: hash,
+      published: true,
+    };
+  });
+}

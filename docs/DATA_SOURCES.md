@@ -11,6 +11,32 @@
 第三方媒体和聚合站只用于发现线索，不作为订阅与品牌价格来源。API 价格排行榜是
 唯一明确例外，见下节。
 
+## 公开栏目快照来源与发布
+
+`/channels`（卡网报价）和 `/api-transit`（API 中转站）使用独立的公开快照数据集，
+不改变官方订阅/API 价格来源的口径，也不把第三方聚合站自动升级为可信价格证据。每个
+快照来源必须先经过人工审核，确认页面公开或已获授权、允许自动读取和再发布，并记录
+来源说明；不得使用需要登录、绕过访问控制、用户任意提交的 URL 或含凭据的接口。
+
+- GitHub Actions 运行 `npm run collect:public -- --trigger=scheduled --domain=all`，
+  通过 `PUBLIC_CHANNELS_SNAPSHOT_URL` 和/或 `PUBLIC_TRANSIT_SNAPSHOT_URL` 指定已审核
+  的来源。至少配置一个来源；只配置一个域时，另一域明确跳过；两个都缺少或
+  `PUBLIC_DATA_DATABASE_URL` 缺少时，任务在采集前失败。
+- 采集器在 GitHub runner 上顺序请求（并发上限 1），仅允许 HTTPS，拒绝凭据、私有主机、
+  重定向和超大响应，并使用固定超时；不使用 VPS 的 WARP/代理、SMTP、`DATA_SYNC` 或
+  旧的官方 `collect` 入口。连接串和完整 URL 不写入日志。
+- 每个 payload 先做版本化 schema 校验，再以 `generation_id` 和领域事务原子发布到独立
+  的 `PUBLIC_DATA_DATABASE_URL`。空结果、结构变化或写入失败不会清空上一有效 generation；
+  本轮失败由下一次定时运行或人工 `workflow_dispatch` 重试。
+- 首次启用前必须由受控发布流程完成公开表的 migration、备份和回滚准备；定时 workflow
+  不执行 `db:migrate`。`PUBLIC_DATA_DIRECT_DATABASE_URL` 仅可在该受控 migration 步骤
+  临时使用，不能作为定时采集凭据。
+- VPS 继续运行官方价格 collector 和既有 timer；网页及公开栏目页面只读已发布 generation，
+  请求期间不访问上游，也不因上游慢或失败增加 VPS 负载。
+- `PUBLIC_DATA_INDEXING_ENABLED` 是 Web 侧 SEO 门禁；公开表 migration、首轮健康快照和
+  数据质量检查完成前保持 `false`，此时栏目可供人工查看但 metadata 为 `noindex, follow`，
+  sitemap 不列出栏目。
+
 ## models.dev API 价格排行榜数据源
 
 - 榜单与模型详情的唯一读取源为 `anomalyco/models.dev`，每 4 小时先解析 `dev`
@@ -246,10 +272,15 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 
 ## 刷新计划
 
-- 全部价格：每 4 小时。
+- 官方订阅与 API 价格：VPS `ai-price-collect.timer` 每 4 小时。
+- 公开栏目快照：GitHub Actions 每 4 小时；至少有一个已审核快照 URL 才会运行采集。
 - 汇率：与价格任务同轮更新。
-- 失败重试：15 分钟、1 小时、6 小时。
+- 官方价格失败重试：15 分钟、1 小时、6 小时。
 - 每周人工抽查四个海外产品和三个国内来源。
+
+公开快照 workflow 不自动重试整轮；失败时保留上一有效 generation，并由下一次 schedule
+或人工 dispatch 触发重试。若公开表 migration 尚未完成，应先关闭该 schedule，避免产生
+预期之外的失败告警。
 
 ## Fixture 规则
 

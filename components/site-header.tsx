@@ -124,6 +124,12 @@ export function SiteFooter({
         <Link href={locale === "en" ? "/en/price-changes" : "/price-changes"}>
           {locale === "en" ? "Price changes" : "价格变化"}
         </Link>
+        <Link href={locale === "en" ? "/en/channels" : "/channels"}>
+          {locale === "en" ? "Channel offers" : "卡网报价"}
+        </Link>
+        <Link href={locale === "en" ? "/en/api-transit" : "/api-transit"}>
+          {locale === "en" ? "API transit" : "API 中转"}
+        </Link>
         <Link href={methodologyHref}>{messages.common.methodology}</Link>
         <Link href={privacyHref}>{messages.common.privacy}</Link>
         <PrivacyPreferencesButton

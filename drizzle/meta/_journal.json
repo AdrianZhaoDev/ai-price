@@ -64,6 +64,13 @@
       "when": 1786438817148,
       "tag": "0008_fresh_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788676206789,
+      "tag": "0009_white_white_tiger",
+      "breakpoints": true
     }
   ]
 }

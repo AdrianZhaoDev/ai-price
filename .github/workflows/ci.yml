@@ -16,6 +16,18 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: public_data_test
+          POSTGRES_PASSWORD: integration-only
+          POSTGRES_DB: public_data_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U public_data_test -d public_data_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +39,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:coverage
+        env:
+          TEST_PUBLIC_DATA_DATABASE_URL: postgresql://public_data_test:integration-only@127.0.0.1:5432/public_data_test
       - run: npx next build --webpack
       - name: Package verified production release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

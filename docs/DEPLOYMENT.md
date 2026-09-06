@@ -8,10 +8,12 @@
 
 - Web：Vercel
 - Database：Neon PostgreSQL 或任意托管 PostgreSQL
-- Scheduler：GitHub Actions 每 4 小时
+- Scheduler：官方价格由 VPS timer 每 4 小时运行；公开栏目快照由 GitHub Actions 每 4 小时发布
 - Email：任意标准 SMTP，生产推荐 SES 或国内云邮件服务
 
-该组合使网页请求只读取数据库，采集不会占用网页服务器资源。
+该组合使网页请求只读取数据库，采集不会占用网页服务器资源。官方价格 collector 继续
+使用 VPS 本地库和既有 `ai-price-collect.timer`；新增卡网/API 中转站 collector 只在
+GitHub-hosted runner 上拉取公开快照并写入远程 public-data DB，不迁移或停用 VPS collector。
 首页使用 15 分钟增量再验证；采集完成后无需重新构建或部署，最迟约 15 分钟即可
 展示数据库中的新价格。
 
@@ -45,6 +47,33 @@ COLLECTOR_CONCURRENCY=3
 `DATABASE_URL` 保持向后兼容并默认作为本地写库。页面读取可通过
 `DATABASE_READ_TARGET` 在本地和远程之间切换；采集与订阅通过
 `DATABASE_WRITE_TARGET` 选择运行数据库。
+
+公开快照 workflow 使用独立的 GitHub Secrets/Variables。来源 URL 和采集开关仅用于
+GitHub；VPS Web 使用 PUBLIC_DATA_DATABASE_URL 的独立只读凭据及 SEO 开关，不能
+把 GitHub 的数据库写入凭据复制给 Web。
+
+```dotenv
+PUBLIC_DATA_DATABASE_URL=
+PUBLIC_CHANNELS_SNAPSHOT_URL=
+PUBLIC_TRANSIT_SNAPSHOT_URL=
+PUBLIC_DATA_DOMAIN=all
+PUBLIC_DATA_CONCURRENCY=1
+PUBLIC_DATA_COLLECTION_ENABLED=false
+# migration + first healthy generation verified before enabling SEO indexing
+PUBLIC_DATA_INDEXING_ENABLED=false
+```
+
+GitHub 的 `PUBLIC_DATA_DATABASE_URL` 必须指向远程 public-data PostgreSQL；
+Web 使用同库只读账号。未批准来源时保持 GitHub Variable
+`PUBLIC_DATA_COLLECTION_ENABLED=false`，定时任务将跳过；人工 dispatch 仍检查配置并
+在缺失时失败，不会自动迁移或写入本地数据库。
+`PUBLIC_DATA_DIRECT_DATABASE_URL` 不属于定时 workflow secrets；仅在受控 migration
+步骤中临时使用，并按 VPS 运维流程保护和清理。
+
+`PUBLIC_DATA_INDEXING_ENABLED` 不应放入定时采集步骤。保持 `false` 时，两个公开栏目
+仍可供人工核对，但页面 metadata 返回 `noindex, follow` 且 sitemap 不列出栏目；只有
+公开表迁移完成、至少一轮快照成功发布并通过数据质量检查后，才在 Web 运行环境中
+显式设置为 `true`。这项开关不会改变 collector 的采集范围。
 
 开启 `DATA_SYNC_ENABLED` 后，每轮采集完成都会把公开价格和采集表完整镜像到目标
 PostgreSQL。`neon` 与 `postgresql` 通道都使用标准 PostgreSQL 协议。
@@ -81,26 +110,44 @@ npm run local:db:down
 通过 Nodemailer JSON transport 预览。进程重启后这些开发数据会清空。
 `npm run collect` 仍会验证官方页面，但不会持久化结果。
 
-## GitHub Secrets
+## GitHub Actions 采集配置
 
-采集工作流需要：
+### 公开快照 workflow
 
-- `DATABASE_URL`
-- `DIRECT_DATABASE_URL`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
-- `SMTP_USER`
-- `SMTP_PASSWORD`
-- `SMTP_FROM`
-- `ADMIN_EMAIL`
-- `EMAIL_TOKEN_SECRET`
+`.github/workflows/collect-public-data.yml` 保留每 4 小时 schedule 和
+`workflow_dispatch`。它在 GitHub-hosted runner 上执行
+`npm run collect:public -- --trigger=scheduled --domain=all`，只把公开快照写入
+远程 public-data PostgreSQL，不调用既有 `collect`，也不迁移现有 VPS collector。
 
-生产采集由 VPS 的 `ai-price-collect.timer` 每 4 小时运行一次，并以 `scheduled`
-记录触发类型。仓库内 `.github/workflows/collect-prices.yml` 仅供人工触发；它先迁移
-数据库再运行采集，任何来源失败都会使任务以非零状态结束。
+需要配置以下 GitHub Secrets/Variables：
 
-CI 不应获得生产数据库和 SMTP 密钥。
+- Secret `PUBLIC_DATA_DATABASE_URL`：远程 public-data 写入连接串，禁止使用 VPS
+  的本地连接串或把值打印到日志；
+- 至少一个 `PUBLIC_CHANNELS_SNAPSHOT_URL` 或 `PUBLIC_TRANSIT_SNAPSHOT_URL`，
+  可放在 Secret 或 repository Variable 中。开启任务后未配置任何 URL 或数据库时，workflow
+  在安装依赖前明确失败；未配置的单个领域会跳过。
+
+定时任务并发上限为 1，job/采集步骤有超时且不自动重试整轮；失败由下一次
+schedule 或人工重跑处理，避免重复发布。HTTP 代理环境被清空，快照源必须使用
+HTTPS；采集器还会拒绝凭据、私有主机、重定向和超大响应。workflow 不接收 SMTP
+或 `DATA_SYNC_*` 密钥，日志不得包含完整数据库/快照 URL。
+
+首次启用 schedule 前，必须在受控发布/运维步骤中为 public-data 表执行并验证
+migration，并完成备份/回滚准备。workflow 有意不自动执行 `db:migrate`，防止
+定时任务在发布并发时扩大数据库权限；migration 未完成时应保持 schedule 关闭或
+接受任务失败告警。
+`PUBLIC_DATA_DIRECT_DATABASE_URL` 如需使用，应在上述受控 migration 步骤中作为
+一次性直连配置，不放入定时 workflow；完成后移除临时暴露。
+
+### 官方价格 collector 与 VPS timer
+
+官方价格生产采集仍由 VPS 的 `ai-price-collect.timer` 每 4 小时运行一次，并以
+`scheduled` 记录触发类型。仓库内 `.github/workflows/collect-prices.yml` 仅供
+人工触发，沿用官方价格数据库和 SMTP 配置；它不承担公开快照发布。VPS timer、
+`/etc/ai-price.env`、WARP 代理和本地到远程的 `DATA_SYNC` 镜像均保持原有流程。
+
+CI 构建与普通检查不应获得 VPS 生产数据库、SMTP 或同步密钥。公开快照 workflow
+是受限例外，只接收专用 `PUBLIC_DATA_*` 配置，不能复用官方 collector 的密钥。
 
 ## 自有邮箱配置示例
 
@@ -122,6 +169,17 @@ CI 不应获得生产数据库和 SMTP 密钥。
 ## 上线检查
 
 - 数据库迁移成功。
+- public-data 远程库已单独备份并完成 `public_data_generations`、`channel_*`、
+  `transit_*` migration；定时 workflow 未获得迁移权限。
+- 至少一个公开快照 URL 与 `PUBLIC_DATA_DATABASE_URL` 已配置；从 `main` 手工触发
+  `collect-public-data.yml` 成功，日志不含连接串、查询参数或其他密钥。
+- 远程库存在最新 `published` generation；对应公开页面只读该 generation，普通
+  页面/API 请求不会触发上游抓取。
+- `/channels`、`/api-transit` 及英文路径上线验收须确认页面返回 200、canonical 正确，
+  并展示已发布 generation（或明确的降级状态），不能把合成 fixture 当作生产数据；
+  只有确认首个健康 generation 后才将 Web 环境的 `PUBLIC_DATA_INDEXING_ENABLED` 改为
+  `true`，届时 sitemap 才列出这些条目。
+- VPS `ai-price-collect.timer`、本地 PostgreSQL 和官方价格采集验收仍通过。
 - seed 不会在生产环境覆盖真实数据。
 - 定时任务可手工触发。
 - 管理员收到测试告警。

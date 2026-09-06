@@ -1,0 +1,260 @@
+import { describe, expect, it } from "vitest";
+import {
+  createTransitRepository,
+  getTransitStationBySlug,
+  normalizeTransitAvailability,
+  normalizeTransitDatabaseSnapshot,
+  normalizeTransitOffer,
+  resetDefaultTransitRepository,
+} from "@/lib/transit/repository";
+import { getSyntheticTransitStations } from "@/lib/transit/fixture";
+
+describe("transit repository", () => {
+  it("returns an explicitly marked synthetic fixture without a loader", async () => {
+    const repository = createTransitRepository({
+      now: () => new Date("2026-02-01T00:00:00.000Z"),
+    });
+    const snapshot = await repository.load();
+    expect(snapshot.origin).toBe("synthetic_fixture");
+    expect(snapshot.isSynthetic).toBe(true);
+    expect(snapshot.degraded).toBe(false);
+    expect(snapshot.stations).toHaveLength(3);
+    const result = await repository.list({ limit: 10 });
+    expect(result.items.map((station) => station.slug)).toEqual([
+      "synthetic-token",
+      "synthetic-fixed",
+    ]);
+    expect(result.total).toBe(2);
+  });
+
+  it("hydrates a future DB adapter shape and aggregates availability samples", async () => {
+    const loaded = {
+      generation_id: "db-generation-1",
+      generated_at: "2026-02-01T00:00:00Z",
+      data_status: "verified",
+      stations: [
+        {
+          id: "db-station",
+          slug: "db-station",
+          name: "DB Station",
+          website_url: "https://db.example.test",
+          status: "active",
+          source_type: "manual_snapshot",
+          data_status: "verified",
+          channel_types: ["official_api"],
+          account_pools: ["official_api"],
+          risk_labels: [],
+          summary: "Loaded from injected adapter",
+          last_updated_at: "2026-02-01T00:00:00Z",
+          offers: [
+            {
+              id: "db-offer",
+              family: "gpt",
+              standard_model_id: "gpt-demo",
+              standard_model_label: "Demo GPT",
+              group_name: "default",
+              billing_mode: "token",
+              recharge_ratio: "1:2",
+              model_multiplier: "0.5",
+              currency: "CNY",
+              account_pool: "official_api",
+              channel_type: "official_api",
+              price_source_url: "https://db.example.test/pricing",
+              last_verified_at: "2026-02-01T00:00:00Z",
+            },
+          ],
+        },
+      ],
+      availability_samples: [
+        {
+          station_id: "db-station",
+          offer_id: "db-offer",
+          success: true,
+          latency_ms: 100,
+          checked_at: "2026-01-31T00:00:00Z",
+          source_type: "manual_snapshot",
+          source_url: "https://db.example.test/status",
+        },
+        {
+          station_id: "db-station",
+          offer_id: "db-offer",
+          success: false,
+          latency_ms: 200,
+          checked_at: "2026-02-01T00:00:00Z",
+          source_type: "manual_snapshot",
+          source_url: "https://db.example.test/status",
+        },
+      ],
+    };
+    const repository = createTransitRepository({
+      databaseLoader: async () => loaded,
+      now: () => new Date("2026-02-01T00:00:00Z"),
+    });
+    const snapshot = await repository.load();
+    expect(snapshot.origin).toBe("database");
+    expect(snapshot.generationId).toBe("db-generation-1");
+    expect(snapshot.stations[0].offers[0].combinedRate).toBeCloseTo(0.25);
+    expect(
+      snapshot.stations[0].offers[0].availability.sevenDayRate,
+    ).toBeCloseTo(0.5);
+    expect(snapshot.stations[0].offers[0].availability.sevenDaySamples).toBe(2);
+    expect((await repository.getBySlug("db-station"))?.name).toBe("DB Station");
+  });
+
+  it("accepts the public-data snapshot naming and keeps station samples scoped", () => {
+    const model = normalizeTransitDatabaseSnapshot({
+      schemaVersion: 1,
+      domain: "transit",
+      generatedAt: "2026-02-01T00:00:00Z",
+      sourceCount: 1,
+      stations: [
+        {
+          id: "snapshot-station",
+          slug: "snapshot-station",
+          name: "Snapshot Station",
+          websiteUrl: "https://snapshot.example.test",
+          status: "active",
+          dataStatus: "verified",
+          stationSystem: "new_api",
+          operatorType: "company",
+          commercialRelation: "none",
+          summary: "Public snapshot shape",
+          channelTypes: ["official_api"],
+          accountPools: ["official_api"],
+          paymentMethods: [],
+          riskLabels: [],
+          usageAdvice: ["cautious"],
+          sourceType: "manual_snapshot",
+          sourceUrl: "https://snapshot.example.test/source",
+          lastUpdatedAt: "2026-02-01T00:00:00Z",
+        },
+      ],
+      offers: [
+        {
+          id: "snapshot-offer",
+          stationId: "snapshot-station",
+          family: "gpt",
+          standardModel: "gpt-demo",
+          groupName: "default",
+          billingMode: "token",
+          currency: "CNY",
+          rechargeRatio: 0.5,
+          modelMultiplier: 0.4,
+          accountPool: "official_api",
+          channelType: "official_api",
+          priceSourceUrl: "https://snapshot.example.test/pricing",
+          status: "verified",
+          availability: {},
+        },
+      ],
+      availabilitySamples: [
+        {
+          id: "snapshot-sample",
+          stationId: "snapshot-station",
+          offerId: "snapshot-offer",
+          scope: "offer",
+          standardModel: "gpt-demo",
+          groupName: "default",
+          sourceType: "authorized_probe",
+          sourceUrl: "https://snapshot.example.test/status",
+          matchLevel: "exact",
+          success: true,
+          latencyMs: 100,
+          sampleCount: 1,
+          checkedAt: "2026-02-01T00:00:00Z",
+        },
+      ],
+    });
+    expect(model?.stations[0].usageAdvice).toBe("cautious");
+    expect(model?.stations[0].offers[0].standardModelId).toBe("gpt-demo");
+    expect(model?.stations[0].offers[0].rechargeCoefficient).toBe(0.5);
+    expect(model?.stations[0].offers[0].combinedRate).toBeCloseTo(0.2);
+    // This historical sample is outside the rolling seven-day window.
+    expect(model?.stations[0].offers[0].availability.sevenDayRate).toBeNull();
+    expect(model?.stations[0].availability.sevenDaySamples).toBe(0);
+  });
+
+  it("keeps the last good generation when a later DB refresh fails or is empty", async () => {
+    let calls = 0;
+    const good = {
+      stations: [
+        {
+          ...getSyntheticTransitStations()[0],
+          synthetic: false,
+          sourceType: "manual_snapshot",
+          dataStatus: "verified",
+        },
+      ],
+      generationId: "good-generation",
+      generatedAt: "2026-02-01T00:00:00Z",
+      dataStatus: "verified",
+    };
+    const repository = createTransitRepository({
+      cacheTtlMs: 0,
+      databaseLoader: async () => {
+        calls += 1;
+        if (calls === 1) return good;
+        if (calls === 2) return { stations: [] };
+        throw new Error("table does not exist");
+      },
+    });
+    const first = await repository.load();
+    expect(first.origin).toBe("database");
+    const empty = await repository.load();
+    expect(empty.generationId).toBe("good-generation");
+    expect(empty.degraded).toBe(true);
+    expect(empty.dataStatus).toBe("degraded");
+    expect(empty.fallbackReason).toBe("database_empty");
+    const failed = await repository.load({ forceRefresh: true });
+    expect(failed.generationId).toBe("good-generation");
+    expect(failed.fallbackReason).toBe("database_unavailable");
+  });
+
+  it("can disable synthetic fallback for a production-only route", async () => {
+    const repository = createTransitRepository({
+      allowSyntheticFixture: false,
+      databaseLoader: async () => ({ stations: [] }),
+    });
+    const snapshot = await repository.load();
+    expect(snapshot.stations).toEqual([]);
+    expect(snapshot.isSynthetic).toBe(false);
+    expect(snapshot.degraded).toBe(true);
+    expect((await repository.list()).items).toEqual([]);
+  });
+
+  it("normalizes individual rows and rejects unsafe URLs without throwing", () => {
+    const availability = normalizeTransitAvailability({
+      seven_day_rate: 96,
+      seven_day_samples: "10",
+      checked_at: "2026-02-01T00:00:00Z",
+      source_type: "manual_snapshot",
+      source_url: "https://example.test/status",
+    });
+    expect(availability.sevenDayRate).toBeCloseTo(0.96);
+    expect(
+      normalizeTransitOffer(
+        {
+          standard_model_id: "demo",
+          billing_mode: "fixed",
+          fixed_price: 1,
+          fixed_price_unit: "request",
+          currency: "CNY",
+          price_source_url: "javascript:alert(1)",
+        },
+        "station",
+      )?.combinedRate,
+    ).toBeNull();
+    expect(
+      normalizeTransitDatabaseSnapshot({
+        stations: [{ id: "bad", name: "Bad", website_url: "file:///tmp/x" }],
+      }),
+    ).toBeNull();
+  });
+
+  it("exposes a safe module-level detail helper and can reset it", async () => {
+    resetDefaultTransitRepository();
+    expect(await getTransitStationBySlug("synthetic-token")).not.toBeNull();
+    resetDefaultTransitRepository();
+    expect(await getTransitStationBySlug("missing")).toBeNull();
+  });
+});
