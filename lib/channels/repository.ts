@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   getPublicDataDatabase,
   isPublicDataDatabaseConfigured,
@@ -217,7 +218,9 @@ async function readChannelSnapshot(
         productType: product.productType,
         specification: product.specification,
         rawTitle: row.title,
-        sourceId: `${row.sourceName}:${row.sourceUrl}`,
+        sourceId: createHash("sha256")
+          .update(JSON.stringify([row.sourceName, row.sourceUrl]))
+          .digest("hex"),
         sourceType: sourceTypeFromName(row.sourceName),
         sourceUrl: row.sourceUrl,
         offerUrl: row.offerUrl,
@@ -233,7 +236,9 @@ async function readChannelSnapshot(
         firstSeenAt: row.observedAt.toISOString(),
         lastSeenAt: row.lastSeenAt.toISOString(),
         observedAt: row.observedAt.toISOString(),
-        publicDedupeKey: `${row.merchantId}|${row.productId}|${row.offerUrl}`,
+        publicDedupeKey: createHash("sha256")
+          .update(JSON.stringify([row.merchantId, row.productId, row.offerUrl]))
+          .digest("hex"),
         classificationConfidence: 1,
         sourceHealth:
           status === "verified" &&

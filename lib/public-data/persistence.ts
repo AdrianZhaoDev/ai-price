@@ -1,5 +1,7 @@
 import {
   contentHash,
+  channelSnapshotSchema,
+  transitSnapshotSchema,
   type ChannelSnapshot,
   type TransitSnapshot,
 } from "@/lib/public-data/snapshot";
@@ -17,6 +19,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { PgTable, PgInsertValue } from "drizzle-orm/pg-core";
 import { calculateRechargeCoefficient } from "@/lib/transit/ranking";
+import { isTransitStationPublic } from "@/lib/transit/types";
 
 export type PublicPublishResult = {
   domain: "channels" | "transit";
@@ -163,6 +166,7 @@ async function clearTransitRows(
 export async function publishChannelSnapshot(
   snapshot: ChannelSnapshot,
 ): Promise<PublicPublishResult> {
+  snapshot = channelSnapshotSchema.parse(snapshot);
   // An empty feed is almost always an upstream outage or parser regression.
   // Reject before opening a transaction so the last published generation and
   // its rows remain available to the web reader.
@@ -173,6 +177,21 @@ export async function publishChannelSnapshot(
   ) {
     throw new Error(
       "Channel snapshot is empty; previous published generation retained.",
+    );
+  }
+  const activeMerchants = new Set(
+    snapshot.merchants
+      .filter((merchant) => merchant.status === "active")
+      .map((merchant) => merchant.id),
+  );
+  if (
+    !snapshot.offers.some(
+      (offer) =>
+        offer.status === "verified" && activeMerchants.has(offer.merchantId),
+    )
+  ) {
+    throw new Error(
+      "Channel snapshot has no public offers; previous published generation retained.",
     );
   }
   const hash = contentHash(snapshot);
@@ -403,6 +422,18 @@ export async function publishChannelSnapshot(
   });
 }
 
+function transitRechargeRatio(
+  offer: TransitSnapshot["offers"][number],
+): number | null {
+  return (
+    finiteNumber(offer.rechargeRatio) ??
+    calculateRechargeCoefficient(offer.rechargeRatioRaw) ??
+    calculateRechargeCoefficient(
+      typeof offer.rechargeRatio === "string" ? offer.rechargeRatio : null,
+    )
+  );
+}
+
 function transitCombinedMultiplier(
   offer: TransitSnapshot["offers"][number],
 ): number | null {
@@ -413,10 +444,7 @@ function transitCombinedMultiplier(
   ) {
     return offer.combinedMultiplier;
   }
-  const recharge =
-    offer.rechargeCoefficient ??
-    finiteNumber(offer.rechargeRatio) ??
-    calculateRechargeCoefficient(offer.rechargeRatioRaw);
+  const recharge = offer.rechargeCoefficient ?? transitRechargeRatio(offer);
   const model = offer.stationGroupMultiplier ?? offer.modelMultiplier;
   if (
     recharge === undefined ||
@@ -432,11 +460,17 @@ function transitCombinedMultiplier(
 export async function publishTransitSnapshot(
   snapshot: TransitSnapshot,
 ): Promise<PublicPublishResult> {
+  snapshot = transitSnapshotSchema.parse(snapshot);
   // A directory with no stations is not a valid refresh.  Keep the previous
   // generation instead of clearing all public rows on an upstream outage.
   if (snapshot.stations.length === 0) {
     throw new Error(
       "Transit snapshot is empty; previous published generation retained.",
+    );
+  }
+  if (!snapshot.stations.some((station) => isTransitStationPublic(station))) {
+    throw new Error(
+      "Transit snapshot has no public stations; previous published generation retained.",
     );
   }
   const hash = contentHash(snapshot);
@@ -588,9 +622,7 @@ export async function publishTransitSnapshot(
           groupName: offer.groupName ?? null,
           billingMode: offer.billingMode,
           currency: offer.currency,
-          rechargeRatio:
-            finiteNumber(offer.rechargeRatio) ??
-            calculateRechargeCoefficient(offer.rechargeRatioRaw),
+          rechargeRatio: transitRechargeRatio(offer),
           rechargeCoefficient: offer.rechargeCoefficient ?? null,
           modelMultiplier: offer.modelMultiplier ?? null,
           stationGroupMultiplier: offer.stationGroupMultiplier ?? null,

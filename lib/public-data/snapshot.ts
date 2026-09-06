@@ -19,7 +19,9 @@ const httpUrl = z
 const isoDate = z.string().datetime({ offset: true });
 const safeId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,119}$/i);
 const publicText = z.string().max(4000);
-const tags = z.array(z.string().max(80)).max(80).default([]);
+const boundedText = (max: number) => z.string().trim().min(1).max(max);
+const tags = z.array(boundedText(80)).max(64).default([]);
+const transitTags = z.array(boundedText(80)).max(30).default([]);
 const sensitiveKey =
   /token|secret|password|passwd|authorization|credential|session|cookie|api[-_]?key|signature|bearer/i;
 
@@ -44,11 +46,11 @@ const publicPayload = z
 export const channelMerchantSnapshotSchema = z.object({
   id: safeId,
   slug: safeId,
-  name: publicText,
-  host: z.string().min(1).max(255),
+  name: boundedText(160),
+  host: boundedText(160),
   websiteUrl: httpUrl,
   status: z.enum(["active", "pending_review", "suspended"]),
-  operatorType: z.string().max(80).nullable().optional(),
+  operatorType: boundedText(80).nullable().optional(),
   platforms: tags,
   riskLabels: tags,
 });
@@ -56,10 +58,10 @@ export const channelMerchantSnapshotSchema = z.object({
 export const channelProductSnapshotSchema = z.object({
   id: safeId,
   slug: safeId,
-  displayName: publicText,
-  platform: z.string().min(1).max(80),
-  productType: z.string().min(1).max(80),
-  spec: publicText.nullable().optional(),
+  displayName: boundedText(240),
+  platform: boundedText(80),
+  productType: boundedText(80),
+  spec: z.string().max(240).nullable().optional(),
   summary: publicText.nullable().optional(),
   aliases: tags,
 });
@@ -68,16 +70,27 @@ export const channelOfferSnapshotSchema = z.object({
   id: safeId,
   merchantId: safeId,
   productId: safeId,
-  sourceName: publicText,
+  sourceName: boundedText(160),
   sourceUrl: httpUrl,
-  title: publicText,
+  title: boundedText(320),
   offerUrl: httpUrl,
   priceMinor: z.number().int().nonnegative().nullable(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   availability: z.enum(["in_stock", "out_of_stock", "unknown", "expired"]),
   stockCount: z.number().int().nonnegative().nullable().optional(),
   minOrderQuantity: z.number().int().positive().nullable().optional(),
-  bulkPricingTiers: z.array(publicPayload).max(100).default([]),
+  bulkPricingTiers: z
+    .array(
+      z
+        .object({
+          minQuantity: z.number().int().positive(),
+          priceMinor: z.number().int().nonnegative(),
+          currency: z.string().regex(/^[A-Z]{3}$/),
+        })
+        .strict(),
+    )
+    .max(64)
+    .default([]),
   tags,
   riskLabels: tags,
   status: z.enum(["verified", "pending_review", "suspended"]),
@@ -102,8 +115,8 @@ export const transitAvailabilitySnapshotSchema = z.object({
   stationId: safeId,
   offerId: safeId.nullable().optional(),
   scope: z.enum(["station", "group", "model", "offer"]),
-  standardModel: publicText.nullable().optional(),
-  groupName: publicText.nullable().optional(),
+  standardModel: boundedText(160).nullable().optional(),
+  groupName: boundedText(160).nullable().optional(),
   sourceType: z.enum([
     "public_status",
     "public_model_catalog",
@@ -116,22 +129,22 @@ export const transitAvailabilitySnapshotSchema = z.object({
     "unknown",
   ]),
   sourceUrl: httpUrl.nullable().optional(),
-  matchLevel: z.enum(["exact", "group", "model", "family"]),
+  matchLevel: z.enum(["exact", "group", "model", "family", "station"]),
   success: z.boolean(),
   latencyMs: z.number().int().nonnegative().max(300_000).nullable().optional(),
   sampleCount: z.number().int().positive().max(100_000).default(1),
   sevenDayRate: z.number().finite().min(0).max(1).nullable().optional(),
   checkedAt: isoDate,
   expiresAt: isoDate.nullable().optional(),
-  note: publicText.nullable().optional(),
+  note: z.string().max(500).nullable().optional(),
 });
 
 export const transitOfferSnapshotSchema = z.object({
   id: safeId,
   stationId: safeId,
-  family: z.string().min(1).max(80),
-  standardModel: publicText,
-  groupName: publicText.nullable().optional(),
+  family: boundedText(40),
+  standardModel: boundedText(160),
+  groupName: boundedText(160).nullable().optional(),
   billingMode: z.enum(["token", "per_request", "fixed"]),
   currency: z.string().regex(/^[A-Z]{3}$/),
   /** Numeric paid/credited ratio, retained for backwards-compatible feeds. */
@@ -155,11 +168,11 @@ export const transitOfferSnapshotSchema = z.object({
     .regex(/^[A-Z]{3}$/)
     .nullable()
     .optional(),
-  fixedPriceUnit: publicText.nullable().optional(),
+  fixedPriceUnit: z.string().max(100).nullable().optional(),
   accountPool: z.string().max(80).nullable().optional(),
   channelType: z.string().max(80).nullable().optional(),
   priceSourceUrl: httpUrl.nullable().optional(),
-  priceSourceLabel: publicText.nullable().optional(),
+  priceSourceLabel: z.string().max(200).nullable().optional(),
   lastVerifiedAt: isoDate.nullable().optional(),
   availability: publicPayload.default({}),
   status: z.enum(["verified", "pending_review", "unavailable", "unknown"]),
@@ -171,8 +184,8 @@ export const transitStationSnapshotSchema = z.object({
   slug: z
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    .max(120),
-  name: publicText,
+    .max(100),
+  name: boundedText(200),
   websiteUrl: httpUrl,
   apiBaseUrl: httpUrl.nullable().optional(),
   status: z.enum(["active", "limited", "unavailable", "unknown"]),
@@ -187,12 +200,12 @@ export const transitStationSnapshotSchema = z.object({
     "sponsored",
     "unknown",
   ]),
-  summary: publicText.nullable().optional(),
-  channelTypes: tags,
-  accountPools: tags,
-  paymentMethods: tags,
-  riskLabels: tags,
-  usageAdvice: z.union([publicText, tags]).optional(),
+  summary: z.string().max(1000).nullable().optional(),
+  channelTypes: transitTags,
+  accountPools: transitTags,
+  paymentMethods: transitTags,
+  riskLabels: transitTags,
+  usageAdvice: z.union([boundedText(80), transitTags]).optional(),
   sourceType: z.string().min(1).max(80),
   sourceUrl: httpUrl,
   lastUpdatedAt: isoDate.nullable().optional(),
@@ -200,17 +213,31 @@ export const transitStationSnapshotSchema = z.object({
   payload: publicPayload.default({}),
 });
 
-export const transitSnapshotSchema = z.object({
-  schemaVersion: z.literal(1),
-  domain: z.literal("transit"),
-  generatedAt: isoDate,
-  sourceCount: z.number().int().nonnegative().max(10_000),
-  stations: z.array(transitStationSnapshotSchema).max(100_000),
-  offers: z.array(transitOfferSnapshotSchema).max(500_000),
-  availabilitySamples: z
-    .array(transitAvailabilitySnapshotSchema)
-    .max(1_000_000),
-});
+export const transitSnapshotSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    domain: z.literal("transit"),
+    generatedAt: isoDate,
+    sourceCount: z.number().int().nonnegative().max(10_000),
+    stations: z.array(transitStationSnapshotSchema).max(20_000),
+    offers: z.array(transitOfferSnapshotSchema).max(500_000),
+    availabilitySamples: z
+      .array(transitAvailabilitySnapshotSchema)
+      .max(1_000_000),
+  })
+  .superRefine((snapshot, context) => {
+    const counts = new Map<string, number>();
+    for (const offer of snapshot.offers) {
+      const count = (counts.get(offer.stationId) ?? 0) + 1;
+      counts.set(offer.stationId, count);
+      if (count === 2001)
+        context.addIssue({
+          code: "custom",
+          path: ["offers"],
+          message: "A station may contain at most 2000 offers.",
+        });
+    }
+  });
 
 export type ChannelSnapshot = z.infer<typeof channelSnapshotSchema>;
 export type TransitSnapshot = z.infer<typeof transitSnapshotSchema>;

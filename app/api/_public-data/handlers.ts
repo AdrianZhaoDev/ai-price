@@ -157,9 +157,7 @@ export async function handleChannelDetailGet(
     const repository = getDefaultChannelRepository();
     const snapshot = await repository.getSnapshot();
     const offer = snapshot.offers.find(
-      (candidate) =>
-        candidate.id.toLowerCase() === id.toLowerCase() &&
-        isPublicChannelOffer(candidate),
+      (candidate) => candidate.id === id && isPublicChannelOffer(candidate),
     );
     if (offer) {
       return publicJson({
@@ -171,9 +169,7 @@ export async function handleChannelDetailGet(
     if (offerOnly)
       return publicError("Channel offer not found", 404, "NOT_FOUND");
     const product = (snapshot.products ?? []).find(
-      (candidate) =>
-        candidate.id.toLowerCase() === id.toLowerCase() ||
-        candidate.slug.toLowerCase() === id.toLowerCase(),
+      (candidate) => candidate.id === id || candidate.slug === id,
     );
     if (product && ["published", "verified"].includes(product.reviewStatus)) {
       return publicJson({
@@ -183,9 +179,7 @@ export async function handleChannelDetailGet(
       });
     }
     const merchant = (snapshot.merchants ?? []).find(
-      (candidate) =>
-        candidate.id.toLowerCase() === id.toLowerCase() ||
-        candidate.slug.toLowerCase() === id.toLowerCase(),
+      (candidate) => candidate.id === id || candidate.slug === id,
     );
     if (merchant && merchant.status === "active") {
       return publicJson({

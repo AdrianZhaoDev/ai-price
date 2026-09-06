@@ -197,10 +197,39 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
 
   it("stores long non-compressible public search text without B-tree tuple failures", async () => {
     const snapshot = channels();
-    snapshot.offers[0].title = randomBytes(1900).toString("hex");
+    snapshot.products[0].summary = randomBytes(1900).toString("hex");
     await expect(publishChannelSnapshot(snapshot)).resolves.toMatchObject({
       published: true,
     });
+  });
+
+  it("retains channel rows on invisible or read-incompatible refreshes and supports long source URLs", async () => {
+    const snapshot = channels();
+    snapshot.offers[0].sourceUrl = `https://example.com/${"a".repeat(1000)}`;
+    snapshot.offers[0].offerUrl = `https://example.com/${"b".repeat(1000)}`;
+    const published = await publishChannelSnapshot(snapshot);
+    const read = await loadChannelSnapshotFromDatabase(connection.database);
+    expect(read?.offers).toHaveLength(1);
+    expect(read?.offers[0].sourceUrl).toBe(snapshot.offers[0].sourceUrl);
+    for (const status of ["pending_review", "suspended"] as const) {
+      const bad = channels();
+      bad.merchants[0].status = status;
+      await expect(publishChannelSnapshot(bad)).rejects.toThrow(
+        "no public offers",
+      );
+      bad.merchants[0].status = "active";
+      bad.offers[0].status = status;
+      await expect(publishChannelSnapshot(bad)).rejects.toThrow(
+        "no public offers",
+      );
+    }
+    const bad = channels();
+    bad.merchants[0].name = "a".repeat(161);
+    await expect(publishChannelSnapshot(bad)).rejects.toThrow();
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(published.generationId);
   });
 
   it("round-trips transit prices and samples and restores a previous feed", async () => {
@@ -224,6 +253,41 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       await loadTransitSnapshotFromDatabase(connection.database),
     );
     expect(restored?.stations[0].offers[0].combinedRate).toBeCloseTo(0.2);
+  });
+
+  it("retains transit rows on invisible or read-incompatible refreshes and parses textual recharge ratios", async () => {
+    const snapshot = transit();
+    snapshot.offers[0].rechargeCoefficient = null;
+    snapshot.offers[0].rechargeRatio = "1:2";
+    snapshot.stations[0].status = "unknown";
+    const published = await publishTransitSnapshot(snapshot);
+    const read = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    expect(read?.stations[0].offers[0].rechargeRatio).toBe(0.5);
+    expect(read?.stations[0].offers[0].combinedRate).toBe(1);
+    for (const bad of [
+      {
+        ...snapshot,
+        stations: [
+          { ...snapshot.stations[0], dataStatus: "pending_review" as const },
+        ],
+      },
+      {
+        ...snapshot,
+        stations: [{ ...snapshot.stations[0], status: "unavailable" as const }],
+      },
+    ])
+      await expect(publishTransitSnapshot(bad)).rejects.toThrow(
+        "no public stations",
+      );
+    const bad = transit();
+    bad.stations[0].name = "a".repeat(201);
+    await expect(publishTransitSnapshot(bad)).rejects.toThrow();
+    const retained = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    expect(retained?.generationId).toBe(published.generationId);
   });
 
   it("retains original-source rows when a later catalogue collapses", async () => {

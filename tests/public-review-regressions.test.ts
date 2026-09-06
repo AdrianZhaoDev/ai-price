@@ -7,6 +7,10 @@ import { createSyntheticChannelSnapshot } from "@/lib/channels/fixture";
 import { channelOfferFiltersSchema } from "@/lib/channels/types";
 import {
   channelOfferSnapshotSchema,
+  channelMerchantSnapshotSchema,
+  channelProductSnapshotSchema,
+  transitOfferSnapshotSchema,
+  transitAvailabilitySnapshotSchema,
   transitStationSnapshotSchema,
 } from "@/lib/public-data/snapshot";
 import { isPrivateOrReservedHostname } from "@/lib/public-data/urls";
@@ -15,6 +19,74 @@ import { filterTransitStations } from "@/lib/transit/ranking";
 import { isTransitStationPublic } from "@/lib/transit/types";
 
 describe("public review regressions", () => {
+  it("keeps public input text and array limits within the read schemas", () => {
+    const limits = [
+      [channelMerchantSnapshotSchema.shape.name, 160],
+      [channelMerchantSnapshotSchema.shape.host, 160],
+      [channelProductSnapshotSchema.shape.displayName, 240],
+      [channelProductSnapshotSchema.shape.spec, 240],
+      [channelOfferSnapshotSchema.shape.title, 320],
+      [transitStationSnapshotSchema.shape.name, 200],
+      [transitStationSnapshotSchema.shape.slug, 100],
+      [transitStationSnapshotSchema.shape.summary, 1000],
+      [transitOfferSnapshotSchema.shape.family, 40],
+      [transitOfferSnapshotSchema.shape.standardModel, 160],
+      [transitOfferSnapshotSchema.shape.groupName, 160],
+      [transitOfferSnapshotSchema.shape.fixedPriceUnit, 100],
+      [transitOfferSnapshotSchema.shape.priceSourceLabel, 200],
+    ] as const;
+    for (const [schema, max] of limits) {
+      expect(schema.safeParse("a".repeat(max)).success).toBe(true);
+      expect(schema.safeParse("a".repeat(max + 1)).success).toBe(false);
+    }
+    expect(
+      channelMerchantSnapshotSchema.shape.name.safeParse("   ").success,
+    ).toBe(false);
+    expect(
+      channelOfferSnapshotSchema.shape.tags.safeParse(Array(65).fill("tag"))
+        .success,
+    ).toBe(false);
+    expect(
+      transitStationSnapshotSchema.shape.paymentMethods.safeParse(
+        Array(31).fill("card"),
+      ).success,
+    ).toBe(false);
+    expect(
+      channelOfferSnapshotSchema.shape.bulkPricingTiers.safeParse([{}]).success,
+    ).toBe(false);
+    expect(
+      transitAvailabilitySnapshotSchema.shape.matchLevel.parse("station"),
+    ).toBe("station");
+  });
+  it("resolves case-distinct offer identifiers exactly", async () => {
+    const snapshot = createSyntheticChannelSnapshot();
+    snapshot.offers = [
+      { ...snapshot.offers[0], id: "Offer-A" },
+      { ...snapshot.offers[0], id: "offer-a" },
+    ];
+    const spy = vi
+      .spyOn(getDefaultChannelRepository(), "getSnapshot")
+      .mockResolvedValue(snapshot);
+    try {
+      for (const id of ["Offer-A", "offer-a"]) {
+        const response = await handleChannelDetailGet(
+          new Request(`http://localhost/api/channels/offers/${id}`),
+          { params: Promise.resolve({ id }) },
+          true,
+        );
+        expect(response.status).toBe(200);
+        expect((await response.json()).offer.id).toBe(id);
+      }
+      const response = await handleChannelDetailGet(
+        new Request("http://localhost/api/channels/offers/OFFER-A"),
+        { params: Promise.resolve({ id: "OFFER-A" }) },
+        true,
+      );
+      expect(response.status).toBe(404);
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it("does not expose pending merchant details", async () => {
     const snapshot = createSyntheticChannelSnapshot();
     snapshot.merchants![0].status = "pending_review";
