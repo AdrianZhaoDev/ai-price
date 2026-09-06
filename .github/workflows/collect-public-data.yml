@@ -34,10 +34,6 @@ jobs:
       HTTPS_PROXY: ""
       ALL_PROXY: ""
       NO_PROXY: "*"
-      http_proxy: ""
-      https_proxy: ""
-      all_proxy: ""
-      no_proxy: "*"
       NPM_CONFIG_AUDIT: "false"
       NPM_CONFIG_FUND: "false"
       NPM_CONFIG_LOGLEVEL: error
@@ -99,6 +95,6 @@ jobs:
           PUBLIC_DATA_DATABASE_URL: ${{ secrets.PUBLIC_DATA_DATABASE_URL }}
           PUBLIC_CHANNELS_SNAPSHOT_URL: ${{ secrets.PUBLIC_CHANNELS_SNAPSHOT_URL || vars.PUBLIC_CHANNELS_SNAPSHOT_URL }}
           PUBLIC_TRANSIT_SNAPSHOT_URL: ${{ secrets.PUBLIC_TRANSIT_SNAPSHOT_URL || vars.PUBLIC_TRANSIT_SNAPSHOT_URL }}
-        run: npm run collect:public -- --trigger=scheduled --domain=all
+        run: env -u http_proxy -u https_proxy -u all_proxy -u no_proxy npm run collect:public -- --trigger=scheduled --domain=all
         timeout-minutes: 25
         continue-on-error: false
