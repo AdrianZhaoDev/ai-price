@@ -426,25 +426,35 @@ export async function publishChannelSnapshot(
           "Bulk tier identity overlap collapsed; previous snapshot retained for review.",
         );
     }
-    const unmatchedIds = snapshot.offers
+    const unmatchedOffers = snapshot.offers
       .filter((offer) => !matches.has(offer.id))
-      .map((offer) => offer.id);
-    const historicalFirstSeen = unmatchedIds.length
+      .map((offer) => ({
+        id: offer.id,
+        merchant_id: offer.merchantId,
+        product_id: offer.productId,
+        offer_url: offer.offerUrl,
+      }));
+    const historicalFirstSeen = unmatchedOffers.length
       ? await tx
           .select({
-            offerId: channelOfferObservations.offerId,
+            offerId: sql<string>`incoming.id`,
             firstSeenAt:
               sql`min(least(${channelOfferObservations.observedAt}, (${channelOfferObservations.offerSnapshot}->>'firstSeenAt')::timestamptz))`.mapWith(
                 channelPublicOffers.firstSeenAt,
               ),
           })
           .from(channelOfferObservations)
-          // IDs are schema-validated ASCII identifiers; this is a bound text-array
-          // parameter, not interpolated SQL or one bind parameter per offer.
-          .where(
-            sql`${channelOfferObservations.offerId} = any(${`{${unmatchedIds.join(",")}}`}::text[])`,
+          // One bound JSON parameter keeps large snapshots below PostgreSQL's
+          // parameter limit. Absent offers may return with a new upstream ID.
+          .innerJoin(
+            sql`jsonb_to_recordset(${JSON.stringify(unmatchedOffers)}::jsonb) as incoming(id text, merchant_id text, product_id text, offer_url text)`,
+            sql`${channelOfferObservations.offerId} = incoming.id or (
+              ${channelOfferObservations.offerSnapshot}->>'merchantId' = incoming.merchant_id and
+              ${channelOfferObservations.offerSnapshot}->>'productId' = incoming.product_id and
+              ${channelOfferObservations.offerSnapshot}->>'offerUrl' = incoming.offer_url
+            )`,
           )
-          .groupBy(channelOfferObservations.offerId)
+          .groupBy(sql`incoming.id`)
       : [];
     const historicalById = new Map(
       historicalFirstSeen.map((row) => [row.offerId, row.firstSeenAt]),

@@ -275,6 +275,28 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       )?.firstSeenAt,
     ).toBe(first.offers[0].observedAt);
   });
+  it("recovers absent offers under new IDs using historical stable identity", async () => {
+    const first = channels();
+    first.offers[0].observedAt = new Date(
+      Date.parse(now) - 3600000,
+    ).toISOString();
+    first.offers.push({
+      ...first.offers[0],
+      id: "anchor",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishChannelSnapshot(first);
+    await publishChannelSnapshot({ ...first, offers: [first.offers[1]] });
+    const returned = channels();
+    returned.offers[0].id = "new-returned-id";
+    returned.offers.push(first.offers[1]);
+    await publishChannelSnapshot(returned);
+    const result = await loadChannelSnapshotFromDatabase(connection.database);
+    expect(
+      result?.offers.find((offer) => offer.id === "new-returned-id")
+        ?.firstSeenAt,
+    ).toBe(first.offers[0].observedAt);
+  });
   it("backfills first-seen from pre-migration stable-identity history", async () => {
     const first = channels();
     first.offers[0].observedAt = new Date(

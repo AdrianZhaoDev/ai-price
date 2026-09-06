@@ -96,6 +96,32 @@ describe("transit repository", () => {
     );
     expect(result?.status).toBe("unknown");
   });
+  it.each([undefined, null, "", "verifed", "published"])(
+    "does not publish an unrecognized offer status %s",
+    async (status) => {
+      const station = getSyntheticTransitStations()[0];
+      const now = new Date();
+      station.dataStatus = "verified";
+      const raw = {
+        ...station,
+        offers: [
+          { ...station.offers[0], status, lastVerifiedAt: now.toISOString() },
+        ],
+      };
+      const repository = createTransitRepository({
+        loader: async () => ({
+          generatedAt: now.toISOString(),
+          stations: [raw],
+        }),
+        now: () => now,
+      });
+      expect((await repository.load()).stations[0].offers[0].status).toBe(
+        "unknown",
+      );
+      expect((await repository.list()).items[0].offers).toEqual([]);
+      expect((await repository.getBySlug(station.slug))?.offers).toEqual([]);
+    },
+  );
   it("sorts structured comparisons using only matching offer evidence", async () => {
     const template = getSyntheticTransitStations()[0];
     const now = Date.now();

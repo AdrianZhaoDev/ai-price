@@ -586,7 +586,7 @@ export function normalizeTransitOffer(
     status: enumValue(
       pick(row, "status"),
       ["verified", "pending_review", "unavailable", "unknown"] as const,
-      "verified",
+      "unknown",
     ),
   } satisfies TransitOffer;
   if (
