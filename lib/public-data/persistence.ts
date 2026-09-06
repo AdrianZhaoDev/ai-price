@@ -46,6 +46,20 @@ function countCollapsed(previous: number, incoming: number): boolean {
   );
 }
 
+function assertStablePrice(
+  previous: number | null | undefined,
+  incoming: number | null | undefined,
+) {
+  if (previous == null) return; // First observed price has no comparable baseline.
+  if (
+    incoming == null ||
+    Math.abs(incoming - previous) > Math.abs(previous) * (0.5 + 1e-9)
+  )
+    throw new Error(
+      "Price anomaly exceeds the 50% change limit; previous snapshot retained for review.",
+    );
+}
+
 type PublishTransaction = Parameters<
   Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
 >[0];
@@ -318,6 +332,26 @@ export async function publishChannelSnapshot(
         throw new Error(
           "Channel source coverage or offer count collapsed; previous snapshot retained.",
         );
+    }
+    const previousPrices = new Map(
+      (
+        await tx
+          .select({
+            id: channelPublicOffers.id,
+            priceMinor: channelPublicOffers.priceMinor,
+            currency: channelPublicOffers.currency,
+          })
+          .from(channelPublicOffers)
+      ).map((row) => [row.id, row]),
+    );
+    for (const offer of snapshot.offers) {
+      const prior = previousPrices.get(offer.id);
+      if (!prior) continue;
+      if (prior.priceMinor != null && prior.currency !== offer.currency)
+        throw new Error(
+          "Channel price currency changed; previous snapshot retained for review.",
+        );
+      assertStablePrice(prior.priceMinor, offer.priceMinor);
     }
     await clearChannelRows(tx);
     const offerCounts = new Map<
@@ -688,6 +722,53 @@ export async function publishTransitSnapshot(
         throw new Error(
           "Transit source coverage or model count collapsed; previous snapshot retained.",
         );
+    }
+    const previousPrices = new Map(
+      (
+        await tx
+          .select({
+            id: transitOffers.id,
+            currency: transitOffers.currency,
+            billingMode: transitOffers.billingMode,
+            inputPrice: transitOffers.inputPrice,
+            outputPrice: transitOffers.outputPrice,
+            cacheReadPrice: transitOffers.cacheReadPrice,
+            cacheWritePrice: transitOffers.cacheWritePrice,
+            imageOutputPrice: transitOffers.imageOutputPrice,
+            fixedPrice: transitOffers.fixedPrice,
+            fixedPriceCurrency: transitOffers.fixedPriceCurrency,
+            fixedPriceUnit: transitOffers.fixedPriceUnit,
+            combinedMultiplier: transitOffers.combinedMultiplier,
+          })
+          .from(transitOffers)
+      ).map((row) => [row.id, row]),
+    );
+    for (const offer of snapshot.offers) {
+      const prior = previousPrices.get(offer.id);
+      if (!prior) continue;
+      if (
+        prior.currency !== offer.currency ||
+        prior.billingMode !== offer.billingMode ||
+        (prior.fixedPrice != null &&
+          (prior.fixedPriceCurrency !== (offer.fixedPriceCurrency ?? null) ||
+            prior.fixedPriceUnit !== (offer.fixedPriceUnit ?? null)))
+      )
+        throw new Error(
+          "Transit price units changed; previous snapshot retained for review.",
+        );
+      for (const field of [
+        "inputPrice",
+        "outputPrice",
+        "cacheReadPrice",
+        "cacheWritePrice",
+        "imageOutputPrice",
+        "fixedPrice",
+      ] as const)
+        assertStablePrice(prior[field], offer[field]);
+      assertStablePrice(
+        prior.combinedMultiplier,
+        transitCombinedMultiplier(offer),
+      );
     }
     await clearTransitRows(tx);
     const offersByStation = new Map<string, TransitSnapshot["offers"]>();

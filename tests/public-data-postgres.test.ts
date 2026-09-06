@@ -487,6 +487,66 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       )?.generationId,
     ).toBe(stationResult.generationId);
   });
+  it("rejects price anomalies and unit changes without replacing current data", async () => {
+    const channel = channels();
+    const station = transit();
+    station.offers[0].inputPrice = 1e-8;
+    const channelResult = await publishChannelSnapshot(channel);
+    const transitResult = await publishTransitSnapshot(station);
+    for (const priceMinor of [0, 1980, null])
+      await expect(
+        publishChannelSnapshot({
+          ...channel,
+          offers: [{ ...channel.offers[0], priceMinor }],
+        }),
+      ).rejects.toThrow("Price anomaly");
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: [{ ...channel.offers[0], currency: "USD" }],
+      }),
+    ).rejects.toThrow("currency changed");
+    for (const inputPrice of [0, 2e-8, null])
+      await expect(
+        publishTransitSnapshot({
+          ...station,
+          offers: [{ ...station.offers[0], inputPrice }],
+        }),
+      ).rejects.toThrow("Price anomaly");
+    await expect(
+      publishTransitSnapshot({
+        ...station,
+        offers: [{ ...station.offers[0], modelMultiplier: 4 }],
+      }),
+    ).rejects.toThrow("Price anomaly");
+    await expect(
+      publishTransitSnapshot({
+        ...station,
+        offers: [{ ...station.offers[0], currency: "CNY" }],
+      }),
+    ).rejects.toThrow("units changed");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(channelResult.generationId);
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(transitResult.generationId);
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: [{ ...channel.offers[0], priceMinor: 1485 }],
+      }),
+    ).resolves.toMatchObject({ published: true });
+    await expect(
+      publishTransitSnapshot({
+        ...station,
+        offers: [{ ...station.offers[0], modelMultiplier: 3 }],
+      }),
+    ).resolves.toMatchObject({ published: true });
+  });
   it("rejects disappearance of publishable offers even when raw counts stay constant", async () => {
     const snapshot = transit();
     snapshot.availabilitySamples = [];
