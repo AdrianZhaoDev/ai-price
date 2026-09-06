@@ -107,6 +107,7 @@ const transit = () =>
         modelMultiplier: 2,
         status: "verified",
         priceSourceUrl: "https://example.com/pricing",
+        lastVerifiedAt: now,
       },
     ],
     availabilitySamples: [
@@ -463,6 +464,70 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         await loadTransitSnapshotFromDatabase(connection.database),
       )?.generationId,
     ).toBe(transitResult.generationId);
+  });
+  it("rejects a delayed but recent generation under the publication lock", async () => {
+    const channel = channels();
+    const station = transit();
+    const channelResult = await publishChannelSnapshot(channel);
+    const stationResult = await publishTransitSnapshot(station);
+    const generatedAt = new Date(Date.parse(now) - 60000).toISOString();
+    await expect(
+      publishChannelSnapshot({ ...channel, generatedAt }),
+    ).rejects.toThrow("older than");
+    await expect(
+      publishTransitSnapshot({ ...station, generatedAt }),
+    ).rejects.toThrow("older than");
+    expect(
+      (await loadChannelSnapshotFromDatabase(connection.database))
+        ?.generationId,
+    ).toBe(channelResult.generationId);
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(stationResult.generationId);
+  });
+  it("rejects disappearance of publishable offers even when raw counts stay constant", async () => {
+    const snapshot = transit();
+    snapshot.availabilitySamples = [];
+    const initial = await publishTransitSnapshot(snapshot);
+    for (const status of ["pending_review", "unknown", "unavailable"] as const)
+      await expect(
+        publishTransitSnapshot({
+          ...snapshot,
+          offers: [{ ...snapshot.offers[0], status }],
+        }),
+      ).rejects.toThrow("collapsed");
+    for (const lastVerifiedAt of [
+      null,
+      new Date(Date.now() - 40 * 3600000).toISOString(),
+    ])
+      await expect(
+        publishTransitSnapshot({
+          ...snapshot,
+          offers: [{ ...snapshot.offers[0], lastVerifiedAt }],
+        }),
+      ).rejects.toThrow("collapsed");
+    expect(
+      normalizeTransitDatabaseSnapshot(
+        await loadTransitSnapshotFromDatabase(connection.database),
+      )?.generationId,
+    ).toBe(initial.generationId);
+    const channel = channels();
+    channel.offers = Array.from({ length: 10 }, (_, index) => ({
+      ...channel.offers[0],
+      id: `offer-${index}`,
+    }));
+    await publishChannelSnapshot(channel);
+    await expect(
+      publishChannelSnapshot({
+        ...channel,
+        offers: channel.offers.map((offer, index) => ({
+          ...offer,
+          status: index ? "pending_review" : "verified",
+        })),
+      }),
+    ).rejects.toThrow("collapsed");
   });
   it("keeps stale channel observations out of current lowest-price rankings", async () => {
     const snapshot = channels();

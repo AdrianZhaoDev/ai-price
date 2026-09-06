@@ -9,6 +9,39 @@ vi.mock("@/components/site-header", () => ({
 }));
 
 describe("transit detail rendering", () => {
+  it.each([0, 0.1, 1])(
+    "does not turn sample presence into a health endorsement at rate %s",
+    (sevenDayRate) => {
+      const station = getSyntheticTransitStations()[0];
+      station.offers = [
+        {
+          ...station.offers[0],
+          availability: {
+            ...station.offers[0].availability,
+            sevenDaySamples: 10,
+            sevenDayRate,
+          },
+        },
+      ];
+      const page = new DOMParser().parseFromString(
+        renderToStaticMarkup(
+          createElement(ApiTransitDetailPage, {
+            locale: "en",
+            station,
+            degraded: false,
+          }),
+        ),
+        "text/html",
+      );
+      const pill = [...page.querySelectorAll("span")].find((item) =>
+        item.textContent?.includes("(10 samples)"),
+      );
+      expect(pill).toBeTruthy();
+      expect(pill?.getAttribute("data-tone")).toBe(
+        sevenDayRate === 0 ? "warning" : null,
+      );
+    },
+  );
   it.each(["zh-CN", "en"] as const)(
     "renders supplied pricing and degradation evidence in %s without reading a repository",
     (locale) => {

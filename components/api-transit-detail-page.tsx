@@ -270,9 +270,10 @@ export function ApiTransitDetailPage({
                   <span
                     className={styles.pill}
                     data-tone={
-                      offer.availability.sevenDaySamples
-                        ? "positive"
-                        : "warning"
+                      offer.availability.sevenDaySamples > 0 &&
+                      offer.availability.sevenDayRate === 0
+                        ? "warning"
+                        : undefined
                     }
                   >
                     {rateCopy(offer.availability, locale)}

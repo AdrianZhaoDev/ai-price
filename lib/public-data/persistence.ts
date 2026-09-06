@@ -39,6 +39,13 @@ function assertFreshGeneration(generatedAt: string) {
     );
 }
 
+function countCollapsed(previous: number, incoming: number): boolean {
+  return (
+    (previous > 0 && incoming === 0) ||
+    (previous - incoming >= 2 && incoming < previous * 0.7)
+  );
+}
+
 type PublishTransaction = Parameters<
   Parameters<ReturnType<typeof getPublicDataDatabase>["transaction"]>[0]
 >[0];
@@ -85,11 +92,27 @@ async function existingGeneration(
   >[0],
   domain: "channels" | "transit",
   hash: string,
+  generatedAt: string,
 ) {
   // Coordinate CLI/manual publishers as well as scheduled workflow runs.
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext(${`public-data:${domain}`}))`,
   );
+  const [current] = await tx
+    .select({ generatedAt: publicDataGenerations.generatedAt })
+    .from(publicDataGenerations)
+    .where(
+      and(
+        eq(publicDataGenerations.domain, domain),
+        eq(publicDataGenerations.status, "published"),
+      ),
+    )
+    .orderBy(desc(publicDataGenerations.publishedAt))
+    .limit(1);
+  if (current && Date.parse(generatedAt) < current.generatedAt.getTime())
+    throw new Error(
+      "Snapshot is older than the published generation; current data retained.",
+    );
   const [row] = await tx
     .select()
     .from(publicDataGenerations)
@@ -205,7 +228,12 @@ export async function publishChannelSnapshot(
   const hash = contentHash(snapshot);
   const database = getPublicDataDatabase();
   return database.transaction(async (tx) => {
-    const previous = await existingGeneration(tx, "channels", hash);
+    const previous = await existingGeneration(
+      tx,
+      "channels",
+      hash,
+      snapshot.generatedAt,
+    );
     if (
       previous?.status === "published" &&
       (await isCurrentGeneration(tx, "channels", previous.id))
@@ -255,21 +283,37 @@ export async function publishChannelSnapshot(
     const baseline = await tx
       .select({
         merchantId: channelPublicOffers.merchantId,
-        count: sql<number>`count(*)::int`,
+        totalCount: sql<number>`count(*)::int`,
+        count: sql<number>`count(*) filter (where ${channelPublicOffers.status} in ('verified', 'published') and ${channelMerchants.status} = 'active')::int`,
       })
       .from(channelPublicOffers)
+      .innerJoin(
+        channelMerchants,
+        eq(channelPublicOffers.merchantId, channelMerchants.id),
+      )
       .groupBy(channelPublicOffers.merchantId);
     const incomingCounts = new Map<string, number>();
-    for (const offer of snapshot.offers)
-      incomingCounts.set(
+    const incomingTotals = new Map<string, number>();
+    for (const offer of snapshot.offers) {
+      incomingTotals.set(
         offer.merchantId,
-        (incomingCounts.get(offer.merchantId) ?? 0) + 1,
+        (incomingTotals.get(offer.merchantId) ?? 0) + 1,
       );
+      if (offer.status === "verified" && activeMerchants.has(offer.merchantId))
+        incomingCounts.set(
+          offer.merchantId,
+          (incomingCounts.get(offer.merchantId) ?? 0) + 1,
+        );
+    }
     for (const source of baseline) {
       const nextCount = incomingCounts.get(source.merchantId) ?? 0;
       if (
-        nextCount === 0 ||
-        (source.count - nextCount >= 2 && nextCount < source.count * 0.7)
+        !merchantIds.has(source.merchantId) ||
+        countCollapsed(source.count, nextCount) ||
+        countCollapsed(
+          source.totalCount,
+          incomingTotals.get(source.merchantId) ?? 0,
+        )
       )
         throw new Error(
           "Channel source coverage or offer count collapsed; previous snapshot retained.",
@@ -532,7 +576,12 @@ export async function publishTransitSnapshot(
   const hash = contentHash(snapshot);
   const database = getPublicDataDatabase();
   return database.transaction(async (tx) => {
-    const previous = await existingGeneration(tx, "transit", hash);
+    const previous = await existingGeneration(
+      tx,
+      "transit",
+      hash,
+      snapshot.generatedAt,
+    );
     if (
       previous?.status === "published" &&
       (await isCurrentGeneration(tx, "transit", previous.id))
@@ -588,27 +637,53 @@ export async function publishTransitSnapshot(
     }
     // All adapters and imported feeds must retain complete source coverage.
     // Check under the same domain lock/transaction as the replacement.
+    const verificationCutoff = new Date(Date.now() - 36 * 3600000);
+    const verificationCeiling = new Date(Date.now() + 5 * 60000);
     const baselineRows = await tx
       .select({
         stationId: transitStations.id,
-        count: sql<number>`count(${transitOffers.id})::int`,
+        totalCount: sql<number>`count(${transitOffers.id})::int`,
+        count: sql<number>`count(${transitOffers.id}) filter (where ${transitOffers.status} = 'verified' and ${transitOffers.lastVerifiedAt} >= ${verificationCutoff.toISOString()}::timestamptz and ${transitOffers.lastVerifiedAt} <= ${verificationCeiling.toISOString()}::timestamptz and ${transitStations.dataStatus} = 'verified' and ${transitStations.status} <> 'unavailable')::int`,
       })
       .from(transitStations)
       .leftJoin(transitOffers, eq(transitStations.id, transitOffers.stationId))
       .groupBy(transitStations.id);
     const incomingCounts = new Map<string, number>();
-    for (const offer of snapshot.offers)
-      incomingCounts.set(
+    const incomingTotals = new Map<string, number>();
+    const publicStationIds = new Set(
+      snapshot.stations
+        .filter((station) => isTransitStationPublic(station))
+        .map((station) => station.id),
+    );
+    for (const offer of snapshot.offers) {
+      incomingTotals.set(
         offer.stationId,
-        (incomingCounts.get(offer.stationId) ?? 0) + 1,
+        (incomingTotals.get(offer.stationId) ?? 0) + 1,
       );
+      const verifiedAt = offer.lastVerifiedAt
+        ? Date.parse(offer.lastVerifiedAt)
+        : NaN;
+      if (
+        offer.status === "verified" &&
+        publicStationIds.has(offer.stationId) &&
+        verifiedAt >= verificationCutoff.getTime() &&
+        verifiedAt <= verificationCeiling.getTime()
+      )
+        incomingCounts.set(
+          offer.stationId,
+          (incomingCounts.get(offer.stationId) ?? 0) + 1,
+        );
+    }
     for (const station of baselineRows) {
       const baseline = station.count;
       const nextCount = incomingCounts.get(station.stationId) ?? 0;
       if (
         !stationIds.has(station.stationId) ||
-        (baseline > 0 && nextCount === 0) ||
-        (baseline - nextCount >= 2 && nextCount < baseline * 0.7)
+        countCollapsed(baseline, nextCount) ||
+        countCollapsed(
+          station.totalCount,
+          incomingTotals.get(station.stationId) ?? 0,
+        )
       )
         throw new Error(
           "Transit source coverage or model count collapsed; previous snapshot retained.",
