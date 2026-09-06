@@ -246,6 +246,7 @@ export function serializeTransitAvailability(
     sevenDaySamples: availability.sevenDaySamples,
     firstCheckedAt: safeDate(availability.firstCheckedAt),
     lastCheckedAt: safeDate(availability.lastCheckedAt),
+    expiresAt: safeDate(availability.expiresAt),
     latestLatencyMs: availability.latestLatencyMs,
     averageLatency7dMs: availability.averageLatency7dMs,
     note: safeText(availability.note, 500) ?? null,

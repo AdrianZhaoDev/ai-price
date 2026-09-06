@@ -49,6 +49,7 @@ describe("ChannelRepository", () => {
 
   it("uses an injected reader, validates rows and deduplicates the published view", async () => {
     const repository = createChannelRepository({
+      now: () => new Date("2026-09-06T01:00:00.000Z"),
       databaseConfigured: true,
       loadPublishedOffers: async ({ domain }) => {
         expect(domain).toBe("channels");

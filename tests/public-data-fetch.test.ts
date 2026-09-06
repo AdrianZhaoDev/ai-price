@@ -38,6 +38,32 @@ describe("availability evidence windows", () => {
     sourceUrl: "https://example.com/status",
     checkedAt: "2026-09-06T00:00:00Z",
   };
+  it("carries the earliest contributing expiry and newest summary expiry", () => {
+    const earliest = "2026-09-07T01:00:00.000Z";
+    const later = "2026-09-07T02:00:00.000Z";
+    const evidence = aggregateAvailability(
+      [
+        { ...sample, id: "first", expiresAt: earliest },
+        {
+          ...sample,
+          id: "second",
+          checkedAt: "2026-09-06T01:00:00Z",
+          expiresAt: later,
+        },
+      ],
+      "s",
+      "o",
+      now,
+    );
+    expect(evidence.expiresAt).toBe(earliest);
+    const summary = aggregateAvailability(
+      [{ ...sample, sampleCount: 100, sevenDayRate: 0.9, expiresAt: later }],
+      "s",
+      "o",
+      now,
+    );
+    expect(summary.expiresAt).toBe(later);
+  });
   it("excludes stale/future/wrong-scope evidence and deduplicates samples", () => {
     const evidence = aggregateAvailability(
       [

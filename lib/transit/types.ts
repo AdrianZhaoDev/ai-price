@@ -218,9 +218,10 @@ export const transitFallbackReasonSchema = z.enum(TRANSIT_FALLBACK_REASONS);
 export const transitAvailabilitySchema = z
   .object({
     sevenDayRate: z.number().finite().min(0).max(1).nullable(),
-    sevenDaySamples: z.number().int().nonnegative().max(100_000),
+    sevenDaySamples: z.number().int().nonnegative().max(1_000_000),
     firstCheckedAt: nullableIsoDate,
     lastCheckedAt: nullableIsoDate,
+    expiresAt: nullableIsoDate.optional(),
     latestLatencyMs: nullableFiniteNonNegative,
     averageLatency7dMs: nullableFiniteNonNegative,
     note: z.string().trim().max(500).nullable(),

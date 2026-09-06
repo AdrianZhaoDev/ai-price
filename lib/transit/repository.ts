@@ -319,6 +319,10 @@ export function normalizeTransitAvailability(
     sevenDaySamples: sampleCount ?? fallback.sevenDaySamples,
     firstCheckedAt,
     lastCheckedAt,
+    expiresAt:
+      dateString(pick(row, "expiresAt", "expires_at")) ??
+      fallback.expiresAt ??
+      null,
     latestLatencyMs:
       nonNegativeNumber(pick(row, "latestLatencyMs", "latest_latency_ms")) ??
       fallback.latestLatencyMs,
@@ -377,7 +381,9 @@ function expireAvailability(
     !Number.isFinite(age) ||
     age < 0 ||
     age >= 7 * 86400000 ||
-    oldestAge >= 7 * 86400000
+    oldestAge >= 7 * 86400000 ||
+    (availability.expiresAt &&
+      Date.parse(availability.expiresAt) <= now.getTime())
   )
     return { ...EMPTY_AVAILABILITY, recentSamples: [] };
   return availability;
@@ -641,6 +647,7 @@ export function aggregateAvailability(
           pick(sample, "sevenDayRate", "seven_day_rate"),
         ),
         checkedAt,
+        expiresAt,
         latencyMs: nonNegativeNumber(pick(sample, "latencyMs", "latency_ms")),
         sourceType: enumValue(
           pick(sample, "sourceType", "source_type"),
@@ -681,6 +688,7 @@ export function aggregateAvailability(
       sevenDayRate: newest.summaryRate,
       sevenDaySamples: newest.summaryRate === null ? 0 : newest.count,
       lastCheckedAt: newest.checkedAt,
+      expiresAt: newest.expiresAt,
       sourceType: newest.sourceType,
       sourceUrl: newest.sourceUrl,
       sourceLabel: newest.sourceLabel,
@@ -696,11 +704,20 @@ export function aggregateAvailability(
     .map((item) => item.latencyMs)
     .filter((item): item is number => item !== null);
   const rate = raw.filter((item) => item.ok).length / raw.length;
+  const expiresAt = raw.reduce<string | null>(
+    (earliest, item) =>
+      item.expiresAt &&
+      (!earliest || Date.parse(item.expiresAt) < Date.parse(earliest))
+        ? item.expiresAt
+        : earliest,
+    null,
+  );
   return normalizeTransitAvailability({
     sevenDayRate: rate,
     sevenDaySamples: raw.length,
     firstCheckedAt: raw[0].checkedAt,
     lastCheckedAt: newest.checkedAt,
+    expiresAt,
     latestLatencyMs: newest.latencyMs,
     averageLatency7dMs: latencies.length
       ? latencies.reduce((sum, item) => sum + item, 0) / latencies.length

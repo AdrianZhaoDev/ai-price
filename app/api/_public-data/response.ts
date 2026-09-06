@@ -560,6 +560,7 @@ function publicTransitAvailability(
     sevenDaySamples: integer(availability.sevenDaySamples),
     firstCheckedAt: date(availability.firstCheckedAt),
     lastCheckedAt: date(availability.lastCheckedAt),
+    expiresAt: date(availability.expiresAt),
     latestLatencyMs: number(availability.latestLatencyMs),
     averageLatency7dMs: number(availability.averageLatency7dMs),
     note: publicNarrative(availability.note, 500),
