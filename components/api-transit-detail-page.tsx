@@ -111,7 +111,7 @@ export function ApiTransitDetailPage({
       <a className="skip-link" href="#main-content">
         {isEnglish ? "Skip to content" : "跳转到正文"}
       </a>
-      <SiteHeader locale={locale} />
+      <SiteHeader locale={locale} activeMode="api-transit" />
       <main id="main-content" className={`main-content ${styles.page}`}>
         <script
           type="application/ld+json"
@@ -119,17 +119,12 @@ export function ApiTransitDetailPage({
             __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
           }}
         />
-        <nav
-          className={styles.subnav}
-          aria-label={isEnglish ? "Directory navigation" : "目录导航"}
+        <Link
+          className={styles.backLink}
+          href={isEnglish ? "/en/api-transit" : "/api-transit"}
         >
-          <Link href={isEnglish ? "/en/api-transit" : "/api-transit"}>
-            {isEnglish ? "← API transit directory" : "← API 中转目录"}
-          </Link>
-          <Link href={isEnglish ? "/en/channels" : "/channels"}>
-            {isEnglish ? "Channels" : "卡网报价"}
-          </Link>
-        </nav>
+          {isEnglish ? "← API transit directory" : "← API 中转目录"}
+        </Link>
 
         <section className={styles.hero} aria-labelledby="transit-detail-title">
           <div>

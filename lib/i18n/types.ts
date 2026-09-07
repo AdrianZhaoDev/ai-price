@@ -17,6 +17,7 @@ export type LocaleMessages = {
   nav: {
     ariaLabel: string;
     modes: Record<PriceMode, string>;
+    directories: Record<"channels" | "api-transit", string>;
     apiCompact: string;
     hot: string;
     switchTo: string;

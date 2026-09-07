@@ -110,7 +110,7 @@ test("pricing navigation uses one clear active state and marks API as hot", asyn
   const links = navigation.locator(".nav-item");
   const hotBadge = navigation.locator(".nav-hot-badge");
 
-  await expect(links).toHaveCount(3);
+  await expect(links).toHaveCount(5);
   await expect(hotBadge).toHaveCount(1);
   await expect(hotBadge).toBeVisible();
   await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
@@ -141,7 +141,7 @@ test("pricing navigation uses one clear active state and marks API as hot", asyn
     atelierStyles
       .filter((item) => !item.active)
       .map((item) => item.backgroundColor),
-  ).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
+  ).toEqual(Array(4).fill("rgba(0, 0, 0, 0)"));
 
   await page.getByRole("button", { name: "切换深色主题" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "midnight");
@@ -1027,7 +1027,7 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
           const items = [...navigation.querySelectorAll(".nav-item")];
           return (
             navigation.scrollWidth <= navigation.clientWidth &&
-            items.length === 3 &&
+            items.length === 5 &&
             items.every((item) => {
               const visibleLabel =
                 item.querySelector(".nav-label-compact") ?? item;
@@ -1047,7 +1047,13 @@ test("all pricing tabs fit common phone widths and use soft navigation", async (
           .evaluateAll((items) =>
             items.map((item) => item.getAttribute("aria-label")),
           ),
-      ).toEqual(["全球区价", "国内订阅", "API 价格排行榜"]);
+      ).toEqual([
+        "全球区价",
+        "国内订阅",
+        "API 价格排行榜",
+        "卡网报价",
+        "API 中转",
+      ]);
     }
   }
 

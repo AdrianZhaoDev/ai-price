@@ -9,7 +9,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 type SiteHeaderProps = {
   locale?: Locale;
-  activeMode?: PriceMode;
+  activeMode?: PriceMode | "channels" | "api-transit";
   syncLabel?: string;
   syncTitle?: string;
   showSync?: boolean;
@@ -75,6 +75,19 @@ export function SiteHeader({
               </Link>
             );
           })}
+          {(["channels", "api-transit"] as const).map((directory) => (
+            <Link
+              key={directory}
+              href={`${locale === "en" ? "/en" : ""}/${directory}`}
+              prefetch={false}
+              className="nav-item pressable"
+              data-mode={directory}
+              aria-current={activeMode === directory ? "page" : undefined}
+              aria-label={messages.nav.directories[directory]}
+            >
+              {messages.nav.directories[directory]}
+            </Link>
+          ))}
         </nav>
       ) : null}
 
