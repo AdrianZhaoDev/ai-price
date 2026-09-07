@@ -200,7 +200,17 @@ async function readChannelSnapshot(
       productType: row.productType,
       specification: row.spec ?? undefined,
       aliases: asStringArray(row.aliases),
-      reviewStatus: "published",
+      reviewStatus: offerRows.some(
+        (offer) =>
+          offer.productId === row.id &&
+          ["verified", "published"].includes(offer.status) &&
+          merchants.some(
+            (merchant) =>
+              merchant.id === offer.merchantId && merchant.status === "active",
+          ),
+      )
+        ? "published"
+        : "pending_review",
     });
     return parsed.success ? [parsed.data] : [];
   });

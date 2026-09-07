@@ -194,7 +194,14 @@ export async function handleChannelDetailGet(
         ? undefined
         : (products.find((candidate) => candidate.id === id) ??
           products.find((candidate) => candidate.slug === id));
-    if (product && ["published", "verified"].includes(product.reviewStatus)) {
+    if (
+      product &&
+      ["published", "verified"].includes(product.reviewStatus) &&
+      snapshot.offers.some(
+        (offer) =>
+          offer.productId === product.id && isPublicChannelOffer(offer),
+      )
+    ) {
       return publicJson({
         ok: true,
         domain: "channels",

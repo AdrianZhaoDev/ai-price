@@ -219,6 +219,19 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       for (const statement of migration.split("--> statement-breakpoint"))
         if (statement.trim()) await connection.client.unsafe(statement);
     }
+    const [sourceVersionsColumn] =
+      await connection.client`select count(*)::int as count from information_schema.columns where table_schema='public' and table_name='public_data_generations' and column_name='source_versions'`;
+    if (!sourceVersionsColumn.count) {
+      const migration = await readFile(
+        new URL(
+          "../drizzle/0015_source_versions_and_product_identities.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      for (const statement of migration.split("--> statement-breakpoint"))
+        if (statement.trim()) await connection.client.unsafe(statement);
+    }
   });
   beforeEach(async () => {
     await connection.client`truncate public_offer_baselines, channel_offer_observations, channel_public_offers, channel_products, channel_merchants, transit_availability_samples, transit_offers, transit_stations, public_data_generations`;
@@ -227,6 +240,103 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     await closeDatabase();
     await connection?.client.end({ timeout: 5 });
     vi.unstubAllEnvs();
+  });
+
+  it("keeps per-source generations independent and unchanged polls idempotent", async () => {
+    const snapshot = transit();
+    snapshot.availabilitySamples = [];
+    snapshot.stations.push({
+      ...snapshot.stations[0],
+      id: "second",
+      slug: "second",
+    });
+    snapshot.offers.push({
+      ...snapshot.offers[0],
+      id: "second-offer",
+      stationId: "second",
+    });
+    snapshot.sourceGenerations = snapshot.stations.map((station) => ({
+      stationId: station.id,
+      generatedAt: now,
+    }));
+    const first = await publishTransitSnapshot(snapshot);
+    const poll = structuredClone(snapshot);
+    poll.stations.forEach((station) => {
+      station.lastCollectedAt = new Date(Date.parse(now) + 1000).toISOString();
+    });
+    expect((await publishTransitSnapshot(poll)).published).toBe(false);
+    poll.stations.reverse();
+    poll.offers.reverse();
+    poll.sourceGenerations!.reverse();
+    expect((await publishTransitSnapshot(poll)).generationId).toBe(
+      first.generationId,
+    );
+    const newer = structuredClone(snapshot);
+    newer.sourceGenerations![1].generatedAt = new Date(
+      Date.parse(now) + 60000,
+    ).toISOString();
+    newer.stations[1].lastUpdatedAt = newer.sourceGenerations![1].generatedAt;
+    newer.offers[1].lastVerifiedAt = newer.sourceGenerations![1].generatedAt;
+    newer.offers[1].modelMultiplier = 2.1;
+    const advanced = await publishTransitSnapshot(newer);
+    expect(advanced.published).toBe(true);
+    expect(advanced.generatedAt).toBe(now);
+    await expect(publishTransitSnapshot(snapshot)).rejects.toThrow("regressed");
+    const conflict = structuredClone(newer);
+    conflict.offers[1].modelMultiplier = 2.2;
+    await expect(publishTransitSnapshot(conflict)).rejects.toThrow("same time");
+    await expect(
+      publishTransitSnapshot({ ...newer, sourceGenerations: undefined }),
+    ).rejects.toThrow("mode changed");
+    const read = normalizeTransitDatabaseSnapshot(
+      await loadTransitSnapshotFromDatabase(connection.database),
+    );
+    expect(read?.generationId).toBe(advanced.generationId);
+  });
+  it("retains product classification after removal and keeps pending-only products unpublished", async () => {
+    const first = channels();
+    first.products.push({
+      ...first.products[0],
+      id: "anchor-product",
+      slug: "anchor-product",
+    });
+    first.offers.push({
+      ...first.offers[0],
+      id: "anchor",
+      productId: "anchor-product",
+      offerUrl: "https://example.com/anchor",
+    });
+    await publishNextChannelSnapshot(first);
+    await publishNextChannelSnapshot({
+      ...first,
+      products: [first.products[1]],
+      offers: [first.offers[1]],
+    });
+    const changed = structuredClone(first);
+    changed.products[0].platform = "reassigned";
+    await expect(publishNextChannelSnapshot(changed)).rejects.toThrow(
+      "product identity changed",
+    );
+    changed.products[0] = first.products[0];
+    changed.offers[0].status = "pending_review";
+    await publishNextChannelSnapshot(changed);
+    const read = await loadChannelSnapshotFromDatabase(connection.database);
+    expect(
+      read?.products?.find((product) => product.id === "product")?.reviewStatus,
+    ).toBe("pending_review");
+    expect(
+      read?.products?.find((product) => product.id === "anchor-product")
+        ?.reviewStatus,
+    ).toBe("published");
+  });
+  it("rejects duplicate transit stable identities even with different offer IDs", async () => {
+    const snapshot = transit();
+    snapshot.offers.push({ ...snapshot.offers[0], id: "duplicate" });
+    await expect(publishTransitSnapshot(snapshot)).rejects.toThrow(
+      "Duplicate stable transit",
+    );
+    snapshot.offers[1].groupName = "different-group";
+    await publishTransitSnapshot(snapshot);
   });
 
   it.each([
@@ -841,6 +951,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       snapshot.offers = Array.from({ length: 10 }, (_, index) => ({
         ...snapshot.offers[0],
         id: `native-${index}`,
+        standardModel: `model-${index}`,
       }));
       await publishNextTransitSnapshot(snapshot);
       await expect(

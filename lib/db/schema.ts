@@ -741,6 +741,10 @@ export const publicDataGenerations = pgTable(
     sourceCount: integer("source_count").default(0).notNull(),
     recordCount: integer("record_count").default(0).notNull(),
     contentHash: text("content_hash").notNull(),
+    sourceVersions:
+      jsonb("source_versions").$type<
+        Array<{ stationId: string; generatedAt: string; contentHash: string }>
+      >(),
     generatedAt: timestamp("generated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

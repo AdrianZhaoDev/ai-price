@@ -139,6 +139,7 @@ describe("public review regressions", () => {
     const id = "shared-id";
     snapshot.offers[0].id = id;
     snapshot.products![1].id = id;
+    snapshot.offers[0].productId = id;
     snapshot.products![0].slug = id;
     snapshot.merchants![1].id = id;
     snapshot.merchants![0].slug = id;
@@ -403,6 +404,33 @@ describe("public review regressions", () => {
         { params: Promise.resolve({ id }) },
       );
       expect(response.status).toBe(404);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it("does not expose a product with no public offer even if its metadata says published", async () => {
+    const snapshot = createSyntheticChannelSnapshot();
+    const product = snapshot.products![0];
+    snapshot.offers = snapshot.offers.map((offer) =>
+      offer.productId === product.id
+        ? {
+            ...offer,
+            published: false,
+            publicationStatus: "pending_review" as const,
+          }
+        : offer,
+    );
+    const spy = vi
+      .spyOn(getDefaultChannelRepository(), "getSnapshot")
+      .mockResolvedValue(snapshot);
+    try {
+      for (const id of [product.id, product.slug]) {
+        const response = await handleChannelDetailGet(
+          new Request(`http://localhost/api/channels/${id}?kind=product`),
+          { params: Promise.resolve({ id }) },
+        );
+        expect(response.status).toBe(404);
+      }
     } finally {
       spy.mockRestore();
     }

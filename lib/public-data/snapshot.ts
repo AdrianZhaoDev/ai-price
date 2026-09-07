@@ -295,6 +295,12 @@ export const transitSnapshotSchema = z
     stations: z
       .array(transitStationSnapshotSchema)
       .max(PUBLIC_DATA_LIMITS.stations),
+    sourceGenerations: z
+      .array(
+        z.object({ stationId: boundedText(160), generatedAt: observedDate }),
+      )
+      .max(PUBLIC_DATA_LIMITS.stations)
+      .optional(),
     offers: z
       .array(transitOfferSnapshotSchema)
       .max(PUBLIC_DATA_LIMITS.transitOffers),
@@ -304,7 +310,21 @@ export const transitSnapshotSchema = z
   })
   .superRefine((snapshot, context) => {
     const counts = new Map<string, number>();
+    const identities = new Set<string>();
     for (const offer of snapshot.offers) {
+      const identity = JSON.stringify([
+        offer.stationId,
+        offer.standardModel,
+        offer.groupName ?? null,
+        offer.billingMode,
+      ]);
+      if (identities.has(identity))
+        context.addIssue({
+          code: "custom",
+          path: ["offers"],
+          message: "Duplicate stable transit offer identity.",
+        });
+      identities.add(identity);
       const count = (counts.get(offer.stationId) ?? 0) + 1;
       counts.set(offer.stationId, count);
       if (count === 2001)
@@ -312,6 +332,36 @@ export const transitSnapshotSchema = z
           code: "custom",
           path: ["offers"],
           message: "A station may contain at most 2000 offers.",
+        });
+    }
+    if (snapshot.sourceGenerations) {
+      const versions = new Map(
+        snapshot.sourceGenerations.map((source) => [
+          source.stationId,
+          source.generatedAt,
+        ]),
+      );
+      if (
+        versions.size !== snapshot.sourceGenerations.length ||
+        versions.size !== snapshot.stations.length ||
+        snapshot.stations.some((station) => !versions.has(station.id))
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["sourceGenerations"],
+          message: "Every station must have exactly one source generation.",
+        });
+      if (
+        Math.min(
+          ...snapshot.sourceGenerations.map((source) =>
+            Date.parse(source.generatedAt),
+          ),
+        ) !== Date.parse(snapshot.generatedAt)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["generatedAt"],
+          message: "Generation time must match the oldest source generation.",
         });
     }
   });

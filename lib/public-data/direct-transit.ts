@@ -153,6 +153,9 @@ export function parseDirectTransit(
     domain: "transit",
     generatedAt: raw.generated_at,
     sourceCount: 1,
+    sourceGenerations: [
+      { stationId: source.id, generatedAt: raw.generated_at },
+    ],
     stations: [
       {
         id: source.id,
@@ -235,6 +238,9 @@ export async function collectDirectTransit(
       Math.min(...results.map((result) => Date.parse(result.generatedAt))),
     ).toISOString(),
     sourceCount: results.length,
+    sourceGenerations: results.flatMap(
+      (result) => result.sourceGenerations ?? [],
+    ),
     stations: results.flatMap((result) => result.stations),
     offers: results.flatMap((result) => result.offers),
     availabilitySamples: [],

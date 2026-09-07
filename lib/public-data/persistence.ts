@@ -13,15 +13,21 @@ import {
   channelProducts,
   channelPublicOffers,
   publicDataGenerations,
+  publicOfferBaselines,
   transitAvailabilitySamples,
   transitOffers,
   transitStations,
 } from "@/lib/db/schema";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PgTable, PgInsertValue } from "drizzle-orm/pg-core";
 import { calculateRechargeCoefficient } from "@/lib/transit/ranking";
 import { isTransitStationPublic } from "@/lib/transit/types";
 import { PUBLIC_DATA_LIMITS } from "@/lib/public-data/limits";
+import {
+  transitGenerationIdentity,
+  assertSourceVersions,
+  type SourceVersion,
+} from "./generations";
 import {
   loadOfferBaselines,
   saveOfferBaselines,
@@ -162,6 +168,7 @@ async function existingGeneration(
   domain: "channels" | "transit",
   hash: string,
   generatedAt: string,
+  sourceVersions: SourceVersion[] | null = null,
 ) {
   // Coordinate CLI/manual publishers as well as scheduled workflow runs.
   await tx.execute(
@@ -171,6 +178,7 @@ async function existingGeneration(
     .select({
       generatedAt: publicDataGenerations.generatedAt,
       contentHash: publicDataGenerations.contentHash,
+      sourceVersions: publicDataGenerations.sourceVersions,
     })
     .from(publicDataGenerations)
     .where(
@@ -181,12 +189,19 @@ async function existingGeneration(
     )
     .orderBy(desc(publicDataGenerations.publishedAt))
     .limit(1);
-  if (current && Date.parse(generatedAt) < current.generatedAt.getTime())
+  if (current && (current.sourceVersions || sourceVersions))
+    assertSourceVersions(current.sourceVersions, sourceVersions);
+  if (
+    current &&
+    !sourceVersions &&
+    Date.parse(generatedAt) < current.generatedAt.getTime()
+  )
     throw new Error(
       "Snapshot is older than the published generation; current data retained.",
     );
   if (
     current &&
+    !sourceVersions &&
     Date.parse(generatedAt) === current.generatedAt.getTime() &&
     hash !== current.contentHash
   )
@@ -235,6 +250,7 @@ async function insertGeneration(
   domain: "channels" | "transit",
   snapshot: ChannelSnapshot | TransitSnapshot,
   hash: string,
+  sourceVersions: SourceVersion[] | null = null,
 ) {
   const [generation] = await tx
     .insert(publicDataGenerations)
@@ -247,6 +263,7 @@ async function insertGeneration(
           ? (snapshot as ChannelSnapshot).offers.length
           : (snapshot as TransitSnapshot).stations.length,
       contentHash: hash,
+      sourceVersions,
       generatedAt: new Date(snapshot.generatedAt),
     })
     .returning({ id: publicDataGenerations.id });
@@ -404,6 +421,32 @@ export async function publishChannelSnapshot(
           "Channel product identity changed; previous snapshot retained for review.",
         );
     }
+    const retainedProducts = await tx
+      .select({
+        id: publicOfferBaselines.offerId,
+        identity: publicOfferBaselines.identity,
+      })
+      .from(publicOfferBaselines)
+      .where(
+        and(
+          eq(publicOfferBaselines.domain, "channel-products"),
+          inArray(
+            publicOfferBaselines.offerId,
+            snapshot.products.map((product) => product.id),
+          ),
+        ),
+      );
+    for (const retained of retainedProducts) {
+      const incoming = incomingProducts.get(retained.id);
+      if (
+        incoming &&
+        JSON.stringify(retained.identity) !==
+          JSON.stringify([incoming.platform, incoming.productType])
+      )
+        throw new Error(
+          "Channel product identity changed; previous snapshot retained for review.",
+        );
+    }
     const baseline = await tx
       .select({
         merchantId: channelPublicOffers.merchantId,
@@ -535,6 +578,16 @@ export async function publishChannelSnapshot(
       ]),
     );
     await clearChannelRows(tx);
+    await saveOfferBaselines(
+      tx,
+      "channel-products",
+      snapshot.products.map((product) => ({
+        id: product.id,
+        identity: [product.platform, product.productType],
+        payload: {},
+        firstSeenAt: new Date(snapshot.generatedAt),
+      })),
+    );
     const offerCounts = new Map<
       string,
       { total: number; inStock: number; latest: Date }
@@ -801,7 +854,7 @@ export async function publishTransitSnapshot(
       "Transit snapshot has no public stations; previous published generation retained.",
     );
   }
-  const hash = contentHash(snapshot);
+  const { hash, versions } = transitGenerationIdentity(snapshot);
   const database = getPublicDataDatabase();
   return database.transaction(async (tx) => {
     const previous = await existingGeneration(
@@ -809,6 +862,7 @@ export async function publishTransitSnapshot(
       "transit",
       hash,
       snapshot.generatedAt,
+      versions,
     );
     if (
       previous?.status === "published" &&
@@ -825,7 +879,8 @@ export async function publishTransitSnapshot(
       };
     }
     const generationId =
-      previous?.id ?? (await insertGeneration(tx, "transit", snapshot, hash));
+      previous?.id ??
+      (await insertGeneration(tx, "transit", snapshot, hash, versions));
     if (previous) {
       await tx
         .update(publicDataGenerations)
@@ -833,6 +888,7 @@ export async function publishTransitSnapshot(
           status: "building",
           sourceCount: snapshot.sourceCount,
           recordCount: snapshot.stations.length,
+          sourceVersions: versions,
           generatedAt: new Date(snapshot.generatedAt),
           publishedAt: null,
           error: null,

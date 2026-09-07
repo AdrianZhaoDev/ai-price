@@ -79,7 +79,7 @@ export async function loadOfferBaselines<T extends Record<string, unknown>>(
 
 export async function saveOfferBaselines(
   tx: Transaction,
-  domain: "channels" | "transit",
+  domain: "channels" | "transit" | "channel-products",
   rows: Array<
     BaselineInput & { payload: Record<string, unknown>; firstSeenAt: Date }
   >,
