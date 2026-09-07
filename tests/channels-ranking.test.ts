@@ -31,6 +31,25 @@ function offer(overrides: Partial<ChannelOffer> = {}): ChannelOffer {
 }
 
 describe("channel availability and ranking", () => {
+  it.each(["price_asc", "price_desc"] as const)(
+    "keeps unknown prices last in %s",
+    (sort) => {
+      const rows = [
+        offer({ id: "unknown", priceMinor: null }),
+        offer({ id: "cheap", priceMinor: 100 }),
+        offer({ id: "expensive", priceMinor: 200 }),
+      ];
+      expect(
+        sortChannelOffers(rows, sort, { now: referenceNow }).map(
+          (row) => row.id,
+        ),
+      ).toEqual(
+        sort === "price_asc"
+          ? ["cheap", "expensive", "unknown"]
+          : ["expensive", "cheap", "unknown"],
+      );
+    },
+  );
   it("does not label or count stale inventory as currently available", () => {
     const stale = offer({
       lastSeenAt: "2026-09-01T00:00:00Z",

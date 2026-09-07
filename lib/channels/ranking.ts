@@ -415,6 +415,9 @@ export function sortChannelOffers(
     let primary = 0;
     switch (sort.by) {
       case "price":
+        // Unknown prices stay last within the availability group in either direction.
+        if ((left.priceMinor === null) !== (right.priceMinor === null))
+          return left.priceMinor === null ? 1 : -1;
         primary = priceCompare(left, right);
         break;
       case "updated":
