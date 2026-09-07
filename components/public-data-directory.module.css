@@ -42,18 +42,7 @@
   margin: 0;
 }
 
-.subnav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 28px;
-  padding: 4px;
-  border: 1px solid var(--separator);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--surface-solid) 75%, transparent);
-}
-
-.subnav a {
+.backLink {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -64,8 +53,7 @@
   font-weight: 700;
 }
 
-.subnav a:hover,
-.subnav a[aria-current="page"] {
+.backLink:hover {
   background: var(--tint-soft);
   color: var(--tint);
 }
