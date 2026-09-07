@@ -184,30 +184,12 @@ input:focus-visible {
 }
 
 .brand-mark {
-  position: relative;
-  display: grid;
+  display: block;
+  flex: 0 0 auto;
   width: 31px;
   height: 31px;
-  place-items: center;
-  overflow: hidden;
   border-radius: 10px;
-  background: linear-gradient(145deg, #1b70da, #0053aa);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.4),
-    0 5px 14px rgba(0, 85, 175, 0.25);
-}
-
-.brand-mark span {
-  position: absolute;
-  width: 15px;
-  height: 6px;
-  border: 1.5px solid white;
-  border-radius: 999px;
-  transform: rotate(45deg);
-}
-
-.brand-mark span:last-child {
-  transform: rotate(-45deg);
+  box-shadow: 0 5px 14px rgba(11, 27, 51, 0.2);
 }
 
 .brand-copy {
@@ -219,6 +201,10 @@ input:focus-visible {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.brand-name-accent {
+  color: var(--tint);
 }
 
 .brand-copy small {
