@@ -3,6 +3,7 @@ import { modes } from "@/lib/data/catalog";
 import { DEFAULT_LOCALE, getMessages, type Locale } from "@/lib/i18n";
 import type { PriceMode } from "@/lib/pricing/types";
 import { modeHref } from "@/lib/seo";
+import { BrandMark } from "./brand-mark";
 import { LanguageSwitcher } from "./language-switcher";
 import { PrivacyPreferencesButton } from "./privacy-preferences-button";
 import { ThemeToggle } from "./theme-toggle";
@@ -37,12 +38,11 @@ export function SiteHeader({
         className="brand"
         aria-label={messages.brand.homeLabel}
       >
-        <span className="brand-mark" aria-hidden="true">
-          <span />
-          <span />
-        </span>
+        <BrandMark />
         <span className="brand-copy">
-          <strong>Low Price Radar</strong>
+          <strong>
+            Low Price <span className="brand-name-accent">Radar</span>
+          </strong>
           <small>{messages.brand.tagline}</small>
         </span>
       </Link>

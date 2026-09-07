@@ -8,6 +8,20 @@ vi.mock("@/components/language-switcher", () => ({
 vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 
 describe("primary directory navigation", () => {
+  it("renders the selected signal-compass brand identity", () => {
+    const document = new DOMParser().parseFromString(
+      renderToStaticMarkup(<SiteHeader showNavigation={false} />),
+      "text/html",
+    );
+
+    expect(
+      document.querySelector('[data-brand-mark="signal-compass"]'),
+    ).not.toBeNull();
+    expect(document.querySelector(".brand")?.textContent).toContain(
+      "Low Price Radar",
+    );
+  });
+
   it.each(["zh-CN", "en"] as const)(
     "renders ordered, localized links and one active directory in %s",
     (locale) => {
