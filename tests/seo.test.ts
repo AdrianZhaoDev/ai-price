@@ -34,6 +34,7 @@ import {
   SEO_DESCRIPTION_MIN_LENGTH,
   SITE_ORIGIN,
 } from "@/lib/seo";
+import { isPublicDirectoryIndexingEnabled } from "@/lib/public-data/indexing";
 import nextConfig, {
   privateRouteHeaders,
   securityHeaders,
@@ -48,6 +49,24 @@ describe("SEO routes", () => {
     expect(
       renderSitemapIndexXml(2, new Date("2026-08-10T00:00:00.000Z")),
     ).toContain("/sitemaps/2.xml");
+  });
+
+  it("requires an explicit production gate before indexing public directories", () => {
+    expect(isPublicDirectoryIndexingEnabled({ NODE_ENV: "production" })).toBe(
+      false,
+    );
+    expect(
+      isPublicDirectoryIndexingEnabled({
+        NODE_ENV: "production",
+        PUBLIC_DATA_INDEXING_ENABLED: "true",
+      }),
+    ).toBe(true);
+    expect(
+      isPublicDirectoryIndexingEnabled({
+        NODE_ENV: "development",
+        PUBLIC_DATA_INDEXING_ENABLED: "false",
+      }),
+    ).toBe(false);
   });
 
   it("assigns a stable, distinct URL to every pricing mode", () => {
@@ -209,7 +228,7 @@ describe("SEO routes", () => {
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
     ]);
-    expect(urls.slice(0, 14)).toEqual([
+    expect(urls.slice(0, 18)).toEqual([
       absoluteUrl("/"),
       absoluteUrl("/china-ai-subscriptions"),
       absoluteUrl("/api-pricing"),
@@ -217,6 +236,8 @@ describe("SEO routes", () => {
       absoluteUrl("/privacy"),
       absoluteUrl("/ai-model-release-watch"),
       absoluteUrl("/price-changes"),
+      absoluteUrl("/channels"),
+      absoluteUrl("/api-transit"),
       absoluteUrl("/en"),
       absoluteUrl("/en/china-ai-subscriptions"),
       absoluteUrl("/en/api-pricing"),
@@ -224,10 +245,12 @@ describe("SEO routes", () => {
       absoluteUrl("/en/privacy"),
       absoluteUrl("/en/ai-model-release-watch"),
       absoluteUrl("/en/price-changes"),
+      absoluteUrl("/en/channels"),
+      absoluteUrl("/en/api-transit"),
     ]);
     expect(
       urls
-        .slice(14)
+        .slice(18)
         .every((url) =>
           landingPages.some(
             (page) =>

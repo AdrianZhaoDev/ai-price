@@ -64,6 +64,55 @@
       "when": 1786438817148,
       "tag": "0008_fresh_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788676206789,
+      "tag": "0009_white_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788713882665,
+      "tag": "0010_fine_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788724397999,
+      "tag": "0011_preserve_channel_observations",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788725812605,
+      "tag": "0012_channel_source_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788731127142,
+      "tag": "0013_channel_first_seen_lineage",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788733368417,
+      "tag": "0014_public_offer_baselines",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788739500000,
+      "tag": "0015_source_versions_and_product_identities",
+      "breakpoints": true
     }
   ]
 }

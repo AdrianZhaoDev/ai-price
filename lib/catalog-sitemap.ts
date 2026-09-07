@@ -15,6 +15,7 @@ import {
 } from "@/lib/model-release-watch";
 import { absoluteUrl } from "@/lib/seo";
 import { localizedPath, type Locale } from "@/lib/i18n";
+import { isPublicDirectoryIndexingEnabled } from "@/lib/public-data/indexing";
 import { unstable_cache } from "next/cache";
 
 export const SITEMAP_PAGE_SIZE = 45_000;
@@ -32,6 +33,8 @@ const CORE_PAGE_UPDATED_AT = {
   "/privacy": new Date("2026-07-31T00:00:00.000Z"),
   [MODEL_RELEASE_WATCH_PATH]: new Date(MODEL_RELEASE_WATCH_UPDATED_AT),
   "/price-changes": new Date("2026-09-04T00:00:00.000Z"),
+  "/channels": new Date("2026-09-06T00:00:00.000Z"),
+  "/api-transit": new Date("2026-09-06T00:00:00.000Z"),
 } as const;
 
 const INDEXABLE_LOCALES: Locale[] = ["zh-CN", "en"];
@@ -53,10 +56,16 @@ export function buildSitemap(
   models: ModelCatalogSummary[] = [],
 ): MetadataRoute.Sitemap {
   const corePages: MetadataRoute.Sitemap = INDEXABLE_LOCALES.flatMap((locale) =>
-    Object.entries(CORE_PAGE_UPDATED_AT).map(([path, lastModified]) => ({
-      url: absoluteUrl(localizedPath(locale, path)),
-      lastModified,
-    })),
+    Object.entries(CORE_PAGE_UPDATED_AT)
+      .filter(
+        ([path]) =>
+          !["/channels", "/api-transit"].includes(path) ||
+          isPublicDirectoryIndexingEnabled(),
+      )
+      .map(([path, lastModified]) => ({
+        url: absoluteUrl(localizedPath(locale, path)),
+        lastModified,
+      })),
   );
   const indexablePages = landingPages
     .map((page) => buildLandingPageData(page, snapshot, now))

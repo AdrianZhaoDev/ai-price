@@ -41,12 +41,26 @@ export function getReadDatabaseUrl(): string | undefined {
   return databaseUrlForTarget(getReadDatabaseTarget());
 }
 
+/**
+ * Public directory pages may be backed by a remote, read-only snapshot
+ * database while the legacy official-price collector continues to use the
+ * VPS-local database.  This optional override lets GitHub-hosted public-data
+ * collectors publish without forcing every existing page to switch targets.
+ */
+export function getPublicDataDatabaseUrl(): string | undefined {
+  return process.env.PUBLIC_DATA_DATABASE_URL ?? getReadDatabaseUrl();
+}
+
 export function getWriteDatabaseUrl(): string | undefined {
   return databaseUrlForTarget(getWriteDatabaseTarget());
 }
 
 export function isReadDatabaseConfigured(): boolean {
   return Boolean(getReadDatabaseUrl());
+}
+
+export function isPublicDataDatabaseConfigured(): boolean {
+  return Boolean(getPublicDataDatabaseUrl());
 }
 
 export function isDatabaseConfigured(): boolean {
@@ -84,6 +98,14 @@ export function getReadDatabase(): Database {
     throw new Error(
       `${getReadDatabaseTarget()} read database is not configured.`,
     );
+  }
+  return databaseForUrl(url);
+}
+
+export function getPublicDataDatabase(): Database {
+  const url = getPublicDataDatabaseUrl();
+  if (!url) {
+    throw new Error("Public data database is not configured.");
   }
   return databaseForUrl(url);
 }

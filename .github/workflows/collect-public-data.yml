@@ -1,0 +1,104 @@
+name: Collect public data
+
+# Public channel/transit collection runs on a GitHub-hosted runner and writes
+# only its published snapshot to the remote database.  The existing VPS
+# official-price timer is deliberately unchanged during this staged rollout.
+on:
+  schedule:
+    # GitHub cron is UTC.  A non-zero minute avoids the top-of-hour burst.
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A snapshot publish is an atomic database operation.  Serialize scheduled and
+# manually dispatched runs so a retry cannot interleave two generations.
+concurrency:
+  group: public-data-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    # A manual run may select an arbitrary ref.  Only execute with production
+    # secrets from the reviewed default branch; feature refs get a clean skip.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.PUBLIC_DATA_COLLECTION_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUBLIC_DATA_DOMAIN: all
+      # Keep the public collector's upstream fan-out bounded and deterministic.
+      PUBLIC_DATA_CONCURRENCY: "1"
+      # This job must use direct egress; do not inherit a proxy/WARP endpoint.
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      NO_PROXY: "*"
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_LOGLEVEL: error
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate public collection configuration
+        shell: bash
+        env:
+          # Keep credentials away from checkout, setup-node, and npm lifecycle
+          # scripts.  Values are tested for presence but are never echoed.
+          PUBLIC_DATA_DATABASE_URL: ${{ secrets.PUBLIC_DATA_DATABASE_URL }}
+          PUBLIC_CHANNELS_SNAPSHOT_URL: ${{ secrets.PUBLIC_CHANNELS_SNAPSHOT_URL || vars.PUBLIC_CHANNELS_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_SNAPSHOT_URL: ${{ secrets.PUBLIC_TRANSIT_SNAPSHOT_URL || vars.PUBLIC_TRANSIT_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_DIRECT_SOURCES: ${{ vars.PUBLIC_TRANSIT_DIRECT_SOURCES }}
+          PUBLIC_CHANNELS_DIRECT_SOURCES: ${{ vars.PUBLIC_CHANNELS_DIRECT_SOURCES }}
+        run: |
+          set -euo pipefail
+          # Do not print values: database and feed URLs may be secrets.  A
+          # missing value is an intentional hard failure, not an accidental
+          # localhost fallback or a partial snapshot publish.
+          if [[ -z "${PUBLIC_DATA_DATABASE_URL:-}" ]]; then
+            echo "PUBLIC_DATA_DATABASE_URL is not configured; refusing to run public collection." >&2
+            exit 1
+          fi
+          case "${PUBLIC_DATA_DATABASE_URL}" in
+            postgres://*|postgresql://*) ;;
+            *)
+              echo "PUBLIC_DATA_DATABASE_URL must be a PostgreSQL URL; refusing to run public collection." >&2
+              exit 1
+              ;;
+          esac
+          if [[ "${PUBLIC_DATA_DATABASE_URL}" == *localhost* ||
+            "${PUBLIC_DATA_DATABASE_URL}" == *127.0.0.1* ||
+            "${PUBLIC_DATA_DATABASE_URL}" == *"[::1]"* ]]; then
+            echo "PUBLIC_DATA_DATABASE_URL must target the remote public-data database; refusing to run public collection." >&2
+            exit 1
+          fi
+          if [[ -z "${PUBLIC_CHANNELS_SNAPSHOT_URL:-}" && -z "${PUBLIC_TRANSIT_SNAPSHOT_URL:-}" && -z "${PUBLIC_TRANSIT_DIRECT_SOURCES:-}" && -z "${PUBLIC_CHANNELS_DIRECT_SOURCES:-}" ]]; then
+            echo "Configure at least one reviewed snapshot or direct source; refusing to run public collection." >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --loglevel=error
+
+      - name: Run scheduled public collection
+        # Explicitly mark this as scheduled so the collector records the right
+        # trigger and applies its scheduled-run failure policy.
+        env:
+          PUBLIC_DATA_DATABASE_URL: ${{ secrets.PUBLIC_DATA_DATABASE_URL }}
+          PUBLIC_CHANNELS_SNAPSHOT_URL: ${{ secrets.PUBLIC_CHANNELS_SNAPSHOT_URL || vars.PUBLIC_CHANNELS_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_SNAPSHOT_URL: ${{ secrets.PUBLIC_TRANSIT_SNAPSHOT_URL || vars.PUBLIC_TRANSIT_SNAPSHOT_URL }}
+          PUBLIC_TRANSIT_DIRECT_SOURCES: ${{ vars.PUBLIC_TRANSIT_DIRECT_SOURCES }}
+          PUBLIC_CHANNELS_DIRECT_SOURCES: ${{ vars.PUBLIC_CHANNELS_DIRECT_SOURCES }}
+        run: env -u http_proxy -u https_proxy -u all_proxy -u no_proxy npm run collect:public -- --trigger=scheduled --domain=all
+        timeout-minutes: 25
+        continue-on-error: false

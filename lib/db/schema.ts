@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -6,11 +7,35 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+// Last accepted evidence survives removal from the current public catalogue.
+// This is a collector-only safety baseline, not a public price-history API.
+export const publicOfferBaselines = pgTable(
+  "public_offer_baselines",
+  {
+    domain: text("domain").notNull(),
+    offerId: text("offer_id").notNull(),
+    identity: jsonb("identity").$type<unknown[]>().notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.domain, table.offerId] }),
+    index("public_offer_baselines_identity_idx").on(
+      table.domain,
+      sql`md5(${table.identity}::text)`,
+    ),
+  ],
+);
 
 export const priceModeEnum = pgEnum("price_mode", [
   "global",
@@ -39,6 +64,22 @@ export const collectionStatusEnum = pgEnum("collection_status", [
   "partial",
   "failed",
 ]);
+
+/**
+ * Public comparison data is intentionally isolated from the official pricing
+ * tables above.  The same generation boundary is used by the GitHub-hosted
+ * collectors and by the read-only web process, so a broken import cannot
+ * expose a half-written snapshot.
+ */
+export const publicDataDomainEnum = pgEnum("public_data_domain", [
+  "channels",
+  "transit",
+]);
+
+export const publicDataGenerationStatusEnum = pgEnum(
+  "public_data_generation_status",
+  ["building", "published", "failed"],
+);
 
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "pending",
@@ -685,6 +726,436 @@ export const collectionErrors = pgTable(
       table.sourceId,
       table.resolvedAt,
       table.createdAt,
+    ),
+  ],
+);
+
+export const publicDataGenerations = pgTable(
+  "public_data_generations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    domain: publicDataDomainEnum("domain").notNull(),
+    status: publicDataGenerationStatusEnum("status")
+      .default("building")
+      .notNull(),
+    sourceCount: integer("source_count").default(0).notNull(),
+    recordCount: integer("record_count").default(0).notNull(),
+    contentHash: text("content_hash").notNull(),
+    sourceVersions:
+      jsonb("source_versions").$type<
+        Array<{ stationId: string; generatedAt: string; contentHash: string }>
+      >(),
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("public_data_generations_latest_idx").on(
+      table.domain,
+      table.status,
+      table.generatedAt,
+    ),
+    uniqueIndex("public_data_generations_domain_hash_unique").on(
+      table.domain,
+      table.contentHash,
+    ),
+  ],
+);
+
+export const channelMerchants = pgTable(
+  "channel_merchants",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    host: text("host").notNull(),
+    websiteUrl: text("website_url").notNull(),
+    status: text("status").default("pending_review").notNull(),
+    operatorType: text("operator_type"),
+    platforms: jsonb("platforms").$type<string[]>().default([]).notNull(),
+    riskLabels: jsonb("risk_labels").$type<string[]>().default([]).notNull(),
+    offerCount: integer("offer_count").default(0).notNull(),
+    inStockCount: integer("in_stock_count").default(0).notNull(),
+    latestSeenAt: timestamp("latest_seen_at", { withTimezone: true }),
+    searchText: text("search_text").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("channel_merchants_generation_slug_unique").on(
+      table.generationId,
+      table.slug,
+    ),
+    index("channel_merchants_generation_search_idx").on(table.generationId),
+    index("channel_merchants_generation_status_idx").on(
+      table.generationId,
+      table.status,
+    ),
+  ],
+);
+
+export const channelProducts = pgTable(
+  "channel_products",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    slug: text("slug").notNull(),
+    displayName: text("display_name").notNull(),
+    platform: text("platform").notNull(),
+    productType: text("product_type").notNull(),
+    spec: text("spec"),
+    summary: text("summary"),
+    aliases: jsonb("aliases").$type<string[]>().default([]).notNull(),
+    offerCount: integer("offer_count").default(0).notNull(),
+    inStockCount: integer("in_stock_count").default(0).notNull(),
+    latestSeenAt: timestamp("latest_seen_at", { withTimezone: true }),
+    searchText: text("search_text").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("channel_products_generation_slug_unique").on(
+      table.generationId,
+      table.slug,
+    ),
+    index("channel_products_generation_filter_idx").on(
+      table.generationId,
+      table.platform,
+      table.productType,
+    ),
+    index("channel_products_generation_search_idx").on(table.generationId),
+  ],
+);
+
+export const channelPublicOffers = pgTable(
+  "channel_public_offers",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    merchantId: text("merchant_id")
+      .references(() => channelMerchants.id, { onDelete: "restrict" })
+      .notNull(),
+    productId: text("product_id")
+      .references(() => channelProducts.id, { onDelete: "restrict" })
+      .notNull(),
+    sourceName: text("source_name").notNull(),
+    sourceType: text("source_type").default("manual_snapshot").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    title: text("title").notNull(),
+    offerUrl: text("offer_url").notNull(),
+    priceMinor: numeric("price_minor", {
+      precision: 20,
+      scale: 6,
+      mode: "number",
+    }),
+    currency: text("currency").notNull(),
+    availability: text("availability").default("unknown").notNull(),
+    stockCount: integer("stock_count"),
+    minOrderQuantity: integer("min_order_quantity"),
+    bulkPricingTiers: jsonb("bulk_pricing_tiers")
+      .$type<Array<Record<string, unknown>>>()
+      .default([])
+      .notNull(),
+    tags: jsonb("tags").$type<string[]>().default([]).notNull(),
+    riskLabels: jsonb("risk_labels").$type<string[]>().default([]).notNull(),
+    status: text("status").default("pending_review").notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    searchText: text("search_text").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("channel_public_offers_generation_filter_idx").on(
+      table.generationId,
+      table.availability,
+      table.currency,
+      table.priceMinor,
+    ),
+    index("channel_public_offers_generation_merchant_idx").on(
+      table.generationId,
+      table.merchantId,
+      table.lastSeenAt,
+    ),
+    index("channel_public_offers_generation_product_idx").on(
+      table.generationId,
+      table.productId,
+      table.lastSeenAt,
+    ),
+    index("channel_public_offers_generation_search_idx").on(table.generationId),
+  ],
+);
+
+export const channelOfferObservations = pgTable(
+  "channel_offer_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // Stable external offer key, independent of replaceable current rows.
+    offerId: text("offer_id").notNull(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "restrict" })
+      .notNull(),
+    offerSnapshot: jsonb("offer_snapshot")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    priceMinor: numeric("price_minor", {
+      precision: 20,
+      scale: 6,
+      mode: "number",
+    }),
+    currency: text("currency").notNull(),
+    availability: text("availability").notNull(),
+    stockCount: integer("stock_count"),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    rawHash: text("raw_hash").notNull(),
+  },
+  (table) => [
+    uniqueIndex("channel_offer_observations_identity_unique").on(
+      table.offerId,
+      table.observedAt,
+      table.rawHash,
+    ),
+    index("channel_offer_observations_offer_idx").on(
+      table.offerId,
+      table.observedAt,
+    ),
+  ],
+);
+
+export const transitStations = pgTable(
+  "transit_stations",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    websiteUrl: text("website_url").notNull(),
+    apiBaseUrl: text("api_base_url"),
+    status: text("status").default("unknown").notNull(),
+    dataStatus: text("data_status").default("pending_review").notNull(),
+    stationSystem: text("station_system"),
+    operatorType: text("operator_type"),
+    commercialRelation: text("commercial_relation").default("none").notNull(),
+    summary: text("summary"),
+    channelTypes: jsonb("channel_types")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    accountPools: jsonb("account_pools")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    paymentMethods: jsonb("payment_methods")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    riskLabels: jsonb("risk_labels").$type<string[]>().default([]).notNull(),
+    usageAdvice: jsonb("usage_advice").$type<string[]>().default([]).notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    lowestMultiplier: numeric("lowest_multiplier", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    currency: text("currency"),
+    lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true }),
+    lastCollectedAt: timestamp("last_collected_at", { withTimezone: true }),
+    payload: jsonb("payload")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    searchText: text("search_text").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("transit_stations_generation_slug_unique").on(
+      table.generationId,
+      table.slug,
+    ),
+    index("transit_stations_generation_filter_idx").on(
+      table.generationId,
+      table.status,
+      table.dataStatus,
+      table.lowestMultiplier,
+    ),
+    index("transit_stations_generation_search_idx").on(table.generationId),
+  ],
+);
+
+export const transitOffers = pgTable(
+  "transit_offers",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    stationId: text("station_id")
+      .references(() => transitStations.id, { onDelete: "cascade" })
+      .notNull(),
+    family: text("family").notNull(),
+    standardModel: text("standard_model").notNull(),
+    groupName: text("group_name"),
+    billingMode: text("billing_mode").notNull(),
+    currency: text("currency").notNull(),
+    rechargeRatio: numeric("recharge_ratio", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    rechargeCoefficient: numeric("recharge_coefficient", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    modelMultiplier: numeric("model_multiplier", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    stationGroupMultiplier: numeric("station_group_multiplier", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    combinedMultiplier: numeric("combined_multiplier", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    inputPrice: numeric("input_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    outputPrice: numeric("output_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    cacheReadPrice: numeric("cache_read_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    cacheWritePrice: numeric("cache_write_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    imageOutputPrice: numeric("image_output_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    fixedPrice: numeric("fixed_price", {
+      precision: 20,
+      scale: 8,
+      mode: "number",
+    }),
+    fixedPriceCurrency: text("fixed_price_currency"),
+    fixedPriceUnit: text("fixed_price_unit"),
+    accountPool: text("account_pool"),
+    channelType: text("channel_type"),
+    priceSourceUrl: text("price_source_url"),
+    priceSourceLabel: text("price_source_label"),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    availability: jsonb("availability")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    status: text("status").default("unknown").notNull(),
+    payload: jsonb("payload")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("transit_offers_generation_station_idx").on(
+      table.generationId,
+      table.stationId,
+      table.status,
+    ),
+    index("transit_offers_generation_model_idx").on(
+      table.generationId,
+      table.standardModel,
+      table.family,
+      table.combinedMultiplier,
+    ),
+  ],
+);
+
+export const transitAvailabilitySamples = pgTable(
+  "transit_availability_samples",
+  {
+    id: text("id").primaryKey(),
+    generationId: uuid("generation_id")
+      .references(() => publicDataGenerations.id, { onDelete: "cascade" })
+      .notNull(),
+    stationId: text("station_id")
+      .references(() => transitStations.id, { onDelete: "cascade" })
+      .notNull(),
+    offerId: text("offer_id").references(() => transitOffers.id, {
+      onDelete: "set null",
+    }),
+    scope: text("scope").notNull(),
+    standardModel: text("standard_model"),
+    groupName: text("group_name"),
+    sourceType: text("source_type").notNull(),
+    sourceUrl: text("source_url"),
+    matchLevel: text("match_level").notNull(),
+    success: boolean("success").notNull(),
+    latencyMs: integer("latency_ms"),
+    sampleCount: integer("sample_count").default(1).notNull(),
+    sevenDayRate: numeric("seven_day_rate", {
+      precision: 8,
+      scale: 5,
+      mode: "number",
+    }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    note: text("note"),
+  },
+  (table) => [
+    index("transit_availability_samples_scope_idx").on(
+      table.stationId,
+      table.scope,
+      table.standardModel,
+      table.groupName,
+      table.checkedAt,
+    ),
+    index("transit_availability_samples_generation_idx").on(
+      table.generationId,
+      table.checkedAt,
     ),
   ],
 );

@@ -58,6 +58,8 @@ const landingPaths = [
 const crawlablePaths = [
   ...publicPages.map((entry) => entry.path),
   ...landingPaths,
+  "/channels",
+  "/api-transit",
   "/ai-model-release-watch",
   "/methodology",
   "/privacy",
