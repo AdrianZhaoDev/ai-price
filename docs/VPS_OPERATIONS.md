@@ -201,7 +201,11 @@ Nginx 只微缓存无查询参数、无 Cookie、无 Authorization 的公开 HTM
 200 响应，缓存键包含完整 `Accept-Language`，有效期 15 分钟。后台、API、订阅结果和
 所有参数页都绕过缓存；浏览器与 Cloudflare 仍收到 `no-store`。`pricing-data` 使用独立
 location，不进入 HTML 微缓存，并保留应用返回的 `public, s-maxage=900`；
-`/_next/static/` 与公开静态资源同样保留应用的长期或 immutable 缓存头。
+带内容哈希的 `/_next/static/` 由 Nginx 从原子切换的共享静态树直接提供，并
+设置一年 immutable 缓存。每次发布只从当前 release 和一个回滚 release 重建
+未公开的临时静态树，再一次性切换软链接；不会原地覆盖正在提供的文件，也不会
+无限累积旧构建。这样旧 HTML/微缓存引用的哈希文件在发布窗口内仍然可用，同时
+不唤醒 Node。其他公开静态资源仍保留应用返回的长期缓存头。
 
 ### 3.4 GitHub 不可用时的手工回退
 
@@ -544,16 +548,21 @@ echo "$CURRENT_RELEASE"
 du -sh /opt/ai-price/releases/*
 ```
 
-至少保留当前版本和一个可用旧版本。只删除核对过的确切目录：
+发布脚本会自动保留当前版本和一个可用旧版本，同时原子重建两者的共享静态树。
+需要手工核对或清理时先 dry-run：
 
 ```bash
-OLD_RELEASE=/opt/ai-price/releases/确切旧时间戳
-test "$OLD_RELEASE" != "$CURRENT_RELEASE"
-test -d "$OLD_RELEASE"
-rm -rf -- "$OLD_RELEASE"
+/usr/local/bin/ai-price-prune-releases --keep 2
 ```
 
-禁止使用未检查的通配符删除 release。
+确认输出中的当前版、保留版和待删除目录后执行：
+
+```bash
+/usr/local/bin/ai-price-prune-releases --keep 2 --apply
+```
+
+该命令持有发布锁，先重建并原子切换共享静态树，再删除更旧的 release 和静态树。
+禁止绕过该命令用通配符删除 release。
 
 ## 8. 快速排障
 
@@ -699,7 +708,7 @@ openssl x509 -checkend 1209600 -noout \
 - HSTS：`max-age=15552000; includeSubDomains`，暂不加入 preload；
 - Early Hints、Crawler Hints：启用；Speed Brain、Rocket Loader、0-RTT：保持关闭；
 - HTML 默认不在 Cloudflare 边缘强制缓存；源站 Nginx 只对无查询、无 Cookie、无鉴权
-  的公开 canonical 请求做 15 分钟微缓存；带内容哈希的 `/_next/static/` 和明确静态
+  的公开 canonical 请求做 15 分钟微缓存；带内容哈希的 `/_next/static/` 由源站 Nginx 直接提供，明确静态
   资源使用长缓存；
 - `/admin/`、`/api/`、`/subscription/` 和 `/en/subscription/` 必须
   `private, no-store`；`/pricing-data/` 保留版本化响应的共享缓存头；
