@@ -49,6 +49,13 @@ for release_name in "${release_names[@]}"; do
   if [[ -n "${kept_releases[${release_path}]:-}" ]]; then
     continue
   fi
+  if [[ ! -f "${release_path}/.release-ready" ]] ||
+    [[ -L "${release_path}/.release-ready" ]]; then
+    find -P "${release_path}" -xdev -depth -delete
+    echo "Removed incomplete release: ${release_path}"
+    ((removed_releases += 1))
+    continue
+  fi
   if ((kept < keep_count)); then
     kept_releases["${release_path}"]=1
     ((kept += 1))

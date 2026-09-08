@@ -34,6 +34,7 @@ function createRelease(
   releasesRoot: string,
   name: string,
   dependencyPath: string,
+  ready = true,
 ) {
   const releasePath = path.join(releasesRoot, name);
   mkdirSync(releasePath);
@@ -41,6 +42,9 @@ function createRelease(
     path.join(dependencyPath, "node_modules"),
     path.join(releasePath, "node_modules"),
   );
+  if (ready) {
+    writeFileSync(path.join(releasePath, ".release-ready"), "");
+  }
   return releasePath;
 }
 
@@ -65,6 +69,12 @@ describe("release pruner", () => {
       "20260101000000000003",
       sharedDependency,
     );
+    const incompleteRelease = createRelease(
+      releasesRoot,
+      "20260101000000000004",
+      orphanDependency,
+      false,
+    );
     symlinkSync(currentRelease, path.join(appRoot, "current"));
 
     execFileSync("bash", [script], {
@@ -83,6 +93,7 @@ describe("release pruner", () => {
       readlinkSync(path.join(currentRelease, "node_modules")),
     ).not.toThrow();
     expect(existsSync(oldRelease)).toBe(false);
+    expect(existsSync(incompleteRelease)).toBe(false);
     expect(existsSync(oldDependency)).toBe(false);
     expect(existsSync(orphanDependency)).toBe(false);
     expect(existsSync(path.join(sharedDependency, "node_modules"))).toBe(true);

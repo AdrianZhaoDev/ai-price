@@ -477,6 +477,10 @@ test -d "$ROLLBACK_RELEASE"
 切换并验证：
 
 ```bash
+exec 9>/opt/ai-price/.deploy.lock
+flock 9
+ROLLBACK_RELEASE=/opt/ai-price/releases/旧版本时间戳
+test -d "$ROLLBACK_RELEASE"
 ln -sfn "$ROLLBACK_RELEASE" /opt/ai-price/current
 chown -h ai-price:ai-price /opt/ai-price/current
 test ! -L /var/cache/nginx/ai-price-public
@@ -508,9 +512,11 @@ COMMIT;"
 
 ## 7. 清理旧版本
 
-安装器会启用 `ai-price-prune-releases.timer`，每天持有部署锁后保留最新 5 个
-release（始终包含当前 release），再删除没有任何保留 release 通过 `node_modules`
-软链接引用的共享依赖目录。不要绕过该锁并发执行部署或清理。
+安装器会启用 `ai-price-prune-releases.timer`，每天持有部署锁后保留最新 5 个已通过
+健康检查并带有 `.release-ready` 标记的 release（始终包含当前 release）。未完成的发布
+不会占用保留名额；安装失败时也会在尚未切换为当前版本的前提下自动删除其目录。随后，
+清理器会删除没有任何保留 release 通过 `node_modules` 软链接引用的共享依赖目录。不要
+绕过该锁并发执行部署、回滚或清理。
 
 查看自动清理状态：
 

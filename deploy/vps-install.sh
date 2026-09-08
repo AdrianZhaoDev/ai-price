@@ -15,6 +15,19 @@ exec 9>"${APP_ROOT}/.deploy.lock"
 flock 9
 RELEASE_ID="$(date -u +%Y%m%d%H%M%S%N)"
 RELEASE_DIR="${APP_ROOT}/releases/${RELEASE_ID}"
+release_ready=false
+
+cleanup_incomplete_release() {
+  if [[ "${release_ready}" == "true" ]] || [[ ! -d "${RELEASE_DIR}" ]]; then
+    return
+  fi
+  if [[ "$(readlink -f -- "${APP_ROOT}/current" 2>/dev/null || true)" == "${RELEASE_DIR}" ]]; then
+    return
+  fi
+  find -P "${RELEASE_DIR}" -xdev -depth -delete
+}
+
+trap cleanup_incomplete_release EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 MISSING_PACKAGES=()
@@ -49,6 +62,14 @@ fi
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${APP_ROOT}/releases"
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" \
   "${APP_ROOT}/shared/dependencies"
+
+PREVIOUS_RELEASE="$(readlink -f -- "${APP_ROOT}/current" 2>/dev/null || true)"
+if [[ "$(dirname -- "${PREVIOUS_RELEASE}")" == "${APP_ROOT}/releases" ]] &&
+  [[ "$(basename -- "${PREVIOUS_RELEASE}")" =~ ^[0-9]{14,23}$ ]] &&
+  [[ -d "${PREVIOUS_RELEASE}" ]] && [[ ! -L "${PREVIOUS_RELEASE}" ]]; then
+  install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
+    "${PREVIOUS_RELEASE}/.release-ready"
+fi
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${RELEASE_DIR}"
 tar -xzf "${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
 install -m 0644 "${LOCK_FILE}" "${RELEASE_DIR}/package-lock.json"
@@ -558,6 +579,11 @@ curl -fsS --max-time 15 -o /dev/null \
   -H "Host: ${PRIMARY_DOMAIN}" http://127.0.0.1/
 curl -fsS --max-time 15 --resolve "${PRIMARY_DOMAIN}:443:127.0.0.1" \
   "https://${PRIMARY_DOMAIN}/" >/dev/null
+
+install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
+  "${RELEASE_DIR}/.release-ready"
+release_ready=true
+trap - EXIT
 
 OBSERVATION_COUNT="$(
   runuser -u postgres -- psql -d ai_price -Atc \
