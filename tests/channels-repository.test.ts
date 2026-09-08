@@ -142,6 +142,7 @@ describe("ChannelRepository", () => {
 
     const injected = new ChannelRepository({
       databaseConfigured: false,
+      now: () => new Date("2026-09-06T01:00:00.000Z"),
       loadPublishedOffers: () => syntheticChannelOffers,
     });
     const offers = await injected.listOffers({

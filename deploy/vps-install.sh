@@ -53,6 +53,8 @@ install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${RELEASE_DIR}"
 tar -xzf "${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
 install -m 0644 "${LOCK_FILE}" "${RELEASE_DIR}/package-lock.json"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${RELEASE_DIR}"
+install -m 0755 "${RELEASE_DIR}/deploy/prune-releases.sh" \
+  /usr/local/sbin/ai-price-prune-releases
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
@@ -275,6 +277,36 @@ OnCalendar=*-*-* 00/4:00:00
 RandomizedDelaySec=300
 Persistent=true
 Unit=ai-price-collect-scheduled.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+cat >/etc/systemd/system/ai-price-prune-releases.service <<'EOF'
+[Unit]
+Description=Prune old AI Price Atlas releases and dependencies
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ai-price-prune-releases
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ai-price/.deploy.lock /opt/ai-price/releases /opt/ai-price/shared/dependencies
+EOF
+
+cat >/etc/systemd/system/ai-price-prune-releases.timer <<'EOF'
+[Unit]
+Description=Daily pruning of old AI Price Atlas releases and dependencies
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=ai-price-prune-releases.service
 
 [Install]
 WantedBy=timers.target
@@ -514,7 +546,8 @@ nginx -t
 
 systemctl daemon-reload
 systemctl enable --now \
-  ai-price.service ai-price-collect.timer nginx certbot.timer
+  ai-price.service ai-price-collect.timer ai-price-prune-releases.timer \
+  nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
 find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete

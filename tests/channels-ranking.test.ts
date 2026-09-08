@@ -234,12 +234,16 @@ describe("channel availability and ranking", () => {
   });
 
   it("filters by query, merchant, availability and minor-unit price", () => {
-    const filtered = filterChannelOffers(syntheticChannelOffers, {
-      query: "cloudbox basic",
-      merchantIds: ["synthetic-merchant-alpha"],
-      availability: "in_stock",
-      maxPriceMinor: 1000,
-    });
+    const filtered = filterChannelOffers(
+      syntheticChannelOffers,
+      {
+        query: "cloudbox basic",
+        merchantIds: ["synthetic-merchant-alpha"],
+        availability: "in_stock",
+        maxPriceMinor: 1000,
+      },
+      { now: referenceNow },
+    );
     expect(filtered.map((item) => item.id)).toEqual([
       "synthetic-offer-basic-alpha-api",
       "synthetic-offer-basic-alpha-page-duplicate",

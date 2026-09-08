@@ -508,6 +508,28 @@ COMMIT;"
 
 ## 7. 清理旧版本
 
+安装器会启用 `ai-price-prune-releases.timer`，每天持有部署锁后保留最新 5 个
+release（始终包含当前 release），再删除没有任何保留 release 通过 `node_modules`
+软链接引用的共享依赖目录。不要绕过该锁并发执行部署或清理。
+
+查看自动清理状态：
+
+```bash
+systemctl status ai-price-prune-releases.timer --no-pager
+systemctl list-timers ai-price-prune-releases.timer --no-pager
+journalctl -u ai-price-prune-releases.service -n 100 --no-pager
+```
+
+需要立即执行相同的受保护清理时：
+
+```bash
+systemctl start ai-price-prune-releases.service
+systemctl status ai-price-prune-releases.service --no-pager
+```
+
+清理器只识别时间戳 release 和 64 位小写十六进制 lockfile 哈希依赖目录；命名不符合
+约定的目录会跳过并记录告警，必须人工核对，不能扩大删除匹配范围。
+
 ```bash
 CURRENT_RELEASE="$(readlink -f /opt/ai-price/current)"
 echo "$CURRENT_RELEASE"
