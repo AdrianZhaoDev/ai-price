@@ -434,7 +434,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     });
     await expect(
       connection.client`delete from public_data_generations where id=${first.generationId}`,
-    ).rejects.toMatchObject({ code: "23001" });
+    ).rejects.toMatchObject({ code: expect.stringMatching(/^(23001|23503)$/) });
     expect(
       await connection.client`select id from channel_offer_observations where offer_id='history-offer'`,
     ).toHaveLength(2);

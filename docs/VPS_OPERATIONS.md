@@ -477,6 +477,10 @@ test -d "$ROLLBACK_RELEASE"
 切换并验证：
 
 ```bash
+exec 9>/opt/ai-price/.deploy.lock
+flock 9
+ROLLBACK_RELEASE=/opt/ai-price/releases/旧版本时间戳
+test -d "$ROLLBACK_RELEASE"
 ln -sfn "$ROLLBACK_RELEASE" /opt/ai-price/current
 chown -h ai-price:ai-price /opt/ai-price/current
 test ! -L /var/cache/nginx/ai-price-public
@@ -507,6 +511,30 @@ COMMIT;"
 ```
 
 ## 7. 清理旧版本
+
+安装器会启用 `ai-price-prune-releases.timer`，每天持有部署锁后保留最新 5 个已通过
+健康检查并带有 `.release-ready` 标记的 release（始终包含当前 release）。未完成的发布
+不会占用保留名额；安装失败时也会在尚未切换为当前版本的前提下自动删除其目录。随后，
+清理器会删除没有任何保留 release 通过 `node_modules` 软链接引用的共享依赖目录。不要
+绕过该锁并发执行部署、回滚或清理。
+
+查看自动清理状态：
+
+```bash
+systemctl status ai-price-prune-releases.timer --no-pager
+systemctl list-timers ai-price-prune-releases.timer --no-pager
+journalctl -u ai-price-prune-releases.service -n 100 --no-pager
+```
+
+需要立即执行相同的受保护清理时：
+
+```bash
+systemctl start ai-price-prune-releases.service
+systemctl status ai-price-prune-releases.service --no-pager
+```
+
+清理器只识别时间戳 release 和 64 位小写十六进制 lockfile 哈希依赖目录；命名不符合
+约定的目录会跳过并记录告警，必须人工核对，不能扩大删除匹配范围。
 
 ```bash
 CURRENT_RELEASE="$(readlink -f /opt/ai-price/current)"

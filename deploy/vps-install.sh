@@ -15,6 +15,19 @@ exec 9>"${APP_ROOT}/.deploy.lock"
 flock 9
 RELEASE_ID="$(date -u +%Y%m%d%H%M%S%N)"
 RELEASE_DIR="${APP_ROOT}/releases/${RELEASE_ID}"
+release_ready=false
+
+cleanup_incomplete_release() {
+  if [[ "${release_ready}" == "true" ]] || [[ ! -d "${RELEASE_DIR}" ]]; then
+    return
+  fi
+  if [[ "$(readlink -f -- "${APP_ROOT}/current" 2>/dev/null || true)" == "${RELEASE_DIR}" ]]; then
+    return
+  fi
+  find -P "${RELEASE_DIR}" -xdev -depth -delete
+}
+
+trap cleanup_incomplete_release EXIT
 
 export DEBIAN_FRONTEND=noninteractive
 MISSING_PACKAGES=()
@@ -49,10 +62,20 @@ fi
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${APP_ROOT}/releases"
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" \
   "${APP_ROOT}/shared/dependencies"
+
+PREVIOUS_RELEASE="$(readlink -f -- "${APP_ROOT}/current" 2>/dev/null || true)"
+if [[ "$(dirname -- "${PREVIOUS_RELEASE}")" == "${APP_ROOT}/releases" ]] &&
+  [[ "$(basename -- "${PREVIOUS_RELEASE}")" =~ ^[0-9]{14,23}$ ]] &&
+  [[ -d "${PREVIOUS_RELEASE}" ]] && [[ ! -L "${PREVIOUS_RELEASE}" ]]; then
+  install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
+    "${PREVIOUS_RELEASE}/.release-ready"
+fi
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${RELEASE_DIR}"
 tar -xzf "${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
 install -m 0644 "${LOCK_FILE}" "${RELEASE_DIR}/package-lock.json"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${RELEASE_DIR}"
+install -m 0755 "${RELEASE_DIR}/deploy/prune-releases.sh" \
+  /usr/local/sbin/ai-price-prune-releases
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
@@ -275,6 +298,36 @@ OnCalendar=*-*-* 00/4:00:00
 RandomizedDelaySec=300
 Persistent=true
 Unit=ai-price-collect-scheduled.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+cat >/etc/systemd/system/ai-price-prune-releases.service <<'EOF'
+[Unit]
+Description=Prune old AI Price Atlas releases and dependencies
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ai-price-prune-releases
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ai-price/.deploy.lock /opt/ai-price/releases /opt/ai-price/shared/dependencies
+EOF
+
+cat >/etc/systemd/system/ai-price-prune-releases.timer <<'EOF'
+[Unit]
+Description=Daily pruning of old AI Price Atlas releases and dependencies
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=ai-price-prune-releases.service
 
 [Install]
 WantedBy=timers.target
@@ -514,7 +567,8 @@ nginx -t
 
 systemctl daemon-reload
 systemctl enable --now \
-  ai-price.service ai-price-collect.timer nginx certbot.timer
+  ai-price.service ai-price-collect.timer ai-price-prune-releases.timer \
+  nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
 find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
@@ -525,6 +579,11 @@ curl -fsS --max-time 15 -o /dev/null \
   -H "Host: ${PRIMARY_DOMAIN}" http://127.0.0.1/
 curl -fsS --max-time 15 --resolve "${PRIMARY_DOMAIN}:443:127.0.0.1" \
   "https://${PRIMARY_DOMAIN}/" >/dev/null
+
+install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
+  "${RELEASE_DIR}/.release-ready"
+release_ready=true
+trap - EXIT
 
 OBSERVATION_COUNT="$(
   runuser -u postgres -- psql -d ai_price -Atc \
