@@ -7,6 +7,16 @@ const siteConfig = installScript.match(
 )?.[1];
 
 describe("production Nginx behavior", () => {
+  it("leaves the API domain to its independently managed gateway", () => {
+    expect(siteConfig).toBeDefined();
+    expect(siteConfig).not.toContain("ai.lowpriceradar.com");
+    expect(siteConfig).toContain(
+      "server_name lowpriceradar.com www.lowpriceradar.com;",
+    );
+    expect(siteConfig).toContain("server_name www.lowpriceradar.com;");
+    expect(installScript).not.toMatch(/(?:rm|cat >).*00-ai-lowpriceradar/);
+  });
+
   it("writes escaped JSON logs without request query strings", () => {
     expect(siteConfig).toBeDefined();
     expect(siteConfig).toContain("log_format ai_price escape=json");

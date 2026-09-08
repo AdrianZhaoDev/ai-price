@@ -1,6 +1,95 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The API gateway is managed separately and shares the certificate's ai SAN.
+# Run this before changing the main vhost and again after reloading Nginx.
+verify_api_gateway() (
+  set -euo pipefail
+  local api_domain="ai.lowpriceradar.com"
+  local challenge_dir="/var/www/html/.well-known/acme-challenge"
+  local challenge_file challenge_name expected actual nginx_check
+  test -r /etc/nginx/conf.d/00-ai-lowpriceradar.conf || {
+    echo "Install the independent API gateway vhost before deploying the main site." >&2
+    exit 1
+  }
+  nginx_check="$(nginx -t 2>&1)" || { printf '%s\n' "$nginx_check" >&2; exit 1; }
+  if [[ "$nginx_check" == *'conflicting server name "ai.lowpriceradar.com"'* ]]; then
+    printf '%s\n' "$nginx_check" >&2
+    exit 1
+  fi
+  test -d "$challenge_dir"
+  challenge_file="$(mktemp "$challenge_dir/newapi-check.XXXXXXXX")"
+  trap 'rm -f -- "$challenge_file"' EXIT
+  challenge_name="${challenge_file##*/}"
+  expected="api-gateway-$challenge_name"
+  printf '%s' "$expected" > "$challenge_file"
+  chmod 644 "$challenge_file"
+  for target in origin public; do
+    local resolve=()
+    if [[ "$target" == origin ]]; then
+      resolve=(--resolve "$api_domain:80:127.0.0.1" --resolve "$api_domain:443:127.0.0.1")
+    fi
+    actual="$(curl -fsS --max-time 20 "${resolve[@]}" "http://$api_domain/.well-known/acme-challenge/$challenge_name")"
+    [[ "$actual" == "$expected" ]] || { echo "API ACME webroot check failed ($target)." >&2; exit 1; }
+    curl -fsS --max-time 20 "${resolve[@]}" "https://$api_domain/api/status" |
+      python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("success") is True and d.get("data", {}).get("version"), "Not a healthy New API response"'
+    actual="$(curl -sS --max-time 20 "${resolve[@]}" -o /dev/null -w '%{http_code}' "https://$api_domain/")"
+    [[ "$actual" == 200 ]] || { echo "API UI check failed ($target)." >&2; exit 1; }
+    actual="$(curl -sS --max-time 20 "${resolve[@]}" -o /dev/null -w '%{http_code} %{redirect_url}' "http://$api_domain/")"
+    [[ "$actual" == "308 https://$api_domain/" ]] || { echo "API HTTP redirect check failed ($target)." >&2; exit 1; }
+    printf 'api-gateway-%s=ok\n' "$target"
+  done
+)
+
+# Explicit one-time transition for a predecessor main vhost. Preserve its other
+# settings and restore the exact file if Nginx or gateway acceptance fails.
+migrate_api_domain() (
+  set -euo pipefail
+  local site=/etc/nginx/sites-available/ai-price backup candidate
+  test -r /etc/nginx/conf.d/00-ai-lowpriceradar.conf
+  test -f "$site"
+  install -d /opt/ai-price /var/backups/ai-price
+  exec 9>/opt/ai-price/.deploy.lock
+  flock 9
+  backup="$(mktemp /var/backups/ai-price/api-domain-before.XXXXXXXX)"
+  cp --preserve=mode,ownership,timestamps "$site" "$backup"
+  candidate="$(mktemp /etc/nginx/sites-available/.ai-price-migrate.XXXXXXXX)"
+  trap 'rm -f -- "$candidate"' EXIT
+  cp --preserve=mode,ownership "$site" "$candidate"
+  python3 - "$candidate" <<'PY_MIGRATE'
+import pathlib,re,sys
+p=pathlib.Path(sys.argv[1]); text=p.read_text()
+def migrate(match):
+    names=match.group(2).split()
+    if "ai.lowpriceradar.com" not in names:
+        return match.group(0)
+    if not {"lowpriceradar.com", "www.lowpriceradar.com"}.intersection(names):
+        raise SystemExit("Refusing to change a standalone API server_name")
+    return match.group(1)+" ".join(n for n in names if n != "ai.lowpriceradar.com")+";"
+p.write_text(re.sub(r"(?m)^(\s*server_name\s+)([^;\n]+);",migrate,text))
+PY_MIGRATE
+  mv -f -- "$candidate" "$site"
+  if nginx -t && systemctl reload nginx && bash "$0" --verify-api-gateway; then
+    printf 'API_DOMAIN_MIGRATED=1 backup=%s\n' "$backup"
+  else
+    cp --preserve=mode,ownership,timestamps "$backup" "$candidate"
+    mv -f -- "$candidate" "$site"
+    nginx -t && systemctl reload nginx
+    echo "API domain migration failed; prior main vhost restored: $backup" >&2
+    exit 1
+  fi
+)
+
+if [[ "${1:-}" == --migrate-api-domain ]]; then
+  migrate_api_domain
+  exit 0
+fi
+
+if [[ "${1:-}" == --verify-api-gateway ]]; then
+  verify_api_gateway
+  exit 0
+fi
+
 PUBLIC_IP="${1:?public IP is required}"
 SOURCE_ARCHIVE="${2:-/tmp/ai-price.tar.gz}"
 LOCK_FILE="${3:-/tmp/ai-price-package-lock.json}"
@@ -9,6 +98,8 @@ ENV_FILE="/etc/ai-price.env"
 SERVICE_USER="ai-price"
 PRIMARY_DOMAIN="lowpriceradar.com"
 CERTIFICATE_DIR="/etc/letsencrypt/live/${PRIMARY_DOMAIN}"
+
+verify_api_gateway
 
 install -d "${APP_ROOT}"
 exec 9>"${APP_ROOT}/.deploy.lock"
@@ -403,7 +494,7 @@ server {
 server {
     listen 80;
     listen [::]:80;
-    server_name lowpriceradar.com www.lowpriceradar.com ai.lowpriceradar.com;
+    server_name lowpriceradar.com www.lowpriceradar.com;
     access_log /var/log/nginx/access.log ai_price;
 
     location ^~ /.well-known/acme-challenge/ {
@@ -538,7 +629,7 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name www.lowpriceradar.com ai.lowpriceradar.com;
+    server_name www.lowpriceradar.com;
     access_log /var/log/nginx/access.log ai_price;
 
     ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
@@ -571,6 +662,7 @@ systemctl enable --now \
   nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
+verify_api_gateway
 find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 
 sleep 3

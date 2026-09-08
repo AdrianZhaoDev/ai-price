@@ -141,6 +141,7 @@ describe("ChannelRepository", () => {
     expect(snapshot.warning).toMatch(/connection refused/);
 
     const injected = new ChannelRepository({
+      now: () => new Date("2026-09-06T01:00:00.000Z"),
       databaseConfigured: false,
       now: () => new Date("2026-09-06T01:00:00.000Z"),
       loadPublishedOffers: () => syntheticChannelOffers,

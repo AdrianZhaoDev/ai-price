@@ -10,20 +10,20 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 
 ## 1. 固定目标
 
-| 项目           | 目标                                                 |
-| -------------- | ---------------------------------------------------- |
-| 主站           | `https://lowpriceradar.com`                          |
-| 规范化         | HTTP、`www`、`ai` 一跳 301 到主站并保留路径/查询参数 |
-| Cloudflare SSL | Full (strict)                                        |
-| TLS            | 最低 1.2，支持 1.3，SSL Labs A/A+                    |
-| DNS            | Cloudflare 代理开启，DNSSEC 有效                     |
-| 公共页面       | 200、可索引、自引用 canonical、在 Sitemap 中         |
-| 私有页面       | noindex，并且 `private, no-store`                    |
-| HTML 缓存      | 默认动态；只对确认无用户态的页面单独评估             |
-| 静态资源       | `/_next/static/` 长缓存、immutable                   |
-| SEO 数据       | Search Console 已验证，Sitemap 已提交                |
-| 访问数据       | Cloudflare Web Analytics/RUM 或等价分析已启用        |
-| 外链数据       | Ahrefs 域名已验证；不可用时明确写数据缺口            |
+| 项目           | 目标                                              |
+| -------------- | ------------------------------------------------- |
+| 主站           | `https://lowpriceradar.com`                       |
+| 规范化         | 主站 HTTP、`www` 一跳 301 到主站；`ai` 为独立网关 |
+| Cloudflare SSL | Full (strict)                                     |
+| TLS            | 最低 1.2，支持 1.3，SSL Labs A/A+                 |
+| DNS            | Cloudflare 代理开启，DNSSEC 有效                  |
+| 公共页面       | 200、可索引、自引用 canonical、在 Sitemap 中      |
+| 私有页面       | noindex，并且 `private, no-store`                 |
+| HTML 缓存      | 默认动态；只对确认无用户态的页面单独评估          |
+| 静态资源       | `/_next/static/` 长缓存、immutable                |
+| SEO 数据       | Search Console 已验证，Sitemap 已提交             |
+| 访问数据       | Cloudflare Web Analytics/RUM 或等价分析已启用     |
+| 外链数据       | Ahrefs 域名已验证；不可用时明确写数据缺口         |
 
 ## 2. 当前生产基线
 
@@ -61,8 +61,8 @@ Cloudflare 边缘缓存和安全状态。它只规定观察与诊断；任何生
 - Cloudflare Web Analytics/RUM 已全球启用。过去 24 小时基线为 38 次访问、51
   次页面浏览；LCP 良好率 82%、P75 2,004 ms，INP 与 CLS 良好率均为 100%；
 - Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 已启用；
-  `Always Use HTTPS` 为避免 `http://www` 两跳而关闭，HTTP 主域和 `ai` 继续由
-  Nginx 一跳到规范 HTTPS 主域；
+  `Always Use HTTPS` 为避免 `http://www` 两跳而关闭，HTTP 主域由 Nginx 一跳到规范 HTTPS 主域；
+  `ai` HTTP 以 308 到自身 HTTPS，首页及 `/api/status` 应为 200，不能恢复主站重定向；
 - 项目代码未发现 Google Analytics、Plausible、Umami、PostHog 或 Clarity；
 - 价格页使用 Cloudflare Zaraz Track 记录匿名交互和订阅漏斗；只有 Zaraz 在生产 Zone
   启用且 Monitoring 数据可读时才能报告事件值，Web Analytics 不替代自定义事件；
@@ -108,7 +108,7 @@ curl -fsS -I https://lowpriceradar.com/api/admin/session
 - 公共响应包含 CSP、`nosniff`、`DENY`、Referrer-Policy；
 - `/admin/`、`/api/`、`/subscription/` 包含 `no-store` 和 `X-Robots-Tag`；
 - 边缘响应包含 HSTS，且 `server: cloudflare`；
-- `www`、`ai`、HTTP 入口只有一次 301。
+- 主站 `www`、HTTP 入口只有一次 301；`ai` 独立提供 New API，不套用主站 SEO/静态缓存验收。
 
 移动浏览器的紧凑地址栏可能只显示域名而隐藏路径。看到站内 404 时，不得只凭截图
 判断首页宕机；先同时请求 `/`，再从 Nginx access log 核对实际请求路径。字面量

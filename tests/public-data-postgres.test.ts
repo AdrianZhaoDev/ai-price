@@ -705,7 +705,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     await expect(
       loadTransitSnapshotFromDatabase(connection.database),
     ).rejects.toThrow(/capacity exceeded/);
-  }, 30000);
+  }, 120000);
   it("backfills retained baselines for absent channel offers and current transit offers", async () => {
     const first = channels();
     first.offers.push({

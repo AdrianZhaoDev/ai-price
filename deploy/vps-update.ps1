@@ -189,6 +189,7 @@ chmod 700 /tmp/ai-price-vps-install.sh
   $PublicIp \
   /tmp/ai-price.tar.gz \
   /tmp/ai-price-package-lock.json
+/tmp/ai-price-vps-install.sh --verify-api-gateway
 systemctl is-active \
   ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
 install -d -o ai-price -g ai-price -m 0750 /run/ai-price-collect
