@@ -590,6 +590,20 @@ journalctl --disk-usage
 不能把验证请求转发给 New API。安装器在任何主站写入前及 Nginx reload 后，
 以临时随机文件校验源站和公网 HTTP webroot，并校验 HTTPS `/api/status` 的 JSON；
 缺失网关、重定向、重复域名或任一检查失败即停止。首次装机先独立配置网关及共享证书。
+本服务器已于 2026-09-08 完成一次性域名迁移。若从旧版配置重建，先安装并核验
+独立网关和共享证书，再从已审核的目标版本运行以下显式迁移入口，然后执行正常发布：
+
+```bash
+bash deploy/vps-install.sh --migrate-api-domain
+bash deploy/vps-install.sh --verify-api-gateway
+```
+
+迁移入口持有主站部署锁，仅移除旧主站 `server_name` 中的 API 域名，保留其他配置；
+原文件备份到 `/var/backups/ai-price/api-domain-before.*`。Nginx 检查、reload 或
+源站/公网网关验收失败时自动恢复原文件并 reload，不改网关配置或生产数据库。
+正常发布不会自动执行迁移；旧域名冲突时先完成上述显式步骤。验收同时要求
+源站/公网 HTTPS 首页 200、HTTP 首页 308 到自身 HTTPS，以及正确的状态 JSON 和 ACME 内容。
+
 主站发布后另行核验该域名无主站重定向、`nginx -t` 无重复 server_name 警告。
 网关账号、令牌、额度和模型白名单由网关管理员独立维护。
 

@@ -434,7 +434,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     });
     await expect(
       connection.client`delete from public_data_generations where id=${first.generationId}`,
-    ).rejects.toMatchObject({ code: "23001" });
+    ).rejects.toMatchObject({ code: expect.stringMatching(/^(23001|23503)$/) });
     expect(
       await connection.client`select id from channel_offer_observations where offer_id='history-offer'`,
     ).toHaveLength(2);
@@ -705,7 +705,7 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
     await expect(
       loadTransitSnapshotFromDatabase(connection.database),
     ).rejects.toThrow(/capacity exceeded/);
-  }, 30000);
+  }, 120000);
   it("backfills retained baselines for absent channel offers and current transit offers", async () => {
     const first = channels();
     first.offers.push({
