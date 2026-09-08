@@ -126,6 +126,8 @@ ssh american-vps
 
 ```bash
 readlink -f /opt/ai-price/current
+# 检查网关源站/公网状态和共享证书的 HTTP ACME webroot；临时探针自动删除。
+bash /opt/ai-price/current/deploy/vps-install.sh --verify-api-gateway
 systemctl is-active \
   ai-price.service nginx postgresql ai-price-collect.timer certbot.timer
 curl -fsS -o /dev/null -w "app=%{http_code}\n" http://127.0.0.1:3100/
@@ -583,6 +585,11 @@ journalctl --disk-usage
 `/etc/nginx/conf.d/00-ai-lowpriceradar.conf` 管理，转发本机 New API 3000，
 再由 New API 调用 `127.0.0.1:8317` 的 CPA。主站安装器不得声明该域名、
 覆盖网关配置或恢复它到主站的重定向；共享证书仍需保留该域名及 ACME 续期。
+网关是主站安装前置条件：HTTP vhost 必须在重定向之前单独处理
+`/.well-known/acme-challenge/`，使用 `root /var/www/html`、`try_files $uri =404`，
+不能把验证请求转发给 New API。安装器在任何主站写入前及 Nginx reload 后，
+以临时随机文件校验源站和公网 HTTP webroot，并校验 HTTPS `/api/status` 的 JSON；
+缺失网关、重定向、重复域名或任一检查失败即停止。首次装机先独立配置网关及共享证书。
 主站发布后另行核验该域名无主站重定向、`nginx -t` 无重复 server_name 警告。
 网关账号、令牌、额度和模型白名单由网关管理员独立维护。
 

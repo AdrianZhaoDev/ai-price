@@ -54,13 +54,16 @@ https://lowpriceradar.com/admin
 http://lowpriceradar.com/
 https://www.lowpriceradar.com/
 https://ai.lowpriceradar.com/
+https://ai.lowpriceradar.com/api/status
+http://ai.lowpriceradar.com/
 ```
 
 验收：
 
 - 三个核心公共页面为 200；
 - 价格变化中英文页和公开数据端点为 200；JSON `available=true` 才能解释事件数量。空列表是暂无符合范围的历史，503 是故障，不混为 0 条变化。最多 100 条不能作为事件总量；只比较相同范围的记录，并检查异常密集涨跌。抽查比价链接恢复同一套餐和地区。
-- HTTP、`www`、`ai` 一跳 301 到规范主域；
+- 主站 HTTP、`www` 一跳 301 到规范主域；
+- `ai` HTTPS 首页为 200，`/api/status` 为 200 且 JSON `success=true`、`data.version` 非空；`ai` HTTP 一跳 308 到自身 HTTPS，不能跳到主站。网关为独立应用，不套用主站 SEO、CSP、静态资源缓存验收；
 - `/admin` 未登录时重定向，并包含 noindex/no-store；
 - robots 和 Sitemap 为 200；
 - HSTS、CSP、`nosniff`、Frame/Referrer Policy 存在；

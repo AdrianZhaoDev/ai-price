@@ -1,6 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The API gateway is managed separately and shares the certificate's ai SAN.
+# Run this before changing the main vhost and again after reloading Nginx.
+verify_api_gateway() (
+  set -euo pipefail
+  local api_domain="ai.lowpriceradar.com"
+  local challenge_dir="/var/www/html/.well-known/acme-challenge"
+  local challenge_file challenge_name expected actual nginx_check
+  test -r /etc/nginx/conf.d/00-ai-lowpriceradar.conf || {
+    echo "Install the independent API gateway vhost before deploying the main site." >&2
+    exit 1
+  }
+  nginx_check="$(nginx -t 2>&1)" || { printf '%s\n' "$nginx_check" >&2; exit 1; }
+  if [[ "$nginx_check" == *'conflicting server name "ai.lowpriceradar.com"'* ]]; then
+    printf '%s\n' "$nginx_check" >&2
+    exit 1
+  fi
+  test -d "$challenge_dir"
+  challenge_file="$(mktemp "$challenge_dir/newapi-check.XXXXXXXX")"
+  trap 'rm -f -- "$challenge_file"' EXIT
+  challenge_name="${challenge_file##*/}"
+  expected="api-gateway-$challenge_name"
+  printf '%s' "$expected" > "$challenge_file"
+  chmod 644 "$challenge_file"
+  for target in origin public; do
+    local resolve=()
+    if [[ "$target" == origin ]]; then
+      resolve=(--resolve "$api_domain:80:127.0.0.1" --resolve "$api_domain:443:127.0.0.1")
+    fi
+    actual="$(curl -fsS --max-time 20 "${resolve[@]}" "http://$api_domain/.well-known/acme-challenge/$challenge_name")"
+    [[ "$actual" == "$expected" ]] || { echo "API ACME webroot check failed ($target)." >&2; exit 1; }
+    curl -fsS --max-time 20 "${resolve[@]}" "https://$api_domain/api/status" |
+      python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("success") is True and d.get("data", {}).get("version"), "Not a healthy New API response"'
+    printf 'api-gateway-%s=ok\n' "$target"
+  done
+)
+
+if [[ "${1:-}" == --verify-api-gateway ]]; then
+  verify_api_gateway
+  exit 0
+fi
+
 PUBLIC_IP="${1:?public IP is required}"
 SOURCE_ARCHIVE="${2:-/tmp/ai-price.tar.gz}"
 LOCK_FILE="${3:-/tmp/ai-price-package-lock.json}"
@@ -9,6 +50,8 @@ ENV_FILE="/etc/ai-price.env"
 SERVICE_USER="ai-price"
 PRIMARY_DOMAIN="lowpriceradar.com"
 CERTIFICATE_DIR="/etc/letsencrypt/live/${PRIMARY_DOMAIN}"
+
+verify_api_gateway
 
 install -d "${APP_ROOT}"
 exec 9>"${APP_ROOT}/.deploy.lock"
@@ -517,6 +560,7 @@ systemctl enable --now \
   ai-price.service ai-price-collect.timer nginx certbot.timer
 systemctl restart ai-price.service
 systemctl reload nginx
+verify_api_gateway
 find -P /var/cache/nginx/ai-price-public -mindepth 1 -delete
 
 sleep 3
