@@ -576,8 +576,15 @@ journalctl --disk-usage
 
 生产主域名为 `https://lowpriceradar.com`。DNS 和边缘 HTTPS 由 Cloudflare
 提供，Cloudflare 必须使用 Full (strict) 连接源站。Nginx 使用 Let's Encrypt
-证书监听 443；80、`www.lowpriceradar.com` 和 `ai.lowpriceradar.com` 均以 301
+证书监听 443；主站 HTTP 和 `www.lowpriceradar.com` 均以 301
 一跳重定向到主域名并保留路径和查询参数。
+
+`ai.lowpriceradar.com` 独立提供 New API 网关，由
+`/etc/nginx/conf.d/00-ai-lowpriceradar.conf` 管理，转发本机 New API 3000，
+再由 New API 调用 `127.0.0.1:8317` 的 CPA。主站安装器不得声明该域名、
+覆盖网关配置或恢复它到主站的重定向；共享证书仍需保留该域名及 ACME 续期。
+主站发布后另行核验该域名无主站重定向、`nginx -t` 无重复 server_name 警告。
+网关账号、令牌、额度和模型白名单由网关管理员独立维护。
 
 旧 v2ray 服务已于 2026-07-30 经授权退役，443 永久归 Nginx 使用。退役前配置的
 root-only 备份位于 `/var/backups/retired-services/`；正常发布不得恢复旧服务。
@@ -635,8 +642,8 @@ openssl x509 -checkend 1209600 -noout \
 - SSL/TLS：手动 Full (strict)，Automatic SSL/TLS 必须关闭；
 - Minimum TLS Version：1.2；
 - TLS 1.3、HTTP/2、HTTP/3、Brotli：启用；
-- Cloudflare `Always Use HTTPS`：关闭。HTTP 主域和 `ai` 由 Nginx 直接 301 到
-  HTTPS 主域；Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 同时处理
+- Cloudflare `Always Use HTTPS`：关闭。HTTP 主域由 Nginx 直接 301 到 HTTPS 主域；`ai` 保持独立网关入口，
+  HTTP 重定向到它自身的 HTTPS；Cloudflare 动态重定向规则 `WWW 直达 HTTPS 主域（单跳）` 同时处理
   HTTP/HTTPS 的 `www`，保留路径和查询参数。不得重新启用 `Always Use HTTPS`，
   否则 `http://www` 会先跳到 `https://www`，重新形成两跳；
 - DNSSEC：启用且注册商存在 DS；

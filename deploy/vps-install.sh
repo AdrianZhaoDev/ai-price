@@ -350,7 +350,7 @@ server {
 server {
     listen 80;
     listen [::]:80;
-    server_name lowpriceradar.com www.lowpriceradar.com ai.lowpriceradar.com;
+    server_name lowpriceradar.com www.lowpriceradar.com;
     access_log /var/log/nginx/access.log ai_price;
 
     location ^~ /.well-known/acme-challenge/ {
@@ -485,7 +485,7 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name www.lowpriceradar.com ai.lowpriceradar.com;
+    server_name www.lowpriceradar.com;
     access_log /var/log/nginx/access.log ai_price;
 
     ssl_certificate /etc/letsencrypt/live/lowpriceradar.com/fullchain.pem;
