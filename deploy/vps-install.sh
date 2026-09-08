@@ -161,12 +161,18 @@ if [[ "$(dirname -- "${PREVIOUS_RELEASE}")" == "${APP_ROOT}/releases" ]] &&
   install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
     "${PREVIOUS_RELEASE}/.release-ready"
 fi
-install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${RELEASE_DIR}"
+install -d -o root -g root -m 0755 "${RELEASE_DIR}"
 tar -xzf "${SOURCE_ARCHIVE}" -C "${RELEASE_DIR}"
 install -m 0644 "${LOCK_FILE}" "${RELEASE_DIR}/package-lock.json"
+if [[ ! -f "${RELEASE_DIR}/deploy/prune-releases.sh" ]] ||
+  [[ -L "${RELEASE_DIR}/deploy/prune-releases.sh" ]]; then
+  echo "Verified release is missing a regular prune helper." >&2
+  exit 1
+fi
+PRUNE_HELPER_STAGED="$(mktemp /run/ai-price-prune.XXXXXXXX)"
+install -m 0700 -o root -g root \
+  "${RELEASE_DIR}/deploy/prune-releases.sh" "${PRUNE_HELPER_STAGED}"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${RELEASE_DIR}"
-install -m 0755 "${RELEASE_DIR}/deploy/prune-releases.sh" \
-  /usr/local/sbin/ai-price-prune-releases
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
@@ -290,6 +296,7 @@ else
   run_as_app ./node_modules/.bin/next build --webpack
   echo "PREBUILT_BUILD=0"
 fi
+
 run_as_app npm run db:migrate
 run_as_app bash -c '
   remote_required=false
@@ -311,6 +318,39 @@ run_as_app bash -c '
 '
 run_as_app npm run seed
 
+cp -a "${RELEASE_DIR}/.next/static" "${RELEASE_DIR}/.next/static-native"
+install -m 0755 "${PRUNE_HELPER_STAGED}" \
+  /usr/local/sbin/ai-price-prune-releases
+rm -f -- "${PRUNE_HELPER_STAGED}"
+PREVIOUS_RELEASE="$(readlink -f "${APP_ROOT}/current" 2>/dev/null || true)"
+PRUNE_ARGS=(
+  --keep 2 --apply --lock-held
+  --current "${RELEASE_DIR}"
+)
+if [[ "${PREVIOUS_RELEASE}" == "${APP_ROOT}/releases/"* ]] &&
+  [[ -d "${PREVIOUS_RELEASE}" ]]; then
+  if [[ ! -f "${PREVIOUS_RELEASE}/.deploy-success" ]]; then
+    PREVIOUS_PID="$(systemctl show ai-price.service -p MainPID --value 2>/dev/null || true)"
+    RUNNING_RELEASE=""
+    if [[ "${PREVIOUS_PID}" =~ ^[1-9][0-9]*$ ]] &&
+      [[ -d "/proc/${PREVIOUS_PID}" ]]; then
+      RUNNING_RELEASE="$(readlink -f "/proc/${PREVIOUS_PID}/cwd" 2>/dev/null || true)"
+    fi
+    if [[ "${RUNNING_RELEASE}" != "${PREVIOUS_RELEASE}" ]] ||
+      ! systemctl is-active --quiet ai-price.service ||
+      ! curl -fsS --max-time 15 http://127.0.0.1:3100/ >/dev/null; then
+      echo "Previous current release is not verified healthy: ${PREVIOUS_RELEASE}" >&2
+      exit 1
+    fi
+    touch "${PREVIOUS_RELEASE}/.deploy-success"
+  fi
+  PRUNE_ARGS+=(--rollback "${PREVIOUS_RELEASE}")
+fi
+/usr/local/sbin/ai-price-prune-releases "${PRUNE_ARGS[@]}"
+cp -an "${APP_ROOT}/shared/next-static-current/." \
+  "${RELEASE_DIR}/.next/static/"
+find -P "${RELEASE_DIR}/.next/static" -type d -exec chmod 0755 {} +
+find -P "${RELEASE_DIR}/.next/static" -type f -exec chmod 0644 {} +
 ln -sfn "${RELEASE_DIR}" "${APP_ROOT}/current"
 chown -h "${SERVICE_USER}:${SERVICE_USER}" "${APP_ROOT}/current"
 
@@ -407,7 +447,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/ai-price/.deploy.lock /opt/ai-price/releases /opt/ai-price/shared/dependencies
+ReadWritePaths=/opt/ai-price/.deploy.lock /opt/ai-price/releases /opt/ai-price/shared/dependencies /opt/ai-price/shared/next-static-releases /opt/ai-price/shared/next-static-current
 EOF
 
 cat >/etc/systemd/system/ai-price-prune-releases.timer <<'EOF'
@@ -565,14 +605,18 @@ server {
     }
 
     location ^~ /_next/static/ {
-        proxy_pass http://127.0.0.1:3100;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_read_timeout 60s;
+        alias /opt/ai-price/shared/next-static-current/;
+        access_log off;
+        gzip on;
+        gzip_vary on;
+        gzip_types text/css application/javascript application/json application/wasm;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+        add_header Content-Security-Policy "base-uri 'self'; frame-ancestors 'none'; object-src 'none'" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
     }
 
     location ~* \.(?:avif|css|gif|ico|jpe?g|js|png|svg|webp|woff2?)$ {
@@ -671,6 +715,7 @@ curl -fsS --max-time 15 -o /dev/null \
   -H "Host: ${PRIMARY_DOMAIN}" http://127.0.0.1/
 curl -fsS --max-time 15 --resolve "${PRIMARY_DOMAIN}:443:127.0.0.1" \
   "https://${PRIMARY_DOMAIN}/" >/dev/null
+touch "${RELEASE_DIR}/.deploy-success"
 
 install -m 0644 -o "${SERVICE_USER}" -g "${SERVICE_USER}" /dev/null \
   "${RELEASE_DIR}/.release-ready"

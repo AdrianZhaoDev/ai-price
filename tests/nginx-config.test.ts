@@ -5,8 +5,23 @@ const installScript = readFileSync("deploy/vps-install.sh", "utf8");
 const siteConfig = installScript.match(
   /cat >\/etc\/nginx\/sites-available\/ai-price <<'EOF'\n([\s\S]*?)\nEOF/,
 )?.[1];
+const stageHelper =
+  'PRUNE_HELPER_STAGED="$(mktemp /run/ai-price-prune.XXXXXXXX)"';
 
 describe("production Nginx behavior", () => {
+  it("stages root deployment helpers before handing the release to the app", () => {
+    expect(installScript).toContain(
+      'install -d -o root -g root -m 0755 "${RELEASE_DIR}"',
+    );
+    expect(installScript).toContain(stageHelper);
+    expect(installScript.indexOf(stageHelper)).toBeLessThan(
+      installScript.indexOf(
+        'chown -R "${SERVICE_USER}:${SERVICE_USER}" "${RELEASE_DIR}"',
+      ),
+    );
+    expect(installScript).toContain('install -m 0755 "${PRUNE_HELPER_STAGED}"');
+  });
+
   it("leaves the API domain to its independently managed gateway", () => {
     expect(siteConfig).toBeDefined();
     expect(siteConfig).not.toContain("ai.lowpriceradar.com");
@@ -94,10 +109,9 @@ describe("production Nginx behavior", () => {
     );
   });
 
-  it("preserves shared caching for versioned pricing data and static assets", () => {
+  it("preserves application caching for versioned pricing data and public assets", () => {
     for (const locationPattern of [
       /location \^~ \/pricing-data\/ \{[\s\S]*?\n    }/,
-      /location \^~ \/_next\/static\/ \{[\s\S]*?\n    }/,
       /location ~\* \\.\(\?:avif\|css[\s\S]*?\n    }/,
     ]) {
       const location = siteConfig?.match(locationPattern)?.[0];
@@ -106,5 +120,57 @@ describe("production Nginx behavior", () => {
       expect(location).not.toContain("proxy_hide_header Cache-Control");
       expect(location).not.toContain("add_header Cache-Control");
     }
+  });
+
+  it("serves content-hashed Next.js assets without waking the application", () => {
+    const location = siteConfig?.match(
+      /location \^~ \/_next\/static\/ \{[\s\S]*?\n    }/,
+    )?.[0];
+    expect(location).toBeDefined();
+    expect(location).toContain(
+      "alias /opt/ai-price/shared/next-static-current/;",
+    );
+    expect(location).not.toContain("proxy_pass");
+    expect(location).toContain("gzip on;");
+    expect(location).toContain("gzip_vary on;");
+    expect(location).toContain(
+      "gzip_types text/css application/javascript application/json application/wasm;",
+    );
+    expect(location).toContain(
+      'add_header Cache-Control "public, max-age=31536000, immutable";',
+    );
+    expect(location).toContain(
+      'add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;',
+    );
+    for (const header of [
+      "Content-Security-Policy",
+      "Permissions-Policy",
+      "Referrer-Policy",
+      "X-Content-Type-Options",
+      "X-Frame-Options",
+    ]) {
+      expect(location).toContain(`add_header ${header}`);
+    }
+  });
+
+  it("publishes retained assets before switching the release", () => {
+    const switchRelease = 'ln -sfn "${RELEASE_DIR}" "${APP_ROOT}/current"';
+    const prune = '/usr/local/bin/ai-price-prune-releases "${PRUNE_ARGS[@]}"';
+    expect(installScript).toContain('--current "${RELEASE_DIR}"');
+    expect(installScript).toContain(
+      'PRUNE_ARGS+=(--rollback "${PREVIOUS_RELEASE}")',
+    );
+    expect(installScript).toContain(
+      'RUNNING_RELEASE="$(readlink -f "/proc/${PREVIOUS_PID}/cwd"',
+    );
+    expect(installScript).toContain(
+      "Previous current release is not verified healthy",
+    );
+    expect(installScript).toContain(
+      'cp -an "${APP_ROOT}/shared/next-static-current/."',
+    );
+    expect(installScript.indexOf(prune)).toBeLessThan(
+      installScript.indexOf(switchRelease),
+    );
   });
 });
