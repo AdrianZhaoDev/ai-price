@@ -107,6 +107,13 @@ describe("production Nginx behavior", () => {
     expect(privateLocation).toContain(
       'add_header Cache-Control "private, no-store, max-age=0" always;',
     );
+    expect(privateLocation).toContain(
+      "proxy_set_header X-Real-IP $http_cf_connecting_ip;",
+    );
+    expect(privateLocation).toContain(
+      "proxy_set_header X-Forwarded-For $http_cf_connecting_ip;",
+    );
+    expect(privateLocation).not.toContain("$proxy_add_x_forwarded_for");
   });
 
   it("preserves application caching for versioned pricing data and public assets", () => {

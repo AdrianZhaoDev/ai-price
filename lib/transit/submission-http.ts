@@ -23,12 +23,10 @@ export function isAllowedTransitSubmissionOrigin(
 }
 
 export function transitSubmissionClientIp(request: NextRequest): string {
-  return (
-    request.headers.get("cf-connecting-ip")?.trim() ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    "unknown"
-  );
+  // Production Nginx overwrites X-Real-IP with the connected client's trusted
+  // address. CF-Connecting-IP and the first X-Forwarded-For entry can be
+  // supplied by a caller and must not select the limiter bucket.
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export async function readTransitSubmissionJson(

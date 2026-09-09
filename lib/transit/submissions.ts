@@ -306,6 +306,12 @@ export async function markTransitSubmissionNotification(input: {
   }
   for (const submission of memorySubmissions.values()) {
     if (submission.id === input.submissionId) {
+      if (
+        submission.notificationStatus === "sent" &&
+        input.status === "failed"
+      ) {
+        return;
+      }
       submission.notificationStatus = input.status;
       if (input.status === "sent") submission.submitterEmailEncrypted = "";
       return;

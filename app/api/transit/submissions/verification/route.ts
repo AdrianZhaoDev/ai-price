@@ -129,6 +129,16 @@ export async function PUT(request: NextRequest) {
     await readTransitSubmissionJson(request),
   );
   if (!parsed.success) return reply(400, "invalid_code");
+  const rateLimit = checkRateLimit(
+    `transit-verification-confirm-ip:${hashValue(transitSubmissionClientIp(request))}`,
+    20,
+    15 * 60 * 1000,
+  );
+  if (!rateLimit.allowed) {
+    return reply(429, "rate_limited", {
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+  }
   const verified = await confirmTransitSubmissionVerification({
     id: parsed.data.verificationId,
     email: parsed.data.email,

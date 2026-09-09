@@ -128,6 +128,32 @@ describe("transit submission email verification", () => {
     ).toBe(400);
   });
 
+  it("rate-limits confirmation transactions by trusted client IP", async () => {
+    mocks.confirmVerification.mockResolvedValue(false);
+    for (let index = 0; index < 20; index += 1) {
+      expect(
+        (
+          await PUT(
+            request("PUT", {
+              email: "owner@example.com",
+              verificationId: crypto.randomUUID(),
+              code: "123456",
+            }),
+          )
+        ).status,
+      ).toBe(400);
+    }
+    const response = await PUT(
+      request("PUT", {
+        email: "owner@example.com",
+        verificationId: crypto.randomUUID(),
+        code: "123456",
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(mocks.confirmVerification).toHaveBeenCalledTimes(20);
+  });
+
   it("limits code delivery per IP and email", async () => {
     for (let index = 0; index < 3; index += 1) {
       expect(

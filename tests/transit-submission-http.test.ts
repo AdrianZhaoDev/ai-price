@@ -68,7 +68,7 @@ describe("transit submission request guards", () => {
     ).toBe(false);
   });
 
-  it("uses trusted proxy headers in precedence order", () => {
+  it("uses only the proxy-overwritten real IP header", () => {
     expect(
       transitSubmissionClientIp(
         request({
@@ -77,12 +77,15 @@ describe("transit submission request guards", () => {
           "x-real-ip": "192.0.2.4",
         }),
       ),
-    ).toBe("192.0.2.1");
+    ).toBe("192.0.2.4");
     expect(
       transitSubmissionClientIp(
         request({ "x-forwarded-for": "192.0.2.2, 192.0.2.3" }),
       ),
-    ).toBe("192.0.2.2");
+    ).toBe("unknown");
+    expect(
+      transitSubmissionClientIp(request({ "cf-connecting-ip": "192.0.2.1" })),
+    ).toBe("unknown");
     expect(
       transitSubmissionClientIp(request({ "x-real-ip": "192.0.2.4" })),
     ).toBe("192.0.2.4");

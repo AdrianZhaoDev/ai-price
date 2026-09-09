@@ -148,6 +148,11 @@ describe("transit submission repository", () => {
         status: "sent",
         now,
       });
+      await markTransitSubmissionNotification({
+        submissionId: submitted.submissionId,
+        status: "failed",
+        now,
+      });
     }
     expect(
       await createTransitSubmission({

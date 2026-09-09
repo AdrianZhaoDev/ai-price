@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     description: parsed.data.description,
     ipAddress: transitSubmissionClientIp(request),
   });
-  const contact = process.env.ADMIN_EMAIL || process.env.CONTACT_EMAIL;
+  const contact = process.env.CONTACT_EMAIL;
   if (result.status === "duplicate")
     return reply(200, "duplicate", { contact });
   if (result.status === "rate_limited") return reply(429, "rate_limited");

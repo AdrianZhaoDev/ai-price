@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { getDatabase } from "@/lib/db/client";
 import {
   transitSubmissionAttempts,
@@ -189,7 +189,7 @@ export async function markTransitSubmissionNotificationRecord(input: {
   status: "sent" | "failed";
   now: Date;
 }): Promise<void> {
-  await getDatabase()
+  const update = getDatabase()
     .update(transitSubmissions)
     .set({
       notificationStatus: input.status,
@@ -197,6 +197,13 @@ export async function markTransitSubmissionNotificationRecord(input: {
       notificationLastAttemptAt: input.now,
       notificationSentAt: input.status === "sent" ? input.now : null,
       ...(input.status === "sent" ? { submitterEmailEncrypted: "" } : {}),
-    })
-    .where(eq(transitSubmissions.id, input.submissionId));
+    });
+  await update.where(
+    input.status === "failed"
+      ? and(
+          eq(transitSubmissions.id, input.submissionId),
+          ne(transitSubmissions.notificationStatus, "sent"),
+        )
+      : eq(transitSubmissions.id, input.submissionId),
+  );
 }

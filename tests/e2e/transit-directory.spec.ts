@@ -154,7 +154,7 @@ test("duplicate submissions show the administrator contact", async ({
   await page.route("**/api/transit/submissions", (route) =>
     route.fulfill({
       status: 200,
-      json: { code: "duplicate", contact: "admin@example.com" },
+      json: { code: "duplicate", contact: "contact@example.com" },
     }),
   );
   await page.getByLabel("邮箱", { exact: true }).fill("owner@example.com");
@@ -165,7 +165,7 @@ test("duplicate submissions show the administrator contact", async ({
   await page.getByLabel("一句话介绍").fill("AI API 网关。");
   await page.getByRole("button", { name: "提交申请" }).click();
   await expect(page.getByRole("status")).toContainText(
-    "该网站已有提交。若尚未显示，请耐心等待，或联系 admin@example.com。",
+    "该网站已有提交。若尚未显示，请耐心等待，或联系 contact@example.com。",
   );
 });
 

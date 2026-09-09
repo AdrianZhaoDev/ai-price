@@ -197,6 +197,11 @@ canonical 页面连续请求能命中源站微缓存，且最新 access log 是�
 源站微缓存状态、Cloudflare Ray ID 和 Nginx request ID。`remote_addr` 在 Cloudflare 代理下通常是边缘
 节点地址，不能直接当作访客 IP；上游字段为 `-` 表示该请求没有进入应用上游。
 
+主站 `/admin`、`/api` 与订阅路径的 Nginx location 依赖第 9.4 节的 Cloudflare-only
+防火墙边界，把 Cloudflare 覆盖后的 `CF-Connecting-IP` 写入上游 `X-Real-IP`，并替换
+而不是追加 `X-Forwarded-For`。应用限流只能读取 `X-Real-IP`；不得重新允许公网绕过
+Cloudflare 直连源站，也不得把客户端原始 forwarding header 直接传给应用。
+
 Nginx 只微缓存无查询参数、无 Cookie、无 Authorization 的公开 HTML `GET`/`HEAD`
 200 响应，缓存键包含完整 `Accept-Language`，有效期 15 分钟。后台、API、订阅结果和
 所有参数页都绕过缓存；浏览器与 Cloudflare 仍收到 `no-store`。`pricing-data` 使用独立

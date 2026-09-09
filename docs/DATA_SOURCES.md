@@ -324,9 +324,11 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 简介和通知状态；管理员通知成功前暂存加密的申请邮箱并保持可恢复的 outbox 状态，送达后清除
 加密邮箱。发送失败或进程
 中断后，后续通过验证的同站申请会继续尝试完成原通知；通知成功后返回“已有提交”并提示等待或
-联系管理员。邮件投递审计中的申请邮箱同样使用服务器密钥 HMAC。数据库迁移新增
+联系 `CONTACT_EMAIL`。邮件投递审计中的申请邮箱同样使用服务器密钥 HMAC。数据库迁移新增
 `transit_submission_verifications`、`transit_submissions` 和 `transit_submission_attempts`
 及相关通知字段和索引；无需新增环境变量。代码回滚可保留这些表，不得未经授权删除申请数据。
 
 开发环境允许相同协议和端口的 localhost、127.0.0.1、IPv6 loopback 等价来源；生产仍严格
-校验配置的来源。
+校验配置的来源。生产限流只读取由 Nginx 覆盖的 `X-Real-IP`；Nginx 依赖 Cloudflare-only
+防火墙边界，以 `CF-Connecting-IP` 替换上游的 `X-Real-IP` 和 `X-Forwarded-For`，不信任
+请求原有的 forwarding header。

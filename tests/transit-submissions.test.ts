@@ -53,6 +53,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("APP_URL", "https://lowpriceradar.com");
   vi.stubEnv("ADMIN_EMAIL", "admin@example.com");
+  vi.stubEnv("CONTACT_EMAIL", "contact@example.com");
   mocks.createSubmission.mockResolvedValue({
     status: "notification_required",
     submissionId: "submission-id",
@@ -116,7 +117,7 @@ describe("transit submissions", () => {
     );
     expect(await response.json()).toEqual({
       code: "duplicate",
-      contact: "admin@example.com",
+      contact: "contact@example.com",
     });
     expect(mocks.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,7 +138,7 @@ describe("transit submissions", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       code: "duplicate",
-      contact: "admin@example.com",
+      contact: "contact@example.com",
     });
     expect(mocks.sendMail).not.toHaveBeenCalled();
   });
