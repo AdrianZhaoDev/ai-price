@@ -68,7 +68,14 @@ export async function confirmTransitVerificationRecord(input: {
 }
 
 export type TransitSubmissionRecordResult =
-  | { status: "submitted"; submissionId: string }
+  | {
+      status: "notification_required";
+      submissionId: string;
+      websiteUrl: string;
+      description: string;
+      submitterEmailEncrypted: string;
+      alreadySubmitted: boolean;
+    }
   | { status: "duplicate" }
   | { status: "rate_limited" }
   | { status: "verification_required" };
@@ -79,6 +86,7 @@ export async function createTransitSubmissionRecord(input: {
   websiteUrl: string;
   websiteKey: string;
   description: string;
+  submitterEmailEncrypted: string;
   ipHash: string;
   now: Date;
   cutoff: Date;
@@ -90,12 +98,7 @@ export async function createTransitSubmissionRecord(input: {
     );
     await tx
       .delete(transitSubmissionAttempts)
-      .where(
-        and(
-          eq(transitSubmissionAttempts.ipHash, input.ipHash),
-          lte(transitSubmissionAttempts.createdAt, input.cutoff),
-        ),
-      );
+      .where(lte(transitSubmissionAttempts.createdAt, input.cutoff));
     const [{ count }] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(transitSubmissionAttempts)
@@ -130,11 +133,29 @@ export async function createTransitSubmissionRecord(input: {
       sql`select pg_advisory_xact_lock(hashtextextended(${`transit-site:${input.websiteKey}`}, 0))`,
     );
     const [existing] = await tx
-      .select({ id: transitSubmissions.id })
+      .select({
+        id: transitSubmissions.id,
+        websiteUrl: transitSubmissions.websiteUrl,
+        description: transitSubmissions.description,
+        submitterEmailEncrypted: transitSubmissions.submitterEmailEncrypted,
+        notificationStatus: transitSubmissions.notificationStatus,
+      })
       .from(transitSubmissions)
       .where(eq(transitSubmissions.websiteKey, input.websiteKey))
       .limit(1);
-    if (existing) return { status: "duplicate" };
+    if (existing?.notificationStatus === "sent") {
+      return { status: "duplicate" };
+    }
+    if (existing) {
+      return {
+        status: "notification_required",
+        submissionId: existing.id,
+        websiteUrl: existing.websiteUrl,
+        description: existing.description,
+        submitterEmailEncrypted: existing.submitterEmailEncrypted,
+        alreadySubmitted: true,
+      };
+    }
 
     const [submission] = await tx
       .insert(transitSubmissions)
@@ -143,6 +164,8 @@ export async function createTransitSubmissionRecord(input: {
         websiteKey: input.websiteKey,
         description: input.description,
         submitterEmailHash: input.emailHash,
+        submitterEmailEncrypted: input.submitterEmailEncrypted,
+        notificationStatus: "pending",
         createdAt: input.now,
       })
       .returning({ id: transitSubmissions.id });
@@ -150,23 +173,30 @@ export async function createTransitSubmissionRecord(input: {
       .update(transitSubmissionVerifications)
       .set({ consumedAt: input.now })
       .where(eq(transitSubmissionVerifications.id, verification.id));
-    return { status: "submitted", submissionId: submission.id };
+    return {
+      status: "notification_required",
+      submissionId: submission.id,
+      websiteUrl: input.websiteUrl,
+      description: input.description,
+      submitterEmailEncrypted: input.submitterEmailEncrypted,
+      alreadySubmitted: false,
+    };
   });
 }
 
-export async function releaseTransitSubmissionRecord(input: {
+export async function markTransitSubmissionNotificationRecord(input: {
   submissionId: string;
-  verificationId: string;
+  status: "sent" | "failed";
+  now: Date;
 }): Promise<void> {
-  await getDatabase().transaction(async (tx) => {
-    const [deleted] = await tx
-      .delete(transitSubmissions)
-      .where(eq(transitSubmissions.id, input.submissionId))
-      .returning({ id: transitSubmissions.id });
-    if (!deleted) return;
-    await tx
-      .update(transitSubmissionVerifications)
-      .set({ consumedAt: null })
-      .where(eq(transitSubmissionVerifications.id, input.verificationId));
-  });
+  await getDatabase()
+    .update(transitSubmissions)
+    .set({
+      notificationStatus: input.status,
+      notificationAttempts: sql`${transitSubmissions.notificationAttempts} + 1`,
+      notificationLastAttemptAt: input.now,
+      notificationSentAt: input.status === "sent" ? input.now : null,
+      ...(input.status === "sent" ? { submitterEmailEncrypted: "" } : {}),
+    })
+    .where(eq(transitSubmissions.id, input.submissionId));
 }

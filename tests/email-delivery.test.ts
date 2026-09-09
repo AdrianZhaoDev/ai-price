@@ -33,11 +33,12 @@ function reservationTransaction(input: {
     .fn()
     .mockResolvedValue(input.inserted ? [{ id: "new-delivery" }] : []);
   const updateWhere = vi.fn().mockResolvedValue(undefined);
+  const insertValues = vi.fn(() => ({
+    onConflictDoNothing: () => ({ returning }),
+  }));
   const tx = {
     insert: vi.fn(() => ({
-      values: () => ({
-        onConflictDoNothing: () => ({ returning }),
-      }),
+      values: insertValues,
     })),
     select: vi.fn(() => ({
       from: () => ({
@@ -57,7 +58,7 @@ function reservationTransaction(input: {
   database.transaction.mockImplementation(
     async (callback: (value: unknown) => unknown) => callback(tx),
   );
-  return { tx, updateWhere };
+  return { tx, updateWhere, insertValues };
 }
 
 beforeEach(() => {
@@ -84,7 +85,7 @@ describe("email delivery persistence", () => {
 
   it("returns a newly inserted durable reservation", async () => {
     state.configured = true;
-    reservationTransaction({ inserted: true });
+    const { insertValues } = reservationTransaction({ inserted: true });
     await expect(
       reserveEmailDelivery({
         type: "verification",
@@ -92,6 +93,25 @@ describe("email delivery persistence", () => {
         dedupeKey: "verification:2",
       }),
     ).resolves.toEqual({ id: "new-delivery", reservedAt: now });
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientHash: expect.any(String),
+      }),
+    );
+  });
+
+  it("accepts a caller-provided keyed recipient hash", async () => {
+    state.configured = true;
+    const { insertValues } = reservationTransaction({ inserted: true });
+    await reserveEmailDelivery({
+      type: "verification",
+      recipient: "owner@example.com",
+      recipientHash: "keyed-email-hash",
+      dedupeKey: "verification:keyed",
+    });
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientHash: "keyed-email-hash" }),
+    );
   });
 
   it.each([

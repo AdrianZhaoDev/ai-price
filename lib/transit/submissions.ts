@@ -5,9 +5,12 @@ import {
   createTransitSubmissionRecord,
   createTransitVerificationRecord,
   deleteTransitVerificationRecord,
-  releaseTransitSubmissionRecord,
-  type TransitSubmissionRecordResult,
+  markTransitSubmissionNotificationRecord,
 } from "@/lib/db/transit-submissions";
+import {
+  decryptTransitSubmissionEmail,
+  encryptTransitSubmissionEmail,
+} from "@/lib/security/transit-submission-data";
 import { emailTokenSecret } from "@/lib/subscriptions/repository";
 import {
   hashToken,
@@ -33,7 +36,13 @@ const memoryState = globalThis as typeof globalThis & {
   __aiPriceTransitSubmissionVerifications?: Map<string, MemoryVerification>;
   __aiPriceTransitSubmissions?: Map<
     string,
-    { id: string; verificationId: string }
+    {
+      id: string;
+      websiteUrl: string;
+      description: string;
+      submitterEmailEncrypted: string;
+      notificationStatus: "pending" | "sent" | "failed";
+    }
   >;
   __aiPriceTransitSubmissionAttempts?: Map<string, number[]>;
 };
@@ -48,7 +57,13 @@ const memorySubmissions =
   memoryState.__aiPriceTransitSubmissions ??
   (memoryState.__aiPriceTransitSubmissions = new Map<
     string,
-    { id: string; verificationId: string }
+    {
+      id: string;
+      websiteUrl: string;
+      description: string;
+      submitterEmailEncrypted: string;
+      notificationStatus: "pending" | "sent" | "failed";
+    }
   >());
 const memoryAttempts =
   memoryState.__aiPriceTransitSubmissionAttempts ??
@@ -74,7 +89,7 @@ export function transitWebsiteKey(url: string): string {
   return `${hostname}${parsed.port ? `:${parsed.port}` : ""}`;
 }
 
-function transitEmailHash(email: string): string {
+export function transitSubmissionEmailHash(email: string): string {
   return hashToken(normalizeEmail(email), emailTokenSecret());
 }
 
@@ -91,7 +106,7 @@ export async function createTransitSubmissionVerification(input: {
   const id = crypto.randomUUID();
   const verification = {
     id,
-    emailHash: transitEmailHash(input.email),
+    emailHash: transitSubmissionEmailHash(input.email),
     codeHash: verificationCodeHash(id, input.code),
     expiresAt: new Date(now.getTime() + TRANSIT_VERIFICATION_TTL_MS),
     createdAt: now,
@@ -133,7 +148,7 @@ export async function confirmTransitSubmissionVerification(input: {
   now?: Date;
 }): Promise<boolean> {
   const now = input.now ?? new Date();
-  const emailHash = transitEmailHash(input.email);
+  const emailHash = transitSubmissionEmailHash(input.email);
   if (isDatabaseConfigured()) {
     return confirmTransitVerificationRecord({
       id: input.id,
@@ -165,7 +180,18 @@ export async function confirmTransitSubmissionVerification(input: {
   return valid;
 }
 
-export type TransitSubmissionResult = TransitSubmissionRecordResult;
+export type TransitSubmissionResult =
+  | {
+      status: "notification_required";
+      submissionId: string;
+      websiteUrl: string;
+      description: string;
+      submitterEmail: string;
+      alreadySubmitted: boolean;
+    }
+  | { status: "duplicate" }
+  | { status: "rate_limited" }
+  | { status: "verification_required" };
 
 export async function createTransitSubmission(input: {
   verificationId: string;
@@ -177,22 +203,42 @@ export async function createTransitSubmission(input: {
 }): Promise<TransitSubmissionResult> {
   const now = input.now ?? new Date();
   const websiteKey = transitWebsiteKey(input.websiteUrl);
-  const emailHash = transitEmailHash(input.email);
+  const normalizedEmail = normalizeEmail(input.email);
+  const secret = emailTokenSecret();
+  const emailHash = transitSubmissionEmailHash(normalizedEmail);
+  const submitterEmailEncrypted = encryptTransitSubmissionEmail(
+    normalizedEmail,
+    secret,
+  );
   const ipHash = transitIpHash(input.ipAddress);
   const cutoff = new Date(now.getTime() - TRANSIT_SUBMISSION_WINDOW_MS);
 
   if (isDatabaseConfigured()) {
-    return createTransitSubmissionRecord({
+    const result = await createTransitSubmissionRecord({
       verificationId: input.verificationId,
       emailHash,
       websiteUrl: input.websiteUrl,
       websiteKey,
       description: input.description,
+      submitterEmailEncrypted,
       ipHash,
       now,
       cutoff,
       windowLimit: TRANSIT_SUBMISSION_WINDOW_LIMIT,
     });
+    return result.status === "notification_required"
+      ? {
+          status: result.status,
+          submissionId: result.submissionId,
+          websiteUrl: result.websiteUrl,
+          description: result.description,
+          submitterEmail: decryptTransitSubmissionEmail(
+            result.submitterEmailEncrypted,
+            secret,
+          ),
+          alreadySubmitted: result.alreadySubmitted,
+        }
+      : result;
   }
 
   const attempts = (memoryAttempts.get(ipHash) ?? []).filter(
@@ -214,32 +260,56 @@ export async function createTransitSubmission(input: {
   ) {
     return { status: "verification_required" };
   }
-  if (memorySubmissions.has(websiteKey)) return { status: "duplicate" };
+  const existing = memorySubmissions.get(websiteKey);
+  if (existing?.notificationStatus === "sent") return { status: "duplicate" };
+  if (existing) {
+    return {
+      status: "notification_required",
+      submissionId: existing.id,
+      websiteUrl: existing.websiteUrl,
+      description: existing.description,
+      submitterEmail: decryptTransitSubmissionEmail(
+        existing.submitterEmailEncrypted,
+        secret,
+      ),
+      alreadySubmitted: true,
+    };
+  }
   const submissionId = crypto.randomUUID();
   verification.consumedAt = now.getTime();
   memorySubmissions.set(websiteKey, {
     id: submissionId,
-    verificationId: input.verificationId,
+    websiteUrl: input.websiteUrl,
+    description: input.description,
+    submitterEmailEncrypted,
+    notificationStatus: "pending",
   });
-  return { status: "submitted", submissionId };
+  return {
+    status: "notification_required",
+    submissionId,
+    websiteUrl: input.websiteUrl,
+    description: input.description,
+    submitterEmail: normalizedEmail,
+    alreadySubmitted: false,
+  };
 }
 
-export async function releaseTransitSubmission(input: {
+export async function markTransitSubmissionNotification(input: {
   submissionId: string;
-  verificationId: string;
+  status: "sent" | "failed";
+  now?: Date;
 }): Promise<void> {
+  const now = input.now ?? new Date();
   if (isDatabaseConfigured()) {
-    await releaseTransitSubmissionRecord(input);
+    await markTransitSubmissionNotificationRecord({ ...input, now });
     return;
   }
-  for (const [websiteKey, submission] of memorySubmissions) {
-    if (submission.id !== input.submissionId) continue;
-    memorySubmissions.delete(websiteKey);
-    const verification = memoryVerifications.get(input.verificationId);
-    if (verification && verification.consumedAt !== null) {
-      verification.consumedAt = null;
+  for (const submission of memorySubmissions.values()) {
+    if (submission.id === input.submissionId) {
+      submission.notificationStatus = input.status;
+      if (input.status === "sent") submission.submitterEmailEncrypted = "";
+      return;
     }
-    return;
   }
 }
 

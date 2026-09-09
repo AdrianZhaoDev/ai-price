@@ -419,7 +419,7 @@ const zh: LocaleMessages = {
         title: "保存内容",
         paragraphs: [
           "系统保存标准化邮箱、邮箱哈希、关注的产品或套餐、订阅语言、订阅状态和邮件送达记录。订阅语言仅用于发送对应语言的确认与价格通知。退订及历史确认令牌只保存不可逆哈希。",
-          "API 中转站收录申请仅持久保存申请邮箱与提交 IP 的服务器密钥 HMAC、网站链接、简介和提交时间。邮箱验证码同样只保存密钥 HMAC，并在 10 分钟后失效；管理员通知邮件会包含申请人填写的邮箱，以便人工审核和联系。",
+          "API 中转站收录申请持久保存申请邮箱与提交 IP 的服务器密钥 HMAC、网站链接、简介、通知状态和提交时间。通知完成前还会保存加密的申请邮箱，仅用于在通知中断后恢复管理员审核邮件，送达后即清除。邮箱验证码只保存密钥 HMAC，并在 10 分钟后失效；管理员通知邮件会包含申请人填写的邮箱，以便人工审核和联系。",
         ],
       },
       {
@@ -926,7 +926,7 @@ const en: LocaleMessages = {
         title: "What we store",
         paragraphs: [
           "The system stores a normalized email, an email hash, the product or plan being followed, the subscription locale, subscription status, and delivery records. The locale is used only to send confirmations and price alerts in the selected language. Unsubscribe and historical confirmation tokens are stored only as irreversible hashes.",
-          "API transit directory submissions persist only server-keyed HMACs of the applicant email and submission IP, together with the website link, description, and submission time. Verification codes are also stored only as keyed HMACs and expire after 10 minutes. The administrator notification email includes the address entered by the applicant for manual review and necessary contact.",
+          "API transit directory submissions persist server-keyed HMACs of the applicant email and submission IP, the website link, description, notification state, and submission time. Until notification completes, an encrypted copy of the applicant email is retained only to resume an interrupted administrator review message and is cleared after delivery. Verification codes are stored only as keyed HMACs and expire after 10 minutes. The administrator notification email includes the address entered by the applicant for manual review and necessary contact.",
         ],
       },
       {

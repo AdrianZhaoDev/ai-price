@@ -17,6 +17,7 @@ import {
   createTransitSubmissionCode,
   createTransitSubmissionVerification,
   deleteTransitSubmissionVerification,
+  transitSubmissionEmailHash,
 } from "@/lib/transit/submissions";
 
 const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     reservation = await reserveEmailDelivery({
       type: "transit-submission-verification",
       recipient: parsed.data.email,
+      recipientHash: transitSubmissionEmailHash(parsed.data.email),
       dedupeKey: `transit-verification:${verificationId}`,
     });
     if (!reservation) throw new Error("Unable to reserve delivery");

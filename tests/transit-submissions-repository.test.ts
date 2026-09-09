@@ -6,7 +6,7 @@ import {
   createTransitSubmission,
   createTransitSubmissionCode,
   createTransitSubmissionVerification,
-  releaseTransitSubmission,
+  markTransitSubmissionNotification,
   transitWebsiteKey,
 } from "@/lib/transit/submissions";
 
@@ -119,15 +119,43 @@ describe("transit submission repository", () => {
       ipAddress: "192.0.2.2",
       now,
     });
-    expect(submitted.status).toBe("submitted");
+    expect(submitted).toEqual(
+      expect.objectContaining({
+        status: "notification_required",
+        submitterEmail: email,
+        alreadySubmitted: false,
+      }),
+    );
     const duplicateId = await verifiedChallenge(now);
+    const pendingDuplicate = await createTransitSubmission({
+      verificationId: duplicateId,
+      email,
+      websiteUrl: "http://example.com/other",
+      description: "Duplicate",
+      ipAddress: "192.0.2.2",
+      now,
+    });
+    expect(pendingDuplicate).toEqual(
+      expect.objectContaining({
+        status: "notification_required",
+        submitterEmail: email,
+        alreadySubmitted: true,
+      }),
+    );
+    if (submitted.status === "notification_required") {
+      await markTransitSubmissionNotification({
+        submissionId: submitted.submissionId,
+        status: "sent",
+        now,
+      });
+    }
     expect(
       await createTransitSubmission({
         verificationId: duplicateId,
         email,
         websiteUrl: "http://example.com/other",
         description: "Duplicate",
-        ipAddress: "192.0.2.2",
+        ipAddress: "192.0.2.4",
         now,
       }),
     ).toEqual({ status: "duplicate" });
@@ -141,22 +169,6 @@ describe("transit submission repository", () => {
         now,
       }),
     ).toEqual({ status: "verification_required" });
-    if (submitted.status === "submitted") {
-      await releaseTransitSubmission({
-        submissionId: submitted.submissionId,
-        verificationId: id,
-      });
-      expect(
-        await createTransitSubmission({
-          verificationId: id,
-          email,
-          websiteUrl: "https://different.example.com/",
-          description: "Different",
-          ipAddress: "192.0.2.3",
-          now,
-        }),
-      ).toEqual(expect.objectContaining({ status: "submitted" }));
-    }
   });
 
   it("limits one IP to five submission attempts in five minutes", async () => {
@@ -174,7 +186,7 @@ describe("transit submission repository", () => {
             now,
           })
         ).status,
-      ).toBe("submitted");
+      ).toBe("notification_required");
     }
     const limitedVerification = await verifiedChallenge(now);
     expect(
@@ -196,6 +208,6 @@ describe("transit submission repository", () => {
         ipAddress: "192.0.2.50",
         now: new Date(now.getTime() + 5 * 60 * 1000),
       }),
-    ).toEqual(expect.objectContaining({ status: "submitted" }));
+    ).toEqual(expect.objectContaining({ status: "notification_required" }));
   });
 });

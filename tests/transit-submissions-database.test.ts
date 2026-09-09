@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hashToken } from "@/lib/security/tokens";
+import { encryptTransitSubmissionEmail } from "@/lib/security/transit-submission-data";
 
 const database = vi.hoisted(() => ({
   delete: vi.fn(),
   insert: vi.fn(),
   transaction: vi.fn(),
+  update: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({
@@ -18,12 +20,13 @@ import {
   createTransitSubmission,
   createTransitSubmissionVerification,
   deleteTransitSubmissionVerification,
-  releaseTransitSubmission,
+  markTransitSubmissionNotification,
 } from "@/lib/transit/submissions";
 
 const now = new Date("2026-09-09T00:00:00Z");
 const email = "owner@example.com";
 const verificationId = "8590b2da-8047-4b95-8ef3-00cf745a172b";
+const encryptedEmail = encryptTransitSubmissionEmail(email, "s".repeat(32));
 
 function resolvedWhere(value: unknown = undefined) {
   return { where: vi.fn().mockResolvedValue(value) };
@@ -145,13 +148,34 @@ describe("transit submission PostgreSQL paths", () => {
   });
 
   it.each([
-    ["duplicate", [{ id: "submission" }], 0, [{ id: verificationId }]],
-    ["rate_limited", [], 5, []],
-    ["verification_required", [], 0, []],
-    ["submitted", [], 0, [{ id: verificationId }]],
+    [
+      "duplicate",
+      [{ id: "submission", notificationStatus: "sent" }],
+      0,
+      [{ id: verificationId }],
+      false,
+    ],
+    ["rate_limited", [], 5, [], false],
+    ["verification_required", [], 0, [], false],
+    ["notification_required", [], 0, [{ id: verificationId }], false],
+    [
+      "notification_required",
+      [
+        {
+          id: "existing-submission",
+          websiteUrl: "https://www.example.com/docs",
+          description: "Original",
+          submitterEmailEncrypted: encryptedEmail,
+          notificationStatus: "failed",
+        },
+      ],
+      0,
+      [{ id: verificationId }],
+      true,
+    ],
   ] as const)(
     "returns %s from its concurrency-safe submission transaction",
-    async (expected, existing, count, verification) => {
+    async (expected, existing, count, verification, alreadySubmitted) => {
       const select = vi
         .fn()
         .mockReturnValueOnce({
@@ -205,43 +229,42 @@ describe("transit submission PostgreSQL paths", () => {
         now,
       });
       expect(result.status).toBe(expected);
-      if (expected === "submitted") {
-        expect(result).toEqual({
-          status: "submitted",
-          submissionId: "new-submission",
-        });
+      if (expected === "notification_required") {
+        expect(result).toEqual(
+          expect.objectContaining({
+            status: "notification_required",
+            submitterEmail: email,
+            alreadySubmitted,
+          }),
+        );
         expect(attemptValues).toHaveBeenCalledOnce();
-        expect(submissionValues).toHaveBeenCalledOnce();
-        expect(tx.update).toHaveBeenCalled();
+        expect(submissionValues).toHaveBeenCalledTimes(
+          alreadySubmitted ? 0 : 1,
+        );
+        expect(tx.update).toHaveBeenCalledTimes(alreadySubmitted ? 0 : 1);
       }
     },
   );
 
-  it.each([true, false])(
-    "releases a submission record when present=%s",
-    async (present) => {
+  it.each(["sent", "failed"] as const)(
+    "marks the notification as %s",
+    async (status) => {
       const updateWhere = vi.fn().mockResolvedValue(undefined);
-      const tx = {
-        delete: vi.fn(() => ({
-          where: () => ({
-            returning: vi
-              .fn()
-              .mockResolvedValue(present ? [{ id: "submission" }] : []),
-          }),
-        })),
-        update: vi.fn(() => ({
-          set: () => ({ where: updateWhere }),
-        })),
-      };
-      database.transaction.mockImplementation(
-        async (callback: (value: unknown) => unknown) => callback(tx),
-      );
-      await releaseTransitSubmission({
+      const updateSet = vi.fn(() => ({ where: updateWhere }));
+      database.update.mockReturnValue({ set: updateSet });
+      await markTransitSubmissionNotification({
         submissionId: "submission",
-        verificationId,
+        status,
+        now,
       });
-      expect(tx.update).toHaveBeenCalledTimes(present ? 1 : 0);
-      expect(updateWhere).toHaveBeenCalledTimes(present ? 1 : 0);
+      expect(updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notificationStatus: status,
+          notificationSentAt: status === "sent" ? now : null,
+          ...(status === "sent" ? { submitterEmailEncrypted: "" } : {}),
+        }),
+      );
+      expect(updateWhere).toHaveBeenCalled();
     },
   );
 });

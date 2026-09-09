@@ -1340,6 +1340,17 @@ export const transitSubmissions = pgTable(
     websiteKey: text("website_key").notNull(),
     description: text("description").notNull(),
     submitterEmailHash: text("submitter_email_hash").notNull(),
+    submitterEmailEncrypted: text("submitter_email_encrypted").notNull(),
+    notificationStatus: text("notification_status")
+      .default("pending")
+      .notNull(),
+    notificationAttempts: integer("notification_attempts").default(0).notNull(),
+    notificationLastAttemptAt: timestamp("notification_last_attempt_at", {
+      withTimezone: true,
+    }),
+    notificationSentAt: timestamp("notification_sent_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1360,6 +1371,7 @@ export const transitSubmissionAttempts = pgTable(
       .notNull(),
   },
   (table) => [
+    index("transit_submission_attempts_created_idx").on(table.createdAt),
     index("transit_submission_attempts_ip_created_idx").on(
       table.ipHash,
       table.createdAt,

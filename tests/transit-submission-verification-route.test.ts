@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   settle: vi.fn(),
   configured: vi.fn(),
+  submissionEmailHash: vi.fn(() => "keyed-email-hash"),
 }));
 
 vi.mock("@/lib/transit/submissions", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/lib/transit/submissions", () => ({
   createTransitSubmissionVerification: mocks.createVerification,
   deleteTransitSubmissionVerification: mocks.deleteVerification,
   confirmTransitSubmissionVerification: mocks.confirmVerification,
+  transitSubmissionEmailHash: mocks.submissionEmailHash,
 }));
 vi.mock("@/lib/email/transport", () => ({
   isSmtpConfigured: mocks.configured,
@@ -92,6 +94,9 @@ describe("transit submission email verification", () => {
         to: "owner@example.com",
         text: expect.stringContaining("123456"),
       }),
+    );
+    expect(mocks.reserve).toHaveBeenCalledWith(
+      expect.objectContaining({ recipientHash: "keyed-email-hash" }),
     );
   });
 

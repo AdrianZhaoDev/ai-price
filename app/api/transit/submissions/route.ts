@@ -14,7 +14,7 @@ import {
 } from "@/lib/transit/submission-http";
 import {
   createTransitSubmission,
-  releaseTransitSubmission,
+  markTransitSubmissionNotification,
   transitWebsiteKey,
 } from "@/lib/transit/submissions";
 
@@ -84,17 +84,22 @@ export async function POST(request: NextRequest) {
     return reply(400, "verification_required");
 
   const recipient = process.env.ADMIN_EMAIL || process.env.CONTACT_EMAIL;
-  const releaseSubmission = () =>
-    releaseTransitSubmission({
+  const successReply = () =>
+    result.alreadySubmitted
+      ? reply(200, "duplicate", { contact })
+      : reply(200, "submitted");
+  const markNotification = (status: "sent" | "failed") =>
+    markTransitSubmissionNotification({
       submissionId: result.submissionId,
-      verificationId: parsed.data.verificationId,
+      status,
     });
   if (!recipient || !isSmtpConfigured()) {
-    await releaseSubmission();
+    await markNotification("failed");
     return reply(503, "unavailable");
   }
-  const dedupeKey = `transit-submission:${transitWebsiteKey(parsed.data.url)}`;
+  const dedupeKey = `transit-submission:${transitWebsiteKey(result.websiteUrl)}`;
   let reservation;
+  let delivered = false;
   try {
     reservation = await reserveEmailDelivery({
       type: "transit-submission",
@@ -103,9 +108,9 @@ export async function POST(request: NextRequest) {
     });
     if (!reservation) {
       if (await isEmailDeliverySent(dedupeKey)) {
-        return reply(200, "submitted");
+        await markNotification("sent");
+        return successReply();
       }
-      await releaseSubmission();
       return reply(503, "retry_later");
     }
     // The submitted URL is plain text only; never fetch it or publish it automatically.
@@ -113,9 +118,10 @@ export async function POST(request: NextRequest) {
       from: process.env.SMTP_FROM,
       to: recipient,
       subject: "API 中转站收录申请",
-      text: `网站链接：${parsed.data.url}\n一句话介绍：${parsed.data.description}\n申请邮箱：${parsed.data.email}\n\n邮箱已通过验证码验证，请人工审核后收录。`,
+      text: `网站链接：${result.websiteUrl}\n一句话介绍：${result.description}\n申请邮箱：${result.submitterEmail}\n\n邮箱已通过验证码验证，请人工审核后收录。`,
     });
     if (!info.accepted?.length) throw new Error("Delivery not accepted");
+    delivered = true;
     try {
       await settleEmailDelivery(reservation, {
         status: "sent",
@@ -125,14 +131,19 @@ export async function POST(request: NextRequest) {
       // The provider accepted the message, so keep the submission even if the
       // delivery audit row could not be finalized.
     }
-    return reply(200, "submitted");
+    await markNotification("sent");
+    return successReply();
   } catch {
+    if (delivered) {
+      await markNotification("sent").catch(() => {});
+      return successReply();
+    }
     if (reservation)
       await settleEmailDelivery(reservation, {
         status: "failed",
         error: "Transit submission delivery failed",
       }).catch(() => {});
-    await releaseSubmission();
+    await markNotification("failed").catch(() => {});
     return reply(503, "unavailable");
   }
 }

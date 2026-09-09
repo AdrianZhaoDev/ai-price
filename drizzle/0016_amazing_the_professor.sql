@@ -21,9 +21,15 @@ CREATE TABLE "transit_submissions" (
 	"website_key" text NOT NULL,
 	"description" text NOT NULL,
 	"submitter_email_hash" text NOT NULL,
+	"submitter_email_encrypted" text NOT NULL,
+	"notification_status" text DEFAULT 'pending' NOT NULL,
+	"notification_attempts" integer DEFAULT 0 NOT NULL,
+	"notification_last_attempt_at" timestamp with time zone,
+	"notification_sent_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE INDEX "transit_submission_attempts_created_idx" ON "transit_submission_attempts" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "transit_submission_attempts_ip_created_idx" ON "transit_submission_attempts" USING btree ("ip_hash","created_at");--> statement-breakpoint
 CREATE INDEX "transit_submission_verifications_email_idx" ON "transit_submission_verifications" USING btree ("email_hash","created_at");--> statement-breakpoint
 CREATE INDEX "transit_submission_verifications_expiry_idx" ON "transit_submission_verifications" USING btree ("expires_at");--> statement-breakpoint

@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   createSubmission: vi.fn(),
-  releaseSubmission: vi.fn(),
+  markNotification: vi.fn(),
   sendMail: vi.fn(),
   reserve: vi.fn(),
   settle: vi.fn(),
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/transit/submissions", () => ({
   createTransitSubmission: mocks.createSubmission,
-  releaseTransitSubmission: mocks.releaseSubmission,
+  markTransitSubmissionNotification: mocks.markNotification,
   transitWebsiteKey: (url: string) => new URL(url).hostname,
 }));
 vi.mock("@/lib/email/transport", () => ({
@@ -54,10 +54,14 @@ beforeEach(() => {
   vi.stubEnv("APP_URL", "https://lowpriceradar.com");
   vi.stubEnv("ADMIN_EMAIL", "admin@example.com");
   mocks.createSubmission.mockResolvedValue({
-    status: "submitted",
+    status: "notification_required",
     submissionId: "submission-id",
+    websiteUrl: "https://ai.lowpriceradar.com/",
+    description: "An AI API gateway.",
+    submitterEmail: "owner@example.com",
+    alreadySubmitted: false,
   });
-  mocks.releaseSubmission.mockResolvedValue(undefined);
+  mocks.markNotification.mockResolvedValue(undefined);
   mocks.configured.mockReturnValue(true);
   mocks.reserve.mockResolvedValue({
     id: "reservation",
@@ -92,6 +96,37 @@ describe("transit submissions", () => {
         text: expect.stringContaining("申请邮箱：owner@example.com"),
       }),
     );
+    expect(mocks.markNotification).toHaveBeenCalledWith({
+      submissionId: "submission-id",
+      status: "sent",
+    });
+  });
+
+  it("resumes a pending duplicate notification before returning duplicate", async () => {
+    mocks.createSubmission.mockResolvedValue({
+      status: "notification_required",
+      submissionId: "existing-submission",
+      websiteUrl: "https://ai.lowpriceradar.com/",
+      description: "Original description",
+      submitterEmail: "original@example.com",
+      alreadySubmitted: true,
+    });
+    const response = await POST(
+      request({ url: "https://ai.lowpriceradar.com/docs" }),
+    );
+    expect(await response.json()).toEqual({
+      code: "duplicate",
+      contact: "admin@example.com",
+    });
+    expect(mocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("申请邮箱：original@example.com"),
+      }),
+    );
+    expect(mocks.markNotification).toHaveBeenCalledWith({
+      submissionId: "existing-submission",
+      status: "sent",
+    });
   });
 
   it("returns the configured contact for an existing website", async () => {
@@ -173,14 +208,14 @@ describe("transit submissions", () => {
     ).toBe(403);
   });
 
-  it("rolls back a persisted submission when admin notification is unavailable", async () => {
+  it("keeps a retryable outbox state when admin notification is unavailable", async () => {
     mocks.configured.mockReturnValue(false);
     expect(
       (await POST(request({ url: "https://ai.lowpriceradar.com" }))).status,
     ).toBe(503);
-    expect(mocks.releaseSubmission).toHaveBeenCalledWith({
+    expect(mocks.markNotification).toHaveBeenCalledWith({
       submissionId: "submission-id",
-      verificationId: "8590b2da-8047-4b95-8ef3-00cf745a172b",
+      status: "failed",
     });
     mocks.configured.mockReturnValue(true);
     mocks.sendMail.mockRejectedValueOnce(new Error("SMTP failure"));
@@ -193,10 +228,10 @@ describe("transit submissions", () => {
       expect.anything(),
       expect.objectContaining({ status: "failed" }),
     );
-    expect(mocks.releaseSubmission).toHaveBeenCalledTimes(2);
+    expect(mocks.markNotification).toHaveBeenCalledTimes(2);
   });
 
-  it("rolls back a submission when its notification reservation is busy", async () => {
+  it("keeps a pending submission when its notification reservation is busy", async () => {
     mocks.reserve.mockResolvedValue(null);
     mocks.sent.mockResolvedValue(false);
     const response = await POST(
@@ -204,14 +239,17 @@ describe("transit submissions", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ code: "retry_later" });
-    expect(mocks.releaseSubmission).toHaveBeenCalledOnce();
+    expect(mocks.markNotification).not.toHaveBeenCalled();
 
     mocks.sent.mockResolvedValue(true);
     expect(
       (await POST(request({ url: "https://already-notified.example.org" })))
         .status,
     ).toBe(200);
-    expect(mocks.releaseSubmission).toHaveBeenCalledOnce();
+    expect(mocks.markNotification).toHaveBeenCalledWith({
+      submissionId: "submission-id",
+      status: "sent",
+    });
   });
 
   it("keeps a submission when SMTP accepted the message but audit settlement fails", async () => {
@@ -221,6 +259,9 @@ describe("transit submissions", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ code: "submitted" });
-    expect(mocks.releaseSubmission).not.toHaveBeenCalled();
+    expect(mocks.markNotification).toHaveBeenCalledWith({
+      submissionId: "submission-id",
+      status: "sent",
+    });
   });
 });

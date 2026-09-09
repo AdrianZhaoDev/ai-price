@@ -1,5 +1,5 @@
 {
-  "id": "b624361b-01f4-47a6-81f4-6e2810819918",
+  "id": "beac1ca2-0934-4211-bc0f-23a98d3d2ca5",
   "prevId": "47fca9e0-c49a-416e-b8b3-07f1e45bf9aa",
   "version": "7",
   "dialect": "postgresql",
@@ -4925,6 +4925,21 @@
         }
       },
       "indexes": {
+        "transit_submission_attempts_created_idx": {
+          "name": "transit_submission_attempts_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "transit_submission_attempts_ip_created_idx": {
           "name": "transit_submission_attempts_ip_created_idx",
           "columns": [
@@ -5089,6 +5104,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "submitter_email_encrypted": {
+          "name": "submitter_email_encrypted",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notification_status": {
+          "name": "notification_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "notification_attempts": {
+          "name": "notification_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "notification_last_attempt_at": {
+          "name": "notification_last_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notification_sent_at": {
+          "name": "notification_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
