@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isIP } from "node:net";
 import { getEmailTransport, isSmtpConfigured } from "@/lib/email/transport";
 import {
+  isEmailDeliverySent,
   reserveEmailDelivery,
   settleEmailDelivery,
 } from "@/lib/email/delivery";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/transit/submission-http";
 import {
   createTransitSubmission,
+  releaseTransitSubmission,
   transitWebsiteKey,
 } from "@/lib/transit/submissions";
 
@@ -32,15 +34,14 @@ const schema = z
       .transform((value, ctx) => {
         try {
           const url = new URL(value);
+          const hostname = url.hostname.replace(/\.$/, "");
           if (
             !["http:", "https:"].includes(url.protocol) ||
             url.username ||
             url.password ||
-            isIP(url.hostname.replace(/^\[|\]$/g, "")) ||
-            !url.hostname.includes(".") ||
-            /\.(localhost|local|internal|test|invalid|example)$/.test(
-              url.hostname,
-            )
+            isIP(hostname.replace(/^\[|\]$/g, "")) ||
+            !hostname.includes(".") ||
+            /\.(localhost|local|internal|test|invalid|example)$/.test(hostname)
           )
             throw new Error();
           url.hash = "";
@@ -76,13 +77,22 @@ export async function POST(request: NextRequest) {
     ipAddress: transitSubmissionClientIp(request),
   });
   const contact = process.env.ADMIN_EMAIL || process.env.CONTACT_EMAIL;
-  if (result === "duplicate") return reply(200, "duplicate", { contact });
-  if (result === "rate_limited") return reply(429, "rate_limited");
-  if (result === "verification_required")
+  if (result.status === "duplicate")
+    return reply(200, "duplicate", { contact });
+  if (result.status === "rate_limited") return reply(429, "rate_limited");
+  if (result.status === "verification_required")
     return reply(400, "verification_required");
 
   const recipient = process.env.ADMIN_EMAIL || process.env.CONTACT_EMAIL;
-  if (!recipient || !isSmtpConfigured()) return reply(200, "submitted");
+  const releaseSubmission = () =>
+    releaseTransitSubmission({
+      submissionId: result.submissionId,
+      verificationId: parsed.data.verificationId,
+    });
+  if (!recipient || !isSmtpConfigured()) {
+    await releaseSubmission();
+    return reply(503, "unavailable");
+  }
   const dedupeKey = `transit-submission:${transitWebsiteKey(parsed.data.url)}`;
   let reservation;
   try {
@@ -91,7 +101,13 @@ export async function POST(request: NextRequest) {
       recipient,
       dedupeKey,
     });
-    if (!reservation) return reply(200, "submitted");
+    if (!reservation) {
+      if (await isEmailDeliverySent(dedupeKey)) {
+        return reply(200, "submitted");
+      }
+      await releaseSubmission();
+      return reply(503, "retry_later");
+    }
     // The submitted URL is plain text only; never fetch it or publish it automatically.
     const info = await getEmailTransport().sendMail({
       from: process.env.SMTP_FROM,
@@ -100,10 +116,15 @@ export async function POST(request: NextRequest) {
       text: `网站链接：${parsed.data.url}\n一句话介绍：${parsed.data.description}\n申请邮箱：${parsed.data.email}\n\n邮箱已通过验证码验证，请人工审核后收录。`,
     });
     if (!info.accepted?.length) throw new Error("Delivery not accepted");
-    await settleEmailDelivery(reservation, {
-      status: "sent",
-      providerMessageId: info.messageId,
-    });
+    try {
+      await settleEmailDelivery(reservation, {
+        status: "sent",
+        providerMessageId: info.messageId,
+      });
+    } catch {
+      // The provider accepted the message, so keep the submission even if the
+      // delivery audit row could not be finalized.
+    }
     return reply(200, "submitted");
   } catch {
     if (reservation)
@@ -111,6 +132,7 @@ export async function POST(request: NextRequest) {
         status: "failed",
         error: "Transit submission delivery failed",
       }).catch(() => {});
-    return reply(200, "submitted");
+    await releaseSubmission();
+    return reply(503, "unavailable");
   }
 }

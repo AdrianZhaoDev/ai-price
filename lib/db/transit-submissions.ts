@@ -68,7 +68,10 @@ export async function confirmTransitVerificationRecord(input: {
 }
 
 export type TransitSubmissionRecordResult =
-  "submitted" | "duplicate" | "rate_limited" | "verification_required";
+  | { status: "submitted"; submissionId: string }
+  | { status: "duplicate" }
+  | { status: "rate_limited" }
+  | { status: "verification_required" };
 
 export async function createTransitSubmissionRecord(input: {
   verificationId: string;
@@ -82,16 +85,6 @@ export async function createTransitSubmissionRecord(input: {
   windowLimit: number;
 }): Promise<TransitSubmissionRecordResult> {
   return getDatabase().transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`transit-site:${input.websiteKey}`}, 0))`,
-    );
-    const [existing] = await tx
-      .select({ id: transitSubmissions.id })
-      .from(transitSubmissions)
-      .where(eq(transitSubmissions.websiteKey, input.websiteKey))
-      .limit(1);
-    if (existing) return "duplicate";
-
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`transit-ip:${input.ipHash}`}, 0))`,
     );
@@ -112,7 +105,7 @@ export async function createTransitSubmissionRecord(input: {
           gt(transitSubmissionAttempts.createdAt, input.cutoff),
         ),
       );
-    if (count >= input.windowLimit) return "rate_limited";
+    if (count >= input.windowLimit) return { status: "rate_limited" };
     await tx
       .insert(transitSubmissionAttempts)
       .values({ ipHash: input.ipHash, createdAt: input.now });
@@ -131,19 +124,49 @@ export async function createTransitSubmissionRecord(input: {
       )
       .limit(1)
       .for("update");
-    if (!verification) return "verification_required";
+    if (!verification) return { status: "verification_required" };
 
-    await tx.insert(transitSubmissions).values({
-      websiteUrl: input.websiteUrl,
-      websiteKey: input.websiteKey,
-      description: input.description,
-      submitterEmailHash: input.emailHash,
-      createdAt: input.now,
-    });
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`transit-site:${input.websiteKey}`}, 0))`,
+    );
+    const [existing] = await tx
+      .select({ id: transitSubmissions.id })
+      .from(transitSubmissions)
+      .where(eq(transitSubmissions.websiteKey, input.websiteKey))
+      .limit(1);
+    if (existing) return { status: "duplicate" };
+
+    const [submission] = await tx
+      .insert(transitSubmissions)
+      .values({
+        websiteUrl: input.websiteUrl,
+        websiteKey: input.websiteKey,
+        description: input.description,
+        submitterEmailHash: input.emailHash,
+        createdAt: input.now,
+      })
+      .returning({ id: transitSubmissions.id });
     await tx
       .update(transitSubmissionVerifications)
       .set({ consumedAt: input.now })
       .where(eq(transitSubmissionVerifications.id, verification.id));
-    return "submitted";
+    return { status: "submitted", submissionId: submission.id };
+  });
+}
+
+export async function releaseTransitSubmissionRecord(input: {
+  submissionId: string;
+  verificationId: string;
+}): Promise<void> {
+  await getDatabase().transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(transitSubmissions)
+      .where(eq(transitSubmissions.id, input.submissionId))
+      .returning({ id: transitSubmissions.id });
+    if (!deleted) return;
+    await tx
+      .update(transitSubmissionVerifications)
+      .set({ consumedAt: null })
+      .where(eq(transitSubmissionVerifications.id, input.verificationId));
   });
 }

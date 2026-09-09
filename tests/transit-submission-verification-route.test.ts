@@ -31,7 +31,11 @@ vi.mock("@/lib/email/delivery", () => ({
 
 import { POST, PUT } from "@/app/api/transit/submissions/verification/route";
 
-function request(method: "POST" | "PUT", body: Record<string, unknown>) {
+function request(
+  method: "POST" | "PUT",
+  body: Record<string, unknown>,
+  ip = "192.0.2.10",
+) {
   return new NextRequest(
     "https://lowpriceradar.com/api/transit/submissions/verification",
     {
@@ -39,7 +43,7 @@ function request(method: "POST" | "PUT", body: Record<string, unknown>) {
       headers: {
         "Content-Type": "application/json",
         origin: "https://lowpriceradar.com",
-        "x-real-ip": "192.0.2.10",
+        "x-real-ip": ip,
       },
       body: JSON.stringify(body),
     },
@@ -134,6 +138,41 @@ describe("transit submission email verification", () => {
     );
     expect(response.status).toBe(429);
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("short-circuits email keys after an IP is blocked", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      expect(
+        (
+          await POST(
+            request("POST", {
+              email: `owner-${index}@example.com`,
+              locale: "en",
+            }),
+          )
+        ).status,
+      ).toBe(200);
+    }
+    for (let index = 0; index < 3; index += 1) {
+      expect(
+        (
+          await POST(
+            request("POST", { email: "blocked@example.com", locale: "en" }),
+          )
+        ).status,
+      ).toBe(429);
+    }
+    expect(
+      (
+        await POST(
+          request(
+            "POST",
+            { email: "blocked@example.com", locale: "en" },
+            "192.0.2.11",
+          ),
+        )
+      ).status,
+    ).toBe(200);
   });
 
   it("rejects invalid requests and removes a challenge after delivery failure", async () => {

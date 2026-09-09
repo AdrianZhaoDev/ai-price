@@ -6,6 +6,7 @@ import {
   createTransitSubmission,
   createTransitSubmissionCode,
   createTransitSubmissionVerification,
+  releaseTransitSubmission,
   transitWebsiteKey,
 } from "@/lib/transit/submissions";
 
@@ -32,6 +33,9 @@ describe("transit submission repository", () => {
   it("generates six-digit codes and groups equivalent website links", () => {
     expect(createTransitSubmissionCode()).toMatch(/^\d{6}$/);
     expect(transitWebsiteKey("http://www.Example.com/docs?a=1")).toBe(
+      transitWebsiteKey("https://example.com/"),
+    );
+    expect(transitWebsiteKey("https://example.com./pricing")).toBe(
       transitWebsiteKey("https://example.com/"),
     );
     expect(transitWebsiteKey("https://api.example.com/")).not.toBe(
@@ -104,29 +108,29 @@ describe("transit submission repository", () => {
         ipAddress: "192.0.2.1",
         now,
       }),
-    ).toBe("verification_required");
+    ).toEqual({ status: "verification_required" });
 
     const id = await verifiedChallenge(now);
+    const submitted = await createTransitSubmission({
+      verificationId: id,
+      email,
+      websiteUrl: "https://www.example.com/docs",
+      description: "Example",
+      ipAddress: "192.0.2.2",
+      now,
+    });
+    expect(submitted.status).toBe("submitted");
+    const duplicateId = await verifiedChallenge(now);
     expect(
       await createTransitSubmission({
-        verificationId: id,
-        email,
-        websiteUrl: "https://www.example.com/docs",
-        description: "Example",
-        ipAddress: "192.0.2.2",
-        now,
-      }),
-    ).toBe("submitted");
-    expect(
-      await createTransitSubmission({
-        verificationId: id,
+        verificationId: duplicateId,
         email,
         websiteUrl: "http://example.com/other",
         description: "Duplicate",
         ipAddress: "192.0.2.2",
         now,
       }),
-    ).toBe("duplicate");
+    ).toEqual({ status: "duplicate" });
     expect(
       await createTransitSubmission({
         verificationId: id,
@@ -136,7 +140,23 @@ describe("transit submission repository", () => {
         ipAddress: "192.0.2.2",
         now,
       }),
-    ).toBe("verification_required");
+    ).toEqual({ status: "verification_required" });
+    if (submitted.status === "submitted") {
+      await releaseTransitSubmission({
+        submissionId: submitted.submissionId,
+        verificationId: id,
+      });
+      expect(
+        await createTransitSubmission({
+          verificationId: id,
+          email,
+          websiteUrl: "https://different.example.com/",
+          description: "Different",
+          ipAddress: "192.0.2.3",
+          now,
+        }),
+      ).toEqual(expect.objectContaining({ status: "submitted" }));
+    }
   });
 
   it("limits one IP to five submission attempts in five minutes", async () => {
@@ -144,14 +164,16 @@ describe("transit submission repository", () => {
     for (let index = 0; index < 5; index += 1) {
       const verificationId = await verifiedChallenge(now);
       expect(
-        await createTransitSubmission({
-          verificationId,
-          email,
-          websiteUrl: `https://site-${index}.example.com/`,
-          description: "Example",
-          ipAddress: "192.0.2.50",
-          now,
-        }),
+        (
+          await createTransitSubmission({
+            verificationId,
+            email,
+            websiteUrl: `https://site-${index}.example.com/`,
+            description: "Example",
+            ipAddress: "192.0.2.50",
+            now,
+          })
+        ).status,
       ).toBe("submitted");
     }
     const limitedVerification = await verifiedChallenge(now);
@@ -164,7 +186,7 @@ describe("transit submission repository", () => {
         ipAddress: "192.0.2.50",
         now,
       }),
-    ).toBe("rate_limited");
+    ).toEqual({ status: "rate_limited" });
     expect(
       await createTransitSubmission({
         verificationId: limitedVerification,
@@ -174,6 +196,6 @@ describe("transit submission repository", () => {
         ipAddress: "192.0.2.50",
         now: new Date(now.getTime() + 5 * 60 * 1000),
       }),
-    ).toBe("submitted");
+    ).toEqual(expect.objectContaining({ status: "submitted" }));
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hashEmail, hashToken } from "@/lib/security/tokens";
+import { hashToken } from "@/lib/security/tokens";
 
 const database = vi.hoisted(() => ({
   delete: vi.fn(),
@@ -18,6 +18,7 @@ import {
   createTransitSubmission,
   createTransitSubmissionVerification,
   deleteTransitSubmissionVerification,
+  releaseTransitSubmission,
 } from "@/lib/transit/submissions";
 
 const now = new Date("2026-09-09T00:00:00Z");
@@ -31,7 +32,7 @@ function resolvedWhere(value: unknown = undefined) {
 function verificationRow(overrides: Record<string, unknown> = {}) {
   return {
     id: verificationId,
-    emailHash: hashEmail(email),
+    emailHash: hashToken(email, "s".repeat(32)),
     codeHash: hashToken(`${verificationId}:123456`, "s".repeat(32)),
     attempts: 0,
     expiresAt: new Date(now.getTime() + 60_000),
@@ -65,7 +66,7 @@ describe("transit submission PostgreSQL paths", () => {
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         id,
-        emailHash: hashEmail(email),
+        emailHash: hashToken(email, "s".repeat(32)),
         expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
       }),
     );
@@ -108,7 +109,10 @@ describe("transit submission PostgreSQL paths", () => {
 
   it.each([
     ["missing", undefined],
-    ["different email", { emailHash: hashEmail("other@example.com") }],
+    [
+      "different email",
+      { emailHash: hashToken("other@example.com", "s".repeat(32)) },
+    ],
     ["expired", { expiresAt: now }],
     ["consumed", { consumedAt: now }],
     ["attempt limit", { attempts: 5 }],
@@ -141,7 +145,7 @@ describe("transit submission PostgreSQL paths", () => {
   });
 
   it.each([
-    ["duplicate", [{ id: "submission" }], 0, []],
+    ["duplicate", [{ id: "submission" }], 0, [{ id: verificationId }]],
     ["rate_limited", [], 5, []],
     ["verification_required", [], 0, []],
     ["submitted", [], 0, [{ id: verificationId }]],
@@ -150,11 +154,6 @@ describe("transit submission PostgreSQL paths", () => {
     async (expected, existing, count, verification) => {
       const select = vi
         .fn()
-        .mockReturnValueOnce({
-          from: () => ({
-            where: () => ({ limit: vi.fn().mockResolvedValue(existing) }),
-          }),
-        })
         .mockReturnValueOnce({
           from: () => ({
             where: vi.fn().mockResolvedValue([{ count }]),
@@ -168,13 +167,27 @@ describe("transit submission PostgreSQL paths", () => {
               }),
             }),
           }),
+        })
+        .mockReturnValueOnce({
+          from: () => ({
+            where: () => ({ limit: vi.fn().mockResolvedValue(existing) }),
+          }),
         });
-      const insertValues = vi.fn().mockResolvedValue(undefined);
+      const attemptValues = vi.fn().mockResolvedValue(undefined);
+      const submissionReturning = vi
+        .fn()
+        .mockResolvedValue([{ id: "new-submission" }]);
+      const submissionValues = vi.fn(() => ({
+        returning: submissionReturning,
+      }));
       const tx = {
         execute: vi.fn().mockResolvedValue(undefined),
         select,
         delete: vi.fn(() => resolvedWhere()),
-        insert: vi.fn(() => ({ values: insertValues })),
+        insert: vi
+          .fn()
+          .mockReturnValueOnce({ values: attemptValues })
+          .mockReturnValueOnce({ values: submissionValues }),
         update: vi.fn(() => ({
           set: () => resolvedWhere(),
         })),
@@ -183,20 +196,52 @@ describe("transit submission PostgreSQL paths", () => {
         async (callback: (value: unknown) => unknown) => callback(tx),
       );
 
-      expect(
-        await createTransitSubmission({
-          verificationId,
-          email,
-          websiteUrl: "https://www.example.com/docs",
-          description: "Example",
-          ipAddress: "192.0.2.10",
-          now,
-        }),
-      ).toBe(expected);
+      const result = await createTransitSubmission({
+        verificationId,
+        email,
+        websiteUrl: "https://www.example.com/docs",
+        description: "Example",
+        ipAddress: "192.0.2.10",
+        now,
+      });
+      expect(result.status).toBe(expected);
       if (expected === "submitted") {
-        expect(insertValues).toHaveBeenCalledTimes(2);
+        expect(result).toEqual({
+          status: "submitted",
+          submissionId: "new-submission",
+        });
+        expect(attemptValues).toHaveBeenCalledOnce();
+        expect(submissionValues).toHaveBeenCalledOnce();
         expect(tx.update).toHaveBeenCalled();
       }
+    },
+  );
+
+  it.each([true, false])(
+    "releases a submission record when present=%s",
+    async (present) => {
+      const updateWhere = vi.fn().mockResolvedValue(undefined);
+      const tx = {
+        delete: vi.fn(() => ({
+          where: () => ({
+            returning: vi
+              .fn()
+              .mockResolvedValue(present ? [{ id: "submission" }] : []),
+          }),
+        })),
+        update: vi.fn(() => ({
+          set: () => ({ where: updateWhere }),
+        })),
+      };
+      database.transaction.mockImplementation(
+        async (callback: (value: unknown) => unknown) => callback(tx),
+      );
+      await releaseTransitSubmission({
+        submissionId: "submission",
+        verificationId,
+      });
+      expect(tx.update).toHaveBeenCalledTimes(present ? 1 : 0);
+      expect(updateWhere).toHaveBeenCalledTimes(present ? 1 : 0);
     },
   );
 });

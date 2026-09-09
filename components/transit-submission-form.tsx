@@ -129,6 +129,11 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
         return;
       }
       if (!response.ok) {
+        if (result.code === "verification_required") {
+          setVerified(false);
+          setVerificationId("");
+          setCode("");
+        }
         setMessage(
           response.status === 429
             ? en

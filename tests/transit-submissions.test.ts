@@ -4,14 +4,17 @@ import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   createSubmission: vi.fn(),
+  releaseSubmission: vi.fn(),
   sendMail: vi.fn(),
   reserve: vi.fn(),
   settle: vi.fn(),
+  sent: vi.fn(),
   configured: vi.fn(),
 }));
 
 vi.mock("@/lib/transit/submissions", () => ({
   createTransitSubmission: mocks.createSubmission,
+  releaseTransitSubmission: mocks.releaseSubmission,
   transitWebsiteKey: (url: string) => new URL(url).hostname,
 }));
 vi.mock("@/lib/email/transport", () => ({
@@ -19,6 +22,7 @@ vi.mock("@/lib/email/transport", () => ({
   getEmailTransport: () => ({ sendMail: mocks.sendMail }),
 }));
 vi.mock("@/lib/email/delivery", () => ({
+  isEmailDeliverySent: mocks.sent,
   reserveEmailDelivery: mocks.reserve,
   settleEmailDelivery: mocks.settle,
 }));
@@ -49,13 +53,18 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("APP_URL", "https://lowpriceradar.com");
   vi.stubEnv("ADMIN_EMAIL", "admin@example.com");
-  mocks.createSubmission.mockResolvedValue("submitted");
+  mocks.createSubmission.mockResolvedValue({
+    status: "submitted",
+    submissionId: "submission-id",
+  });
+  mocks.releaseSubmission.mockResolvedValue(undefined);
   mocks.configured.mockReturnValue(true);
   mocks.reserve.mockResolvedValue({
     id: "reservation",
     reservedAt: new Date(),
   });
   mocks.settle.mockResolvedValue(undefined);
+  mocks.sent.mockResolvedValue(false);
   mocks.sendMail.mockResolvedValue({
     accepted: ["admin@example.com"],
     messageId: "message",
@@ -86,7 +95,7 @@ describe("transit submissions", () => {
   });
 
   it("returns the configured contact for an existing website", async () => {
-    mocks.createSubmission.mockResolvedValue("duplicate");
+    mocks.createSubmission.mockResolvedValue({ status: "duplicate" });
     const response = await POST(
       request({ url: "https://ai.lowpriceradar.com/docs" }),
     );
@@ -102,7 +111,7 @@ describe("transit submissions", () => {
     ["rate_limited", 429, "rate_limited"],
     ["verification_required", 400, "verification_required"],
   ] as const)("maps %s storage results", async (result, status, code) => {
-    mocks.createSubmission.mockResolvedValue(result);
+    mocks.createSubmission.mockResolvedValue({ status: result });
     const response = await POST(
       request({ url: "https://ai.lowpriceradar.com" }),
     );
@@ -133,6 +142,7 @@ describe("transit submissions", () => {
     "https://localhost",
     "invalid",
     "https://host.internal",
+    "https://host.internal.",
   ])("rejects invalid/private input %s", async (url) => {
     expect((await POST(request({ url }))).status).toBe(400);
     expect(mocks.createSubmission).not.toHaveBeenCalled();
@@ -163,21 +173,54 @@ describe("transit submissions", () => {
     ).toBe(403);
   });
 
-  it("keeps a persisted submission successful when admin notification is unavailable", async () => {
+  it("rolls back a persisted submission when admin notification is unavailable", async () => {
     mocks.configured.mockReturnValue(false);
     expect(
       (await POST(request({ url: "https://ai.lowpriceradar.com" }))).status,
-    ).toBe(200);
+    ).toBe(503);
+    expect(mocks.releaseSubmission).toHaveBeenCalledWith({
+      submissionId: "submission-id",
+      verificationId: "8590b2da-8047-4b95-8ef3-00cf745a172b",
+    });
     mocks.configured.mockReturnValue(true);
     mocks.sendMail.mockRejectedValueOnce(new Error("SMTP failure"));
     const response = await POST(
       request({ url: "https://other.lowpriceradar.com" }),
     );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ code: "submitted" });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "unavailable" });
     expect(mocks.settle).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ status: "failed" }),
     );
+    expect(mocks.releaseSubmission).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back a submission when its notification reservation is busy", async () => {
+    mocks.reserve.mockResolvedValue(null);
+    mocks.sent.mockResolvedValue(false);
+    const response = await POST(
+      request({ url: "https://ai.lowpriceradar.com" }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "retry_later" });
+    expect(mocks.releaseSubmission).toHaveBeenCalledOnce();
+
+    mocks.sent.mockResolvedValue(true);
+    expect(
+      (await POST(request({ url: "https://already-notified.example.org" })))
+        .status,
+    ).toBe(200);
+    expect(mocks.releaseSubmission).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a submission when SMTP accepted the message but audit settlement fails", async () => {
+    mocks.settle.mockRejectedValueOnce(new Error("database timeout"));
+    const response = await POST(
+      request({ url: "https://ai.lowpriceradar.com" }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ code: "submitted" });
+    expect(mocks.releaseSubmission).not.toHaveBeenCalled();
   });
 });

@@ -55,23 +55,25 @@ export async function POST(request: NextRequest) {
   if (!isSmtpConfigured()) return reply(503, "unavailable");
 
   const ipHash = hashValue(transitSubmissionClientIp(request));
-  const emailHash = hashEmail(parsed.data.email);
   const ipLimit = checkRateLimit(
     `transit-verification-ip:${ipHash}`,
     5,
     15 * 60 * 1000,
   );
+  if (!ipLimit.allowed) {
+    return reply(429, "rate_limited", {
+      retryAfterSeconds: ipLimit.retryAfterSeconds,
+    });
+  }
+  const emailHash = hashEmail(parsed.data.email);
   const emailLimit = checkRateLimit(
     `transit-verification-email:${emailHash}`,
     3,
     15 * 60 * 1000,
   );
-  if (!ipLimit.allowed || !emailLimit.allowed) {
+  if (!emailLimit.allowed) {
     return reply(429, "rate_limited", {
-      retryAfterSeconds: Math.max(
-        ipLimit.retryAfterSeconds,
-        emailLimit.retryAfterSeconds,
-      ),
+      retryAfterSeconds: emailLimit.retryAfterSeconds,
     });
   }
 
