@@ -306,6 +306,8 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 中英文一句话介绍，按 `rank` 从小到大排序，整行可点击且不显示原始网址。初始数据包括用户指定的
 `https://ai.lowpriceradar.com/`、CallAI 和 WAWA ZZ API。
 页面不读取报价数据库，不抓取或列出模型，不提供比价、筛选和可用性统计。
+该人工维护目录始终读取管理员写入目标，避免数据库读写目标分离时出现后台已保存但公开页未更新；
+它不加入公开报价快照镜像。
 既有中转数据 API、详情路由和采集历史保留兼容；目录链接不构成报价或服务质量核验。
 
 收录申请先向 `POST /api/transit/submissions/verification` 提交 `email` 和 `locale` 获取

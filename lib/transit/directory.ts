@@ -1,10 +1,5 @@
 import { asc, desc, eq, or } from "drizzle-orm";
-import {
-  getDatabase,
-  getReadDatabase,
-  isDatabaseConfigured,
-  isReadDatabaseConfigured,
-} from "@/lib/db/client";
+import { getDatabase, isDatabaseConfigured } from "@/lib/db/client";
 import { transitDirectoryEntries, transitSubmissions } from "@/lib/db/schema";
 import { transitWebsiteKey } from "@/lib/transit/submissions";
 
@@ -57,8 +52,8 @@ export const defaultTransitDirectoryEntries = [
 ] as const;
 
 export async function listPublicTransitDirectoryEntries() {
-  if (!isReadDatabaseConfigured()) return [...defaultTransitDirectoryEntries];
-  const rows = await getReadDatabase()
+  if (!isDatabaseConfigured()) return [...defaultTransitDirectoryEntries];
+  const rows = await getDatabase()
     .select({
       id: transitDirectoryEntries.id,
       name: transitDirectoryEntries.name,
@@ -172,6 +167,11 @@ export async function reviewTransitSubmission(
           updatedAt: now,
         });
       }
+    } else if (decision === "rejected") {
+      await tx
+        .update(transitDirectoryEntries)
+        .set({ published: false, updatedAt: now })
+        .where(eq(transitDirectoryEntries.sourceSubmissionId, id));
     }
     await tx
       .update(transitSubmissions)
