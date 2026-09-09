@@ -409,22 +409,24 @@ const zh: LocaleMessages = {
       },
     ],
     privacyEyebrow: "隐私说明",
-    privacyTitle: "价格通知与访问数据的使用",
+    privacyTitle: "邮箱验证、价格通知与访问数据的使用",
     privacyLead:
-      "邮箱用于发送订阅成功通知、价格变化通知和处理退订，不出售，也不用于营销邮件。",
+      "邮箱用于验证收录申请、发送订阅成功通知、价格变化通知和处理退订，不出售，也不用于营销邮件。",
     privacyDescription:
-      "了解 Low Price Radar 在价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界。",
+      "了解 Low Price Radar 在收录申请和价格变化通知中保存哪些邮箱与订阅信息、使用目的、保存期限、安全处理、邮件服务商、退订和删除方式，以及访问官方来源或使用网站分析服务时的数据边界。",
     privacySections: [
       {
         title: "保存内容",
         paragraphs: [
           "系统保存标准化邮箱、邮箱哈希、关注的产品或套餐、订阅语言、订阅状态和邮件送达记录。订阅语言仅用于发送对应语言的确认与价格通知。退订及历史确认令牌只保存不可逆哈希。",
+          "API 中转站收录申请持久保存申请邮箱与提交 IP 的服务器密钥 HMAC、网站链接、简介、通知状态和提交时间。通知完成前还会保存加密的申请邮箱，仅用于在通知中断后恢复管理员审核邮件，送达后即清除。邮箱验证码只保存密钥 HMAC，并在 10 分钟后失效；管理员通知邮件会包含申请人填写的邮箱，以便人工审核和联系。",
         ],
       },
       {
         title: "使用目的与保存期限",
         paragraphs: [
           "订阅数据只用于匹配关注的产品或套餐、发送订阅成功与价格变化通知、处理退订和排查邮件送达问题。我们不会把邮箱出售、出租或用于与价格通知无关的营销。",
+          "收录申请数据只用于验证申请人邮箱、去重、限制滥用、人工审核和必要联系，不用于营销。",
           "有效订阅在用户主动退订前保存。退订后，系统可以保留必要的不可逆哈希和最小送达记录，用于避免误发、处理滥用和证明退订状态；不再需要的数据会按运维周期清理。",
         ],
       },
@@ -914,22 +916,24 @@ const en: LocaleMessages = {
       },
     ],
     privacyEyebrow: "Privacy",
-    privacyTitle: "How we use subscription and visit data",
+    privacyTitle: "How we use verification, subscription, and visit data",
     privacyLead:
-      "Email is used for subscription confirmations, price change alerts, and unsubscribing. It is not sold or used for marketing email.",
+      "Email is used to verify directory submissions, confirm subscriptions, send price change alerts, and process unsubscribes. It is not sold or used for marketing email.",
     privacyDescription:
-      "Learn what email and subscription information Low Price Radar keeps for price alerts, how it is used and retained, how email providers and deletion requests are handled, and where official-source visits and site analytics data remain separate.",
+      "Learn what email, directory-submission, and subscription information Low Price Radar keeps, how it is used and retained, how email providers and deletion requests are handled, and where official-source visits and site analytics data remain separate.",
     privacySections: [
       {
         title: "What we store",
         paragraphs: [
           "The system stores a normalized email, an email hash, the product or plan being followed, the subscription locale, subscription status, and delivery records. The locale is used only to send confirmations and price alerts in the selected language. Unsubscribe and historical confirmation tokens are stored only as irreversible hashes.",
+          "API transit directory submissions persist server-keyed HMACs of the applicant email and submission IP, the website link, description, notification state, and submission time. Until notification completes, an encrypted copy of the applicant email is retained only to resume an interrupted administrator review message and is cleared after delivery. Verification codes are stored only as keyed HMACs and expire after 10 minutes. The administrator notification email includes the address entered by the applicant for manual review and necessary contact.",
         ],
       },
       {
         title: "Purpose and retention",
         paragraphs: [
           "Subscription data is used only to match followed products or plans, send confirmation and price-change alerts, process unsubscribes, and troubleshoot delivery. We do not sell, rent, or use the email for unrelated marketing.",
+          "Directory-submission data is used only to verify the applicant's email, deduplicate requests, prevent abuse, conduct manual review, and make necessary contact. It is not used for marketing.",
           "An active subscription is retained until you unsubscribe. After unsubscribing, the system may retain a necessary irreversible hash and minimal delivery record to prevent accidental sends, address abuse, and prove the unsubscribe state. Data that is no longer needed is removed on the operations schedule.",
         ],
       },

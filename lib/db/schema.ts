@@ -1308,3 +1308,73 @@ export const emailDeliveries = pgTable(
     index("email_deliveries_created_idx").on(table.createdAt),
   ],
 );
+
+export const transitSubmissionVerifications = pgTable(
+  "transit_submission_verifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    emailHash: text("email_hash").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("transit_submission_verifications_email_idx").on(
+      table.emailHash,
+      table.createdAt,
+    ),
+    index("transit_submission_verifications_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const transitSubmissions = pgTable(
+  "transit_submissions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    websiteUrl: text("website_url").notNull(),
+    websiteKey: text("website_key").notNull(),
+    description: text("description").notNull(),
+    submitterEmailHash: text("submitter_email_hash").notNull(),
+    submitterEmailEncrypted: text("submitter_email_encrypted").notNull(),
+    notificationStatus: text("notification_status")
+      .default("pending")
+      .notNull(),
+    notificationAttempts: integer("notification_attempts").default(0).notNull(),
+    notificationLastAttemptAt: timestamp("notification_last_attempt_at", {
+      withTimezone: true,
+    }),
+    notificationSentAt: timestamp("notification_sent_at", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("transit_submissions_website_key_unique").on(table.websiteKey),
+    index("transit_submissions_created_idx").on(table.createdAt),
+  ],
+);
+
+export const transitSubmissionAttempts = pgTable(
+  "transit_submission_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ipHash: text("ip_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("transit_submission_attempts_created_idx").on(table.createdAt),
+    index("transit_submission_attempts_ip_created_idx").on(
+      table.ipHash,
+      table.createdAt,
+    ),
+  ],
+);

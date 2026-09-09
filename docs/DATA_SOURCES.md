@@ -308,13 +308,27 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 页面不读取报价数据库，不抓取或列出模型，不提供比价、筛选和可用性统计。
 既有中转数据 API、详情路由和采集历史保留兼容；目录链接不构成报价或服务质量核验。
 
-收录申请提交 `url` 和 `description`（一句话介绍）至 `POST /api/transit/submissions`，经网址校验后通过现有
-SMTP 发送纯文本通知至 `ADMIN_EMAIL`（未配置时使用 `CONTACT_EMAIL`），人工审核后
-在目录代码中添加标题、介绍和链接。不会自动抓取网址或直接公开用户输入。接口限制 8 KiB 请求体、
-2048 字符网址、160 字符单行介绍及每个 Web 进程每小时 20 次提交请求；进程重启重置限流。
-使用现有邮件投递记录按 UTC 日期和网址和介绍摘要去重；失败时返回错误，允许用户重试。
-此变更无数据库迁移、无新增环境变量，回滚代码即可恢复原目录，已发出的审核邮件仍保留。
+收录申请先向 `POST /api/transit/submissions/verification` 提交 `email` 和 `locale` 获取
+6 位邮箱验证码，再以 `PUT` 向同一路径提交 `email`、`verificationId` 和 `code` 完成验证。
+验证码 10 分钟内有效，最多校验 5 次；验证成功后，最终向 `POST /api/transit/submissions`
+提交 `email`、`verificationId`、`url` 和 `description`（一句话介绍）。服务端校验网址后，
+通过现有 SMTP 向 `ADMIN_EMAIL`（未配置时使用 `CONTACT_EMAIL`）发送纯文本通知，人工审核后
+在目录代码中添加标题、介绍和链接。不会自动抓取网址或直接公开用户输入。
 
-收录接口先按客户端限制每 10 分钟 10 次尝试（仅保存 IP 摘要，过期删除，最多 1000 项），
-再校验输入；无效请求不消耗全站邮件额度。开发环境允许相同协议和端口的
-localhost、127.0.0.1、IPv6 loopback 等价来源；生产仍严格校验配置的来源。
+接口限制 8 KiB 请求体、2048 字符网址和 160 字符单行介绍。验证码发送按同一 IP 每 15 分钟
+5 次、同一邮箱每 15 分钟 3 次限制，内存键设置 10000 项硬上限并在到期或达到上限时回收。
+最终提交按同一 IP 每 5 分钟最多 5 次限制；尝试记录持久化到 PostgreSQL 并按全局 5 分钟
+保留期清理。限流和邮箱标识使用服务器密钥 HMAC，不保存原始 IP；验证码只保存密钥 HMAC。
+
+网站按规范化域名去重，忽略 `http/https`、`www`、DNS 尾点和页面路径。申请记录持久化网站、
+简介和通知状态；管理员通知成功前暂存加密的申请邮箱并保持可恢复的 outbox 状态，送达后清除
+加密邮箱。发送失败或进程
+中断后，后续通过验证的同站申请会继续尝试完成原通知；通知成功后返回“已有提交”并提示等待或
+联系 `CONTACT_EMAIL`。邮件投递审计中的申请邮箱同样使用服务器密钥 HMAC。数据库迁移新增
+`transit_submission_verifications`、`transit_submissions` 和 `transit_submission_attempts`
+及相关通知字段和索引；无需新增环境变量。代码回滚可保留这些表，不得未经授权删除申请数据。
+
+开发环境允许相同协议和端口的 localhost、127.0.0.1、IPv6 loopback 等价来源；生产仍严格
+校验配置的来源。生产限流只读取由 Nginx 覆盖的 `X-Real-IP`；Nginx 依赖 Cloudflare-only
+防火墙边界，以 `CF-Connecting-IP` 替换上游的 `X-Real-IP` 和 `X-Forwarded-For`，不信任
+请求原有的 forwarding header。

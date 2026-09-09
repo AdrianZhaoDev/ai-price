@@ -72,6 +72,14 @@
 .controls button {
   justify-self: start;
 }
+.inlineControls {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.inlineControls input {
+  flex: 1;
+}
 .controls input {
   flex: 1;
   min-width: 0;
@@ -107,6 +115,10 @@
     padding: 12px 8px;
   }
   .controls {
+    flex-direction: column;
+  }
+  .inlineControls {
+    align-items: stretch;
     flex-direction: column;
   }
 }

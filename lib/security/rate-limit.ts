@@ -10,6 +10,7 @@ const globalRateLimits = globalThis as typeof globalThis & {
 const records =
   globalRateLimits.__aiPriceRateLimits ??
   (globalRateLimits.__aiPriceRateLimits = new Map());
+const MAX_RATE_LIMIT_KEYS = 10_000;
 
 export function checkRateLimit(
   key: string,
@@ -17,9 +18,24 @@ export function checkRateLimit(
   windowMs: number,
   now = Date.now(),
 ): { allowed: boolean; retryAfterSeconds: number } {
-  const record = records.get(key);
+  let record = records.get(key);
+  if (record && record.resetAt <= now) {
+    records.delete(key);
+    record = undefined;
+  }
 
-  if (!record || record.resetAt <= now) {
+  if (!record) {
+    if (records.size >= MAX_RATE_LIMIT_KEYS) {
+      for (const [recordKey, candidate] of records) {
+        if (candidate.resetAt <= now) records.delete(recordKey);
+      }
+    }
+    if (records.size >= MAX_RATE_LIMIT_KEYS) {
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil(windowMs / 1000)),
+      };
+    }
     records.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, retryAfterSeconds: 0 };
   }

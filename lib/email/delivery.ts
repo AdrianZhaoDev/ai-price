@@ -11,6 +11,7 @@ export type EmailDeliveryReservation = {
 export async function reserveEmailDelivery(input: {
   type: string;
   recipient: string;
+  recipientHash?: string;
   dedupeKey: string;
 }): Promise<EmailDeliveryReservation | null> {
   const now = new Date();
@@ -23,7 +24,7 @@ export async function reserveEmailDelivery(input: {
       .insert(emailDeliveries)
       .values({
         messageType: input.type,
-        recipientHash: hashEmail(input.recipient),
+        recipientHash: input.recipientHash ?? hashEmail(input.recipient),
         dedupeKey: input.dedupeKey,
         status: "sending",
         createdAt: now,
