@@ -9,6 +9,7 @@ import {
 } from "@/lib/email/delivery";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { hashValue } from "@/lib/security/tokens";
+import { allowTransitSubmissionAttempt } from "@/lib/security/transit-submission-rate-limit";
 
 const schema = z
   .object({
@@ -55,13 +56,31 @@ function reply(status: number, code: string) {
 
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
-  const expectedOrigin = new URL(process.env.APP_URL || request.url).origin;
-  if (origin && origin !== expectedOrigin) return reply(403, "cross_origin");
+  const expected = new URL(process.env.APP_URL || request.url);
+  if (origin && origin !== expected.origin) {
+    try {
+      const incoming = new URL(origin);
+      const loopback = ["localhost", "127.0.0.1", "[::1]"];
+      if (
+        process.env.NODE_ENV === "production" ||
+        !loopback.includes(expected.hostname) ||
+        !loopback.includes(incoming.hostname) ||
+        incoming.protocol !== expected.protocol ||
+        incoming.port !== expected.port
+      )
+        return reply(403, "cross_origin");
+    } catch {
+      return reply(403, "cross_origin");
+    }
+  }
+  const ip =
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "unknown";
+  if (!allowTransitSubmissionAttempt(ip)) return reply(429, "rate_limited");
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     return reply(400, "invalid_request");
-  // Fixed key bounds memory and total SMTP traffic, including distributed submissions.
-  if (!checkRateLimit("transit-submissions", 20, 60 * 60 * 1000).allowed)
-    return reply(429, "rate_limited");
   let body: unknown;
   try {
     const reader = request.body?.getReader();
@@ -84,6 +103,9 @@ export async function POST(request: NextRequest) {
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) return reply(400, "invalid_url");
+  // Malformed input never consumes the shared SMTP budget.
+  if (!checkRateLimit("transit-submissions", 20, 60 * 60 * 1000).allowed)
+    return reply(429, "rate_limited");
   const recipient = process.env.ADMIN_EMAIL || process.env.CONTACT_EMAIL;
   if (!recipient || !isSmtpConfigured()) return reply(503, "unavailable");
   const dedupeKey = `transit-submission:${new Date().toISOString().slice(0, 10)}:${hashValue(JSON.stringify(parsed.data))}`;

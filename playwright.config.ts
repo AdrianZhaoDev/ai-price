@@ -18,6 +18,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
+    timeout: 180_000,
     command: webServerCommand,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
