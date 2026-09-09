@@ -1,30 +1,11 @@
 import type { Locale } from "@/lib/i18n";
 import { absoluteUrl, metadataForDocument } from "@/lib/seo";
+import { listPublicTransitDirectoryEntries } from "@/lib/transit/directory";
 import { SiteFooter, SiteHeader } from "./site-header";
 import { TransitSubmissionForm } from "./transit-submission-form";
 import type { PublicDirectorySearchParams } from "./channels-page";
 import styles from "./transit-directory.module.css";
 
-const stations = [
-  {
-    name: "Low Price Radar API",
-    url: "https://ai.lowpriceradar.com/",
-    description: "Low Price Radar 的 AI API 网关。",
-    descriptionEn: "The AI API gateway from Low Price Radar.",
-  },
-  {
-    name: "CallAI",
-    url: "https://sub.callai.one/",
-    description: "提供多模型 AI API 中转服务。",
-    descriptionEn: "An API relay service for multiple AI models.",
-  },
-  {
-    name: "WAWA ZZ API",
-    url: "https://wawazz.xyz/",
-    description: "提供 AI API 中转调用服务。",
-    descriptionEn: "A gateway for AI API calls.",
-  },
-];
 export const apiTransitPageMetadata = (locale: Locale) =>
   metadataForDocument({
     path: "/api-transit",
@@ -43,6 +24,7 @@ export async function ApiTransitPage({
 }) {
   const en = locale === "en";
   const title = en ? "API transit stations" : "API 中转站";
+  const stations = await listPublicTransitDirectoryEntries();
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -63,7 +45,7 @@ export async function ApiTransitPage({
                 "@type": "ListItem",
                 position: index + 1,
                 name: station.name,
-                url: station.url,
+                url: station.websiteUrl,
               })),
             }).replace(/</g, "\\u003c"),
           }}
@@ -78,17 +60,17 @@ export async function ApiTransitPage({
           </thead>
           <tbody>
             {stations.map((station) => (
-              <tr key={station.url}>
+              <tr key={station.websiteUrl}>
                 <th scope="row">
                   <a
-                    href={station.url}
+                    href={station.websiteUrl}
                     target="_blank"
                     rel="nofollow noopener noreferrer"
                   >
                     {station.name}
                   </a>
                 </th>
-                <td>{en ? station.descriptionEn : station.description}</td>
+                <td>{en ? station.descriptionEn : station.descriptionZh}</td>
               </tr>
             ))}
           </tbody>

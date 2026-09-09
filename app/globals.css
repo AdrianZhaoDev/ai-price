@@ -4078,6 +4078,173 @@ input:focus-visible {
   color: #854d0e !important;
 }
 
+.admin-status[data-status="approved"] {
+  background: #dff5e7;
+  color: #166534 !important;
+}
+
+.admin-status[data-status="rejected"] {
+  background: #fee2e2;
+  color: #991b1b !important;
+}
+
+.admin-directory-feedback {
+  margin: 24px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  background: var(--surface-solid);
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
+
+.admin-directory-section {
+  margin-top: 44px;
+}
+
+.admin-directory-section > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--separator-strong);
+}
+
+.admin-directory-section h2 {
+  margin: 5px 0 0;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.admin-directory-section > header > span,
+.admin-directory-card time,
+.admin-directory-actions > span {
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+
+.admin-directory-list {
+  display: grid;
+}
+
+.admin-directory-card {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--separator);
+}
+
+.admin-directory-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.admin-directory-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-directory-card > header > a {
+  color: var(--tint);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-directory-notice {
+  margin: -6px 0 18px;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admin-directory-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 180px;
+  gap: 14px;
+}
+
+.admin-directory-fields label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.admin-directory-fields label > span {
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-directory-fields input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.admin-directory-fields input:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 2px;
+}
+
+.admin-directory-wide {
+  grid-column: span 2;
+}
+
+.admin-directory-check {
+  display: flex !important;
+  align-items: center;
+  min-height: 44px;
+  padding-top: 17px;
+  grid-auto-flow: column;
+  justify-content: start;
+}
+
+.admin-directory-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ink);
+}
+
+.admin-directory-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.admin-directory-actions > span {
+  margin-left: auto;
+}
+
+.admin-directory-create {
+  margin-top: 38px;
+  padding: 18px 0;
+  border-block: 1px solid var(--separator);
+}
+
+.admin-directory-create summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-directory-create form {
+  margin-top: 20px;
+}
+
+.admin-directory-create form > button {
+  margin-top: 16px;
+}
+
 .admin-empty {
   padding: 48px 12px;
   color: var(--ink-secondary);
@@ -4333,7 +4500,8 @@ input:focus-visible {
   }
 
   .admin-error-entry > header,
-  .admin-error-filter-form {
+  .admin-error-filter-form,
+  .admin-directory-card > header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -4345,6 +4513,31 @@ input:focus-visible {
 
   .admin-pagination {
     grid-template-columns: 76px 1fr 76px;
+  }
+
+  .admin-section-nav {
+    overflow-x: auto;
+  }
+
+  .admin-section-nav a {
+    flex: 0 0 auto;
+  }
+
+  .admin-directory-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-directory-wide {
+    grid-column: auto;
+  }
+
+  .admin-directory-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-directory-actions > span {
+    margin-left: 0;
   }
 }
 

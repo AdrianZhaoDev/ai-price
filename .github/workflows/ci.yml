@@ -71,6 +71,25 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: e2e
+          POSTGRES_PASSWORD: integration-only
+          POSTGRES_DB: ai_price_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U e2e -d ai_price_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://e2e:integration-only@127.0.0.1:5432/ai_price_e2e
+      LOCAL_DATABASE_URL: postgresql://e2e:integration-only@127.0.0.1:5432/ai_price_e2e
+      DATABASE_READ_TARGET: local
+      DATABASE_WRITE_TARGET: local
+      APP_URL: http://127.0.0.1:3100
+      EMAIL_TOKEN_SECRET: e2e-only-secret-value-with-32-characters
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -78,5 +97,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run db:migrate
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
