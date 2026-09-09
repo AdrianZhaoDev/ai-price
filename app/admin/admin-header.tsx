@@ -5,7 +5,7 @@ export function AdminHeader({
   title,
   description,
 }: {
-  current: "subscriptions" | "errors";
+  current: "subscriptions" | "errors" | "transit-submissions";
   title: string;
   description: string;
 }) {
@@ -29,6 +29,12 @@ export function AdminHeader({
         </Link>
         <Link href="/admin/errors" data-active={current === "errors"}>
           采集错误
+        </Link>
+        <Link
+          href="/admin/transit-submissions"
+          data-active={current === "transit-submissions"}
+        >
+          中转站申请
         </Link>
       </nav>
     </>

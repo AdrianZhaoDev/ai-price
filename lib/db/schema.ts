@@ -1351,6 +1351,8 @@ export const transitSubmissions = pgTable(
     notificationSentAt: timestamp("notification_sent_at", {
       withTimezone: true,
     }),
+    reviewStatus: text("review_status").default("pending").notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1358,6 +1360,42 @@ export const transitSubmissions = pgTable(
   (table) => [
     uniqueIndex("transit_submissions_website_key_unique").on(table.websiteKey),
     index("transit_submissions_created_idx").on(table.createdAt),
+  ],
+);
+
+export const transitDirectoryEntries = pgTable(
+  "transit_directory_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    websiteUrl: text("website_url").notNull(),
+    websiteKey: text("website_key").notNull(),
+    descriptionZh: text("description_zh").notNull(),
+    descriptionEn: text("description_en").notNull(),
+    rank: integer("rank").default(0).notNull(),
+    published: boolean("published").default(true).notNull(),
+    sourceSubmissionId: uuid("source_submission_id").references(
+      () => transitSubmissions.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("transit_directory_entries_website_key_unique").on(
+      table.websiteKey,
+    ),
+    uniqueIndex("transit_directory_entries_submission_unique").on(
+      table.sourceSubmissionId,
+    ),
+    index("transit_directory_entries_public_rank_idx").on(
+      table.published,
+      table.rank,
+    ),
   ],
 );
 
