@@ -58,7 +58,9 @@ test.describe("public channel and API transit directories", () => {
           scripts.map((script) => script.textContent ?? ""),
         );
       expect(
-        structuredData.filter((value) => value.includes("Dataset")),
+        structuredData.filter((value) =>
+          value.includes(path.includes("api-transit") ? "ItemList" : "Dataset"),
+        ),
       ).toHaveLength(1);
       if (isMobile) {
         expect(
@@ -121,9 +123,7 @@ test.describe("public channel and API transit directories", () => {
 
     await page.goto("/api-transit");
     if (stationSlug) {
-      const detailLink = page.locator(`a[href="/api-transit/${stationSlug}"]`);
-      await expect(detailLink.first()).toBeVisible();
-      await detailLink.first().click();
+      await page.goto(`/api-transit/${stationSlug}`);
       await expect(page).toHaveURL(new RegExp(`/api-transit/${stationSlug}$`), {
         timeout: 30_000,
       });

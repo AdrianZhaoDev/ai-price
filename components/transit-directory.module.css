@@ -1,0 +1,112 @@
+.page {
+  padding-top: 36px;
+  padding-bottom: 48px;
+}
+.page h1 {
+  margin: 0 0 24px;
+  font-size: clamp(26px, 4vw, 36px);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 16px;
+}
+.table th,
+.table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--separator);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.table thead {
+  background: var(--surface-solid);
+  color: var(--ink-secondary);
+}
+.table th:first-child {
+  width: 36%;
+}
+.table tbody th {
+  font-weight: 500;
+}
+.table tbody tr {
+  position: relative;
+}
+.table tbody tr:hover,
+.table tbody tr:focus-within {
+  background: var(--tint-soft);
+}
+.table a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.table a:focus-visible::after {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
+}
+.table a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--tint);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.form {
+  margin-top: 32px;
+  max-width: 720px;
+}
+.form h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+.form label {
+  display: block;
+  margin-bottom: 8px;
+}
+.controls {
+  display: grid;
+  gap: 12px;
+}
+.controls button {
+  justify-self: start;
+}
+.controls input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  font: inherit;
+}
+.controls button {
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--surface-solid);
+  font: inherit;
+  cursor: pointer;
+}
+.controls button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.form p {
+  color: var(--ink-secondary);
+  line-height: 1.6;
+}
+@media (max-width: 480px) {
+  .table th,
+  .table td {
+    padding: 12px 8px;
+  }
+  .controls {
+    flex-direction: column;
+  }
+}
