@@ -263,4 +263,104 @@ describe("email templates", () => {
     expect(digest.subject).toContain("new models");
     expect(digest.html).toContain('<html lang="en">');
   });
+
+  it("renders neutral and sparse price changes safely", () => {
+    const message = priceChangeEmail({
+      scopeLabel: "Plan",
+      changes: [
+        {
+          region: "Unknown",
+          previousPrice: "N/A",
+          currentPrice: "N/A",
+          previousCny: null,
+          currentCny: null,
+          changePercent: null,
+        },
+      ],
+      topThree: [],
+      viewUrl: "not a url",
+      ctaLabel: "查看",
+      unsubscribeUrl: "javascript:alert(1)",
+    });
+    expect(message.subject).toBe("Plan 价格有变化");
+    expect(message.html).toContain('href="#"');
+    expect(message.html).not.toContain("查看官方来源");
+    expect(message.text).toContain("官方来源：");
+  });
+
+  it("renders downward, unchanged, and removed ranking branches", () => {
+    const message = apiRankingChangeEmail({
+      subject: "榜单变化",
+      tables: [
+        {
+          metric: "output",
+          label: "输出",
+          rows: [
+            {
+              rank: 2,
+              providerName: "Provider",
+              modelName: "Model Down",
+              displayPrice: "¥2",
+              priceCny: 2,
+              previousRank: 1,
+              previousDisplayPrice: "¥1",
+              rankDelta: -1,
+              priceDirection: "increase",
+              isNew: false,
+            },
+            {
+              rank: 3,
+              providerName: "Provider",
+              modelName: "Model Same",
+              displayPrice: "¥3",
+              priceCny: 3,
+              previousRank: 3,
+              previousDisplayPrice: null,
+              rankDelta: 0,
+              priceDirection: null,
+              isNew: false,
+            },
+          ],
+        },
+      ],
+      removed: [
+        {
+          metricLabel: "输入",
+          providerName: "Old Provider",
+          modelName: "Old Model",
+          previousRank: null,
+          previousDisplayPrice: null,
+        },
+      ],
+      viewUrl: "https://example.com/api-pricing",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+    });
+    expect(message.html).toContain("↓1 · 涨价");
+    expect(message.text).toContain("下降1名 / 涨价");
+    expect(message.text).toContain("输入 · Old Provider · Old Model");
+  });
+
+  it("uses custom subscription copy and links admin alerts", () => {
+    const subscription = subscriptionCreatedEmail({
+      scopeLabel: "Plan",
+      viewUrl: "https://example.com/plan",
+      ctaLabel: "查看",
+      unsubscribeUrl: "https://example.com/unsubscribe",
+      eyebrow: "自定义标题",
+      description: "自定义说明",
+      subject: "自定义主题",
+    });
+    expect(subscription.subject).toBe("自定义主题");
+    expect(subscription.html).toContain("自定义标题");
+
+    const alert = adminAlertEmail({
+      sourceName: "Source",
+      errorCode: "ERROR",
+      message: "Failure",
+      occurredAt: "2026-09-09",
+      adminUrl: "https://example.com/admin/errors",
+    });
+    expect(alert.html).toContain("在管理后台查看完整错误日志");
+    expect(alert.text).toContain("https://example.com/admin/errors");
+  });
 });
