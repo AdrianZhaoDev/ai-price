@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   adminTransitRedirect,
   isAuthorizedAdminMutation,
+  revalidateTransitDirectory,
 } from "@/lib/admin/transit-directory";
 import { reviewTransitSubmission } from "@/lib/transit/directory";
 
@@ -18,6 +19,7 @@ export async function POST(
   if (!id.success) return adminTransitRedirect(request, "invalid");
   try {
     const rejected = await reviewTransitSubmission(id.data, "rejected");
+    if (rejected) revalidateTransitDirectory();
     return adminTransitRedirect(request, rejected ? "rejected" : "failed");
   } catch {
     return adminTransitRedirect(request, "failed");
