@@ -18,8 +18,8 @@ ALTER TABLE "transit_directory_entries" ADD CONSTRAINT "transit_directory_entrie
 CREATE UNIQUE INDEX "transit_directory_entries_website_key_unique" ON "transit_directory_entries" USING btree ("website_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "transit_directory_entries_submission_unique" ON "transit_directory_entries" USING btree ("source_submission_id");--> statement-breakpoint
 CREATE INDEX "transit_directory_entries_public_rank_idx" ON "transit_directory_entries" USING btree ("published","rank");--> statement-breakpoint
-INSERT INTO "transit_directory_entries" ("name", "website_url", "website_key", "description_zh", "description_en", "rank", "published") VALUES
-	('Low Price Radar API', 'https://ai.lowpriceradar.com/', 'ai.lowpriceradar.com', 'Low Price Radar 的 AI API 网关。', 'The AI API gateway from Low Price Radar.', 10, true),
-	('CallAI', 'https://sub.callai.one/', 'sub.callai.one', '提供多模型 AI API 中转服务。', 'An API relay service for multiple AI models.', 20, true),
-	('WAWA ZZ API', 'https://wawazz.xyz/', 'wawazz.xyz', '提供 AI API 中转调用服务。', 'A gateway for AI API calls.', 30, true)
+INSERT INTO "transit_directory_entries" ("id", "name", "website_url", "website_key", "description_zh", "description_en", "rank", "published") VALUES
+	('00000000-0000-4000-8000-000000000001', 'Low Price Radar API', 'https://ai.lowpriceradar.com/', 'ai.lowpriceradar.com', 'Low Price Radar 的 AI API 网关。', 'The AI API gateway from Low Price Radar.', 10, true),
+	('00000000-0000-4000-8000-000000000002', 'CallAI', 'https://sub.callai.one/', 'sub.callai.one', '提供多模型 AI API 中转服务。', 'An API relay service for multiple AI models.', 20, true),
+	('00000000-0000-4000-8000-000000000003', 'WAWA ZZ API', 'https://wawazz.xyz/', 'wawazz.xyz', '提供 AI API 中转调用服务。', 'A gateway for AI API calls.', 30, true)
 ON CONFLICT ("website_key") DO NOTHING;

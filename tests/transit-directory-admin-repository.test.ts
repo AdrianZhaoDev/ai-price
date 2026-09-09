@@ -4,18 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const databaseMocks = vi.hoisted(() => ({
   database: {} as Record<string, ReturnType<typeof vi.fn>>,
   readDatabase: {} as Record<string, ReturnType<typeof vi.fn>>,
+  writeConfigured: vi.fn(),
   readConfigured: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({
   getDatabase: () => databaseMocks.database,
   getReadDatabase: () => databaseMocks.readDatabase,
+  isDatabaseConfigured: databaseMocks.writeConfigured,
   isReadDatabaseConfigured: databaseMocks.readConfigured,
 }));
 
 import {
   createTransitDirectoryEntry,
   defaultTransitDirectoryEntries,
+  listAdminTransitDirectoryEntries,
+  listAdminTransitSubmissions,
   listPublicTransitDirectoryEntries,
   reviewTransitSubmission,
   updateTransitDirectoryEntry,
@@ -42,6 +46,14 @@ describe("transit directory repository", () => {
     expect(await listPublicTransitDirectoryEntries()).toEqual(
       defaultTransitDirectoryEntries,
     );
+  });
+
+  it("renders the read-only admin fixture when no write database is configured", async () => {
+    databaseMocks.writeConfigured.mockReturnValue(false);
+    expect(await listAdminTransitDirectoryEntries()).toEqual(
+      defaultTransitDirectoryEntries,
+    );
+    expect(await listAdminTransitSubmissions()).toEqual([]);
   });
 
   it("reads only published entries in rank order", async () => {

@@ -2,6 +2,7 @@ import { asc, desc, eq, or } from "drizzle-orm";
 import {
   getDatabase,
   getReadDatabase,
+  isDatabaseConfigured,
   isReadDatabaseConfigured,
 } from "@/lib/db/client";
 import { transitDirectoryEntries, transitSubmissions } from "@/lib/db/schema";
@@ -18,28 +19,40 @@ export type TransitDirectoryInput = {
 
 export const defaultTransitDirectoryEntries = [
   {
+    id: "00000000-0000-4000-8000-000000000001",
     name: "Low Price Radar API",
     websiteUrl: "https://ai.lowpriceradar.com/",
     descriptionZh: "Low Price Radar 的 AI API 网关。",
     descriptionEn: "The AI API gateway from Low Price Radar.",
     rank: 10,
     published: true,
+    sourceSubmissionId: null,
+    createdAt: new Date("2026-09-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-09T00:00:00.000Z"),
   },
   {
+    id: "00000000-0000-4000-8000-000000000002",
     name: "CallAI",
     websiteUrl: "https://sub.callai.one/",
     descriptionZh: "提供多模型 AI API 中转服务。",
     descriptionEn: "An API relay service for multiple AI models.",
     rank: 20,
     published: true,
+    sourceSubmissionId: null,
+    createdAt: new Date("2026-09-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-09T00:00:00.000Z"),
   },
   {
+    id: "00000000-0000-4000-8000-000000000003",
     name: "WAWA ZZ API",
     websiteUrl: "https://wawazz.xyz/",
     descriptionZh: "提供 AI API 中转调用服务。",
     descriptionEn: "A gateway for AI API calls.",
     rank: 30,
     published: true,
+    sourceSubmissionId: null,
+    createdAt: new Date("2026-09-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-09T00:00:00.000Z"),
   },
 ] as const;
 
@@ -65,6 +78,7 @@ export async function listPublicTransitDirectoryEntries() {
 }
 
 export async function listAdminTransitDirectoryEntries() {
+  if (!isDatabaseConfigured()) return [...defaultTransitDirectoryEntries];
   return getDatabase()
     .select()
     .from(transitDirectoryEntries)
@@ -75,6 +89,7 @@ export async function listAdminTransitDirectoryEntries() {
 }
 
 export async function listAdminTransitSubmissions() {
+  if (!isDatabaseConfigured()) return [];
   return getDatabase()
     .select()
     .from(transitSubmissions)
