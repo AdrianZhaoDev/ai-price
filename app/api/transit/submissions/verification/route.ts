@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
     code,
   });
   let reservation;
+  let delivered = false;
   try {
     reservation = await reserveEmailDelivery({
       type: "transit-submission-verification",
@@ -104,12 +105,14 @@ export async function POST(request: NextRequest) {
         : `你的收录申请验证码是：${code}\n\n验证码 10 分钟内有效。如非本人操作，请忽略此邮件。`,
     });
     if (!info.accepted?.length) throw new Error("Delivery not accepted");
+    delivered = true;
     await settleEmailDelivery(reservation, {
       status: "sent",
       providerMessageId: info.messageId,
     });
     return reply(200, "code_sent", { verificationId });
   } catch {
+    if (delivered) return reply(200, "code_sent", { verificationId });
     await deleteTransitSubmissionVerification(verificationId).catch(() => {});
     if (reservation) {
       await settleEmailDelivery(reservation, {

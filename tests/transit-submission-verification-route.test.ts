@@ -224,4 +224,17 @@ describe("transit submission email verification", () => {
       expect.objectContaining({ status: "failed" }),
     );
   });
+
+  it("keeps an accepted verification challenge when audit settlement fails", async () => {
+    mocks.settle.mockRejectedValueOnce(new Error("database timeout"));
+    const response = await POST(
+      request("POST", { email: "owner@example.com", locale: "en" }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      code: "code_sent",
+      verificationId: "8590b2da-8047-4b95-8ef3-00cf745a172b",
+    });
+    expect(mocks.deleteVerification).not.toHaveBeenCalled();
+  });
 });

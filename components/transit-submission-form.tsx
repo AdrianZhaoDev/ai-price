@@ -76,11 +76,18 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
           code: code.trim(),
         }),
       });
+      const result = (await response.json().catch(() => ({}))) as {
+        code?: string;
+      };
       if (!response.ok) {
         setMessage(
-          en
-            ? "The code is incorrect or expired. Request a new code if needed."
-            : "验证码错误或已过期，需要时请重新获取。",
+          response.status === 429 || result.code === "rate_limited"
+            ? en
+              ? "Too many verification attempts. Please try again later."
+              : "验证码尝试过于频繁，请稍后再试。"
+            : en
+              ? "The code is incorrect or expired. Request a new code if needed."
+              : "验证码错误或已过期，需要时请重新获取。",
         );
         return;
       }

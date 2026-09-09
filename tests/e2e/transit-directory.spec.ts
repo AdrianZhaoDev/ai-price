@@ -199,3 +199,25 @@ test("expired verification unlocks the email and code controls", async ({
   await expect(page.getByRole("button", { name: "发送验证码" })).toBeEnabled();
   await expect(page.getByLabel("邮箱验证码")).toHaveCount(0);
 });
+
+test("confirmation rate limits show a retry-later message", async ({
+  page,
+}) => {
+  await page.goto("/api-transit");
+  await page.route("**/api/transit/submissions/verification", (route) =>
+    route.fulfill({
+      status: route.request().method() === "POST" ? 200 : 429,
+      json:
+        route.request().method() === "POST"
+          ? { code: "code_sent", verificationId: "verification-id" }
+          : { code: "rate_limited" },
+    }),
+  );
+  await page.getByLabel("邮箱", { exact: true }).fill("owner@example.com");
+  await page.getByRole("button", { name: "发送验证码" }).click();
+  await page.getByLabel("邮箱验证码").fill("123456");
+  await page.getByRole("button", { name: "验证邮箱" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "验证码尝试过于频繁，请稍后再试。",
+  );
+});
