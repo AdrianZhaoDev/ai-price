@@ -299,3 +299,22 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 - 一份币种或周期异常响应。
 
 解析器未达到测试要求不得加入生产调度。
+
+## API 中转站链接目录
+
+`/api-transit` 与 `/en/api-transit` 仅展示维护在
+`components/api-transit-page.tsx` 的网站标题和一句话介绍，整行可点击且不显示原始网址。首项为用户指定的
+`https://ai.lowpriceradar.com/`，另有现有来源 CallAI、WAWA ZZ API。
+页面不读取报价数据库，不抓取或列出模型，不提供比价、筛选和可用性统计。
+既有中转数据 API、详情路由和采集历史保留兼容；目录链接不构成报价或服务质量核验。
+
+收录申请提交 `url` 和 `description`（一句话介绍）至 `POST /api/transit/submissions`，经网址校验后通过现有
+SMTP 发送纯文本通知至 `ADMIN_EMAIL`（未配置时使用 `CONTACT_EMAIL`），人工审核后
+在目录代码中添加标题、介绍和链接。不会自动抓取网址或直接公开用户输入。接口限制 8 KiB 请求体、
+2048 字符网址、160 字符单行介绍及每个 Web 进程每小时 20 次提交请求；进程重启重置限流。
+使用现有邮件投递记录按 UTC 日期和网址和介绍摘要去重；失败时返回错误，允许用户重试。
+此变更无数据库迁移、无新增环境变量，回滚代码即可恢复原目录，已发出的审核邮件仍保留。
+
+收录接口先按客户端限制每 10 分钟 10 次尝试（仅保存 IP 摘要，过期删除，最多 1000 项），
+再校验输入；无效请求不消耗全站邮件额度。开发环境允许相同协议和端口的
+localhost、127.0.0.1、IPv6 loopback 等价来源；生产仍严格校验配置的来源。

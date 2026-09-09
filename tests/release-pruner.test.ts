@@ -13,6 +13,17 @@ import { describe, expect, it } from "vitest";
 
 const script = path.resolve("deploy/prune-releases.sh");
 
+// Keep ownership operations inside the fixture: CI and local tests need no root
+// privileges or production ai-price account to exercise retention behavior.
+const harness = `
+id() { echo 0; }
+install() { mkdir -p -- "\${@: -1}"; }
+chown() { :; }
+pruner_script="$1"
+shift
+source "$pruner_script"
+`;
+
 function createFixture() {
   const appRoot = mkdtempSync(path.join(tmpdir(), "ai-price-pruner-"));
   const releasesRoot = path.join(appRoot, "releases");
@@ -77,7 +88,7 @@ describe("release pruner", () => {
     );
     symlinkSync(currentRelease, path.join(appRoot, "current"));
 
-    execFileSync("bash", [script], {
+    execFileSync("bash", ["-c", harness, "pruner-test", script], {
       env: {
         ...process.env,
         AI_PRICE_APP_ROOT: appRoot,
@@ -110,7 +121,7 @@ describe("release pruner", () => {
     symlinkSync(tmpdir(), path.join(appRoot, "current"));
 
     expect(() =>
-      execFileSync("bash", [script], {
+      execFileSync("bash", ["-c", harness, "pruner-test", script], {
         env: { ...process.env, AI_PRICE_APP_ROOT: appRoot },
         stdio: "pipe",
       }),
