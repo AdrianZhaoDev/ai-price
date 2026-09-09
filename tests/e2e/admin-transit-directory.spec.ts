@@ -1,8 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadEnvConfig } from "@next/env";
 import { createAdminSession } from "../../lib/admin/auth";
-
-loadEnvConfig(process.cwd());
 
 test("administrator can edit and rank the transit directory", async ({
   context,
