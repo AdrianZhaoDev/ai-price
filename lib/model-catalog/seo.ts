@@ -129,6 +129,11 @@ export function modelDecisionNotes(
         ? "attachments"
         : "附件"
       : undefined,
+    model.capabilities.temperature
+      ? locale === "en"
+        ? "temperature control"
+        : "温度控制"
+      : undefined,
   ].filter((value): value is string => Boolean(value));
   const modalities = model.inputModalities.join(" / ");
   const updated = (model.detailChangedAt ?? model.updatedDate).slice(0, 10);
@@ -141,7 +146,9 @@ export function modelDecisionNotes(
       enabledCapabilities.length
         ? `The catalog marks ${enabledCapabilities.join(", ")} as supported. Its recorded input modalities are ${modalities || "not specified"}.`
         : `No optional capability is confirmed in the current catalog. Its recorded input modalities are ${modalities || "not specified"}.`,
-      `There are ${model.providerIds.length} active serving options in this snapshot. Compare provider status, model ID, context limits, and both input and output prices before choosing one. Data last changed on ${updated}.`,
+      model.active
+        ? `There are ${model.providerIds.length} active serving options in this snapshot. Compare provider status, model ID, context limits, and both input and output prices before choosing one. Data last changed on ${updated}.`
+        : `This archived snapshot retains ${model.providerIds.length} historical provider entries for reference; do not treat them as currently available. Data last changed on ${updated}.`,
     ];
   }
 
@@ -152,7 +159,9 @@ export function modelDecisionNotes(
     enabledCapabilities.length
       ? `目录已标记支持${enabledCapabilities.join("、")}，记录的输入模态为${modalities || "未说明"}。`
       : `当前目录没有确认额外能力，记录的输入模态为${modalities || "未说明"}。`,
-    `本快照包含 ${model.providerIds.length} 个有效服务选项。选择前应同时比较服务状态、模型 ID、上下文限制以及输入和输出单价；数据最近变更于 ${updated}。`,
+    model.active
+      ? `本快照包含 ${model.providerIds.length} 个有效服务选项。选择前应同时比较服务状态、模型 ID、上下文限制以及输入和输出单价；数据最近变更于 ${updated}。`
+      : `这是归档快照，保留 ${model.providerIds.length} 条历史服务商记录供参考，不代表当前仍可使用；数据最近变更于 ${updated}。`,
   ];
 }
 

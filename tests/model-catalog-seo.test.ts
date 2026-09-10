@@ -55,7 +55,7 @@ describe("model catalog snapshot SEO", () => {
         name: "Reasoner",
         output: 8_192,
         providerIds: ["one", "two"],
-        capabilities: { reasoning: true, toolCall: true },
+        capabilities: { reasoning: true, toolCall: true, temperature: true },
       }),
     );
 
@@ -63,6 +63,14 @@ describe("model catalog snapshot SEO", () => {
     expect(notes.join(" ")).toContain("Reasoner");
     expect(notes.join(" ")).toContain("100,000 tokens 上下文");
     expect(notes.join(" ")).toContain("2 个有效服务选项");
-    expect(notes.join(" ")).toContain("推理、工具调用");
+    expect(notes.join(" ")).toContain("推理、工具调用、温度控制");
+  });
+
+  it("labels retained provider entries as historical for archived models", () => {
+    const notes = modelDecisionNotes(detail({ active: false }));
+
+    expect(notes.join(" ")).toContain("归档快照");
+    expect(notes.join(" ")).toContain("不代表当前仍可使用");
+    expect(notes.join(" ")).not.toContain("有效服务选项");
   });
 });
