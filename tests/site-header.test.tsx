@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-header";
 
 vi.mock("@/components/language-switcher", () => ({
   LanguageSwitcher: () => null,
@@ -57,5 +58,11 @@ describe("primary directory navigation", () => {
     expect(
       renderToStaticMarkup(<SiteHeader showNavigation={false} />),
     ).not.toContain("desktop-nav");
+  });
+
+  it("links the related digital-services directory from the footer", () => {
+    expect(renderToStaticMarkup(<SiteFooter />)).toContain(
+      'href="https://nav.lowpriceradar.com/"',
+    );
   });
 });

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const publicPages = [
   {
     path: "/",
-    title: "AI订阅全球价格对比",
+    title: "Low Price Radar",
     canonical: "https://lowpriceradar.com",
     sitemapUrl: "https://lowpriceradar.com",
   },

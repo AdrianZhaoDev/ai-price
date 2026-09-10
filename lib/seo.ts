@@ -50,10 +50,9 @@ export const modeSeoByLocale: Record<Locale, Record<PriceMode, ModeSeo>> = {
   "zh-CN": {
     global: {
       path: "/",
-      title:
-        "AI订阅全球价格对比：ChatGPT、Claude、Gemini、Grok | Low Price Radar",
+      title: "Low Price Radar：ChatGPT、Claude、Gemini、Grok 订阅价格对比",
       description:
-        "比较 ChatGPT、Claude、Gemini、Grok 在全球 App Store 地区的官方订阅价格、人民币换算、最低价与地区价差，并查看套餐周期、价格核验时间和可追溯官方来源，帮助选择更合适的订阅地区和方案。",
+        "Low Price Radar（AI 价签）比较 ChatGPT、Claude、Gemini、Grok 在全球 App Store 地区的官方订阅价格、人民币换算、最低价与地区价差，并展示核验时间和官方来源。",
       keywords: [
         "AI 订阅价格",
         "ChatGPT 价格",
