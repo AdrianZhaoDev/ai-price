@@ -98,6 +98,64 @@ export function modelSnapshotSummary(
   return `${model.labName} 的 ${model.name}（${model.id}）${model.family ? `属于 ${model.family} 系列，` : ""}当前汇总 ${model.providerIds.length} 个有效提供商${context ? `、${context} tokens 上下文` : ""}${inputPrice ? `、每百万 tokens 最低非零输入价 $${inputPrice}` : ""}${outputPrice ? `、最低非零输出价 $${outputPrice}` : ""}。最近目录变更：${updated}。`;
 }
 
+export function modelDecisionNotes(
+  model: ModelDetail,
+  locale: Locale = "zh-CN",
+): string[] {
+  const context = model.context?.toLocaleString(
+    locale === "en" ? "en-US" : "zh-CN",
+  );
+  const output = model.output?.toLocaleString(
+    locale === "en" ? "en-US" : "zh-CN",
+  );
+  const enabledCapabilities = [
+    model.capabilities.reasoning
+      ? locale === "en"
+        ? "reasoning"
+        : "推理"
+      : undefined,
+    model.capabilities.toolCall
+      ? locale === "en"
+        ? "tool calling"
+        : "工具调用"
+      : undefined,
+    model.capabilities.structuredOutput
+      ? locale === "en"
+        ? "structured output"
+        : "结构化输出"
+      : undefined,
+    model.capabilities.attachment
+      ? locale === "en"
+        ? "attachments"
+        : "附件"
+      : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const modalities = model.inputModalities.join(" / ");
+  const updated = (model.detailChangedAt ?? model.updatedDate).slice(0, 10);
+
+  if (locale === "en") {
+    return [
+      context || output
+        ? `${model.name} offers${context ? ` a ${context}-token context window` : ""}${output ? ` and up to ${output} output tokens` : ""}; compare those limits with the size of your prompts and expected responses.`
+        : `${model.name} does not expose complete context and output limits in the current catalog, so confirm workload limits with the serving provider.`,
+      enabledCapabilities.length
+        ? `The catalog marks ${enabledCapabilities.join(", ")} as supported. Its recorded input modalities are ${modalities || "not specified"}.`
+        : `No optional capability is confirmed in the current catalog. Its recorded input modalities are ${modalities || "not specified"}.`,
+      `There are ${model.providerIds.length} active serving options in this snapshot. Compare provider status, model ID, context limits, and both input and output prices before choosing one. Data last changed on ${updated}.`,
+    ];
+  }
+
+  return [
+    context || output
+      ? `${model.name}${context ? `提供 ${context} tokens 上下文` : ""}${output ? `、最大输出 ${output} tokens` : ""}；选择前应把这些限制与提示词长度和预期回复规模对应起来。`
+      : `${model.name} 当前目录未提供完整上下文和输出上限，实际工作负载限制需要向服务商再次确认。`,
+    enabledCapabilities.length
+      ? `目录已标记支持${enabledCapabilities.join("、")}，记录的输入模态为${modalities || "未说明"}。`
+      : `当前目录没有确认额外能力，记录的输入模态为${modalities || "未说明"}。`,
+    `本快照包含 ${model.providerIds.length} 个有效服务选项。选择前应同时比较服务状态、模型 ID、上下文限制以及输入和输出单价；数据最近变更于 ${updated}。`,
+  ];
+}
+
 export function metadataForModel(
   model: ModelDetail,
   locale: Locale = "zh-CN",

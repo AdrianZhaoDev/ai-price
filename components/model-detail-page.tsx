@@ -4,6 +4,7 @@ import { StructuredData } from "@/components/structured-data";
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { getMessages, type Locale } from "@/lib/i18n";
 import {
+  modelDecisionNotes,
   modelSeoDescription,
   modelSeoTitle,
   modelSnapshotSummary,
@@ -48,6 +49,7 @@ export function ModelDetailPage({
   const catalogUrl = absoluteUrl(modeHref("api", locale));
   const modelTitle = modelSeoTitle(model, locale);
   const snapshotSummary = modelSnapshotSummary(model, locale);
+  const decisionNotes = modelDecisionNotes(model, locale);
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -185,6 +187,40 @@ export function ModelDetailPage({
         <section className="model-snapshot" aria-labelledby="snapshot-title">
           <h2 id="snapshot-title">{detailMessages.snapshotTitle}</h2>
           <p>{snapshotSummary}</p>
+        </section>
+        <section
+          className="model-decision-guide"
+          aria-labelledby="decision-guide-title"
+        >
+          <div className="model-section-heading">
+            <h2 id="decision-guide-title">
+              {locale === "en"
+                ? "How to evaluate this model"
+                : "如何判断这个模型是否合适"}
+            </h2>
+            <p>
+              {locale === "en"
+                ? "Use the model-specific limits and serving coverage below instead of comparing the model name alone."
+                : "不要只比较模型名称，应结合本页的规格、能力和服务覆盖做判断。"}
+            </p>
+          </div>
+          <ol>
+            {decisionNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ol>
+          <nav
+            aria-label={
+              locale === "en" ? "Model research links" : "模型研究入口"
+            }
+          >
+            <Link href={modeHref("api", locale)}>
+              {locale === "en" ? "Compare all API models" : "比较全部 API 模型"}
+            </Link>
+            <Link href={locale === "en" ? "/en/methodology" : "/methodology"}>
+              {locale === "en" ? "Read the data methodology" : "查看数据方法"}
+            </Link>
+          </nav>
         </section>
         <dl className="model-facts">
           {facts.map(([label, value]) => (

@@ -15,8 +15,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   applicationName: SITE_NAME,
   title: {
-    default:
-      "AI订阅全球价格对比：ChatGPT、Claude、Gemini、Grok | Low Price Radar",
+    default: "Low Price Radar：ChatGPT、Claude、Gemini、Grok 订阅价格对比",
     template: "%s | Low Price Radar",
   },
   description:

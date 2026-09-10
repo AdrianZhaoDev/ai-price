@@ -143,6 +143,9 @@ export function SiteFooter({
         <Link href={locale === "en" ? "/en/api-transit" : "/api-transit"}>
           {locale === "en" ? "API transit" : "API 中转"}
         </Link>
+        <a href="https://nav.lowpriceradar.com/">
+          {locale === "en" ? "Digital services directory" : "数字权益导航"}
+        </a>
         <Link href={methodologyHref}>{messages.common.methodology}</Link>
         <Link href={privacyHref}>{messages.common.privacy}</Link>
         <PrivacyPreferencesButton
