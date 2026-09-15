@@ -193,6 +193,13 @@ describe("official table adapters", () => {
       "cache_write",
     ]);
     expect(fallbackPaygo.every((offer) => offer.currency === "USD")).toBe(true);
+    expect(
+      fallbackPaygo.every(
+        (offer) =>
+          offer.category === "MiniMax Global" &&
+          !offer.canonicalPlanSlug?.includes("recharge-now"),
+      ),
+    ).toBe(true);
     expect(directPaygo[0].canonicalPlanSlug).toContain("语言模型");
     expect(paygoAdapter.healthCheck(fallbackPaygo)).toMatchObject({
       ok: false,

@@ -133,6 +133,12 @@ describe("price formatting", () => {
     expect(formatOfferUnit("/秒", "en")).toBe("/seconds");
     expect(formatOfferUnit("/字符", "en")).toBe("/characters");
     expect(formatOfferUnit("/每小时", "en")).toBe("/hour");
+    expect(formatOfferUnit("/百万字符", "en")).toBe("/million characters");
+    expect(formatOfferUnit("/个声音", "en")).toBe("/voices");
+    expect(formatOfferUnit("/首", "en")).toBe("/songs");
+    expect(formatOfferUnit("/条（1080P，6 秒）", "en")).toBe(
+      "/videos (1080P, 6 seconds)",
+    );
     expect(
       formatOfferAnnotation(
         { category: "中国内地", priceTier: "标准" },

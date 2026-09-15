@@ -389,7 +389,9 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
             multiplier: unitInfo.multiplier,
             currency: isGlobalSource ? "USD" : "CNY",
             region: isGlobalSource ? "全球" : "中国大陆",
-            category: table.context || `价目表 ${tableOrder + 1}`,
+            category: isGlobalSource
+              ? "MiniMax Global"
+              : table.context || `价目表 ${tableOrder + 1}`,
             tier: [
               modelQualifier,
               ...row
