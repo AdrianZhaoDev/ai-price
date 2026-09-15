@@ -358,7 +358,10 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
       if (!modelName) continue;
       for (const column of columns) {
         const cell = row[column.index] ?? "";
-        const value = numberFrom(cell);
+        const value =
+          isGlobalSource && /\$/.test(cell)
+            ? firstNumberFrom(cell)
+            : numberFrom(cell);
         if (!validPrice(value) || !/[0-9]/.test(cell)) continue;
         const parsedUnit = normalizeTokenUnit(
           `${column.label} ${cell} ${table.context}`.replace(

@@ -180,7 +180,7 @@ export function firstNumberFrom(value: string | undefined): number | null {
 
 export function priceTypeFrom(label: string): ApiPriceType {
   const normalized = label.replace(/\s+/g, "").toLowerCase();
-  if (/缓存.*写|cache.*write/.test(normalized)) return "cache_write";
+  if (/缓存.*写|cach(?:e|ing).*write/.test(normalized)) return "cache_write";
   if (/缓存未命中|未命中缓存|uncached|cachemiss/.test(normalized)) {
     return "input";
   }
@@ -209,6 +209,9 @@ export function normalizeTokenUnit(text: string): {
   multiplier: number;
 } {
   const normalized = text.replace(/\s+/g, "").toLowerCase();
+  if (/(?:百万|1m|million|\/m).*?(?:字符|characters?)/.test(normalized)) {
+    return { unit: "/百万字符", multiplier: 1 };
+  }
   if (/百万|1m|million/.test(normalized)) {
     return { unit: "/百万 tokens", multiplier: 1 };
   }

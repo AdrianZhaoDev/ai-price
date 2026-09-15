@@ -29,6 +29,7 @@ export const modes: ModeDefinition[] = [
 const observedAt = "2026-07-23T18:00:00+08:00";
 const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
 const grokApiObservedAt = "2026-08-13T00:00:00+08:00";
+const minimaxGlobalObservedAt = "2026-09-15T18:13:00+08:00";
 const globalApiFxRate = 1 / 0.14797;
 
 function globalApiOffers(
@@ -501,7 +502,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
     sourceType: "official_web",
     color: "#FF4D4F",
     status: "verified",
-    lastCheckedAt: observedAt,
+    lastCheckedAt: minimaxGlobalObservedAt,
     offers: [
       {
         id: "minimax-global-plus",
@@ -513,7 +514,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
         convertedCny: Number((22 * globalApiFxRate).toFixed(2)),
         billingPeriod: "month",
         status: "verified",
-        observedAt,
+        observedAt: minimaxGlobalObservedAt,
       },
       {
         id: "minimax-global-max",
@@ -525,7 +526,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
         convertedCny: Number((55 * globalApiFxRate).toFixed(2)),
         billingPeriod: "month",
         status: "verified",
-        observedAt,
+        observedAt: minimaxGlobalObservedAt,
       },
       {
         id: "minimax-global-ultra",
@@ -537,7 +538,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
         convertedCny: Number((132 * globalApiFxRate).toFixed(2)),
         billingPeriod: "month",
         status: "verified",
-        observedAt,
+        observedAt: minimaxGlobalObservedAt,
       },
     ],
   },
@@ -1577,10 +1578,12 @@ export const providerCatalog: ProviderCatalogItem[] = [
     sourceType: "official_api",
     color: "#FF4D4F",
     status: "verified",
-    lastCheckedAt: observedAt,
-    offers: globalApiOffers("minimax-api", [
-      { name: "MiniMax-M3", cached: 0.06, input: 0.3, output: 1.2 },
-    ]),
+    lastCheckedAt: minimaxGlobalObservedAt,
+    offers: globalApiOffers(
+      "minimax-api",
+      [{ name: "MiniMax-M3", cached: 0.06, input: 0.3, output: 1.2 }],
+      minimaxGlobalObservedAt,
+    ),
   },
   {
     id: "stepfun-api",

@@ -186,6 +186,12 @@ describe("official table adapters", () => {
     expect(fallbackPaygo.map((offer) => offer.amountMinor)).toEqual([
       30, 120, 6, 37.5,
     ]);
+    expect(fallbackPaygo.map((offer) => offer.priceType)).toEqual([
+      "input",
+      "output",
+      "cached_input",
+      "cache_write",
+    ]);
     expect(fallbackPaygo.every((offer) => offer.currency === "USD")).toBe(true);
     expect(directPaygo[0].canonicalPlanSlug).toContain("语言模型");
     expect(paygoAdapter.healthCheck(fallbackPaygo)).toMatchObject({
@@ -201,6 +207,37 @@ describe("official table adapters", () => {
     expect(tokenPlanAdapter.healthCheck(fallbackTokenPlan)).toMatchObject({
       ok: true,
     });
+
+    const completeRows = Array.from(
+      { length: 17 },
+      (_, index) =>
+        `| MiniMax-Test-${index + 1} | \\$0.3 / M tokens | \\$1.2 / M tokens | \\$0.06 / M tokens | \\$0.375 / M tokens |`,
+    ).join("\n");
+    const completePaygo = await paygoAdapter.parse({
+      ...raw(`
+## Text
+
+| Model | Input | Output | Prompt caching Read | Prompt caching Write |
+| --- | --- | --- | --- | --- |
+${completeRows}
+
+## Audio
+
+| Model | Price |
+| --- | --- |
+| Speech-Pro | \\$100 / 1M characters |
+`),
+      sourceUrl: "https://platform.minimax.io/docs/guides/pricing-paygo.md",
+    });
+    const speech = completePaygo.find((offer) =>
+      offer.rawPlanName.startsWith("Speech-Pro"),
+    );
+    expect(speech).toMatchObject({
+      amountMinor: 10_000,
+      displayPrice: "$100",
+      unit: "/百万字符",
+    });
+    expect(paygoAdapter.healthCheck(completePaygo)).toMatchObject({ ok: true });
   });
 
   it("preserves DeepSeek sub-cent API prices", () => {
