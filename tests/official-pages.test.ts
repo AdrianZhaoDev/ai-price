@@ -140,53 +140,67 @@ describe("official table adapters", () => {
       (item) => item.id === "minimax-token-plan-official",
     )!;
     expect(adapter.sourceUrl).toBe(
-      "https://platform.minimax.cn/docs/guides/pricing-token-plan",
+      "https://platform.minimax.io/docs/guides/pricing-token-plan.md",
     );
     expect(adapter.healthCheck(offers)).toMatchObject({ ok: true });
   });
 
-  it("keeps MiniMax fallback identities stable and downgrades its provenance", async () => {
+  it("parses MiniMax official global sources without weakening completeness", async () => {
     const tokenPlan = `
 |  | **Plus** | **Max** | **Ultra** |
 | --- | --- | --- | --- |
-| **价格** | **¥49 /月** | **¥119 /月** | **¥469 /月** |
+| **Price** | **\\$22 /month** | **\\$55 /month** | **\\$132 /month** |
 `;
     const paygo = `
-## 语言模型
+## Text
 
-| **模型** | **输入价格** 元/百万 tokens | **输出价格** 元/百万 tokens | **缓存读取** 元/百万 tokens | **缓存写入** 元/百万 tokens |
+| **Model** | **Input** | **Output** | **Prompt caching Read** | **Prompt caching Write** |
 | --- | --- | --- | --- | --- |
-| **MiniMax-M2.7** | 2.1 | 8.4 | 0.42 | 2.625 |
+| **MiniMax-M2.7** | \\$0.3 / M tokens | \\$1.2 / M tokens | \\$0.06 / M tokens | \\$0.375 / M tokens |
 `;
 
     const paygoAdapter = officialPageAdapters.find(
       (item) => item.id === "minimax-paygo-official",
     )!;
+    expect(paygoAdapter.sourceUrl).toBe(
+      "https://platform.minimax.io/docs/guides/pricing-paygo.md",
+    );
     const directPaygo = await paygoAdapter.parse(
-      raw(`<table><tr><th>模型</th><th>输入价格元/百万 tokens</th><th>输出价格元/百万 tokens</th><th>缓存读取元/百万 tokens</th><th>缓存写入元/百万 tokens</th></tr>
+      raw(`<h2>语言模型</h2><table><tr><th>模型</th><th>输入价格元/百万 tokens</th><th>输出价格元/百万 tokens</th><th>缓存读取元/百万 tokens</th><th>缓存写入元/百万 tokens</th></tr>
       <tr><td>MiniMax-M2.7</td><td>2.1</td><td>8.4</td><td>0.42</td><td>2.625</td></tr></table>`),
     );
     const fallbackPaygo = await paygoAdapter.parse({
       ...raw(paygo),
+      sourceUrl: "https://platform.minimax.io/docs/guides/pricing-paygo.md",
+    });
+    const fallbackTokenPlan = parseMiniMaxTokenPlan({
+      ...raw(tokenPlan),
       sourceUrl:
-        "https://r.jina.ai/https://platform.minimax.cn/docs/guides/pricing-paygo",
+        "https://platform.minimax.io/docs/guides/pricing-token-plan.md",
     });
 
-    expect(parseMiniMaxTokenPlan(raw(tokenPlan))).toHaveLength(3);
-    expect(fallbackPaygo.map((offer) => offer.amountMinor)).toEqual([
-      210, 840, 42, 262.5,
-    ]);
-    expect(fallbackPaygo.map((offer) => offer.canonicalPlanSlug)).toEqual(
-      directPaygo.map((offer) => offer.canonicalPlanSlug),
-    );
-    expect(fallbackPaygo.every((offer) => offer.status === "unpublished")).toBe(
+    expect(fallbackTokenPlan).toHaveLength(3);
+    expect(fallbackTokenPlan.every((offer) => offer.currency === "USD")).toBe(
       true,
     );
-    expect(
-      fallbackPaygo.every((offer) =>
-        offer.sourceUrl.startsWith("https://r.jina.ai/"),
-      ),
-    ).toBe(true);
+    expect(fallbackPaygo.map((offer) => offer.amountMinor)).toEqual([
+      30, 120, 6, 37.5,
+    ]);
+    expect(fallbackPaygo.every((offer) => offer.currency === "USD")).toBe(true);
+    expect(directPaygo[0].canonicalPlanSlug).toContain("语言模型");
+    expect(paygoAdapter.healthCheck(fallbackPaygo)).toMatchObject({
+      ok: false,
+      code: "MISSING_PRICE",
+    });
+    const tokenPlanAdapter = officialPageAdapters.find(
+      (item) => item.id === "minimax-token-plan-official",
+    )!;
+    expect(tokenPlanAdapter.sourceUrl).toBe(
+      "https://platform.minimax.io/docs/guides/pricing-token-plan.md",
+    );
+    expect(tokenPlanAdapter.healthCheck(fallbackTokenPlan)).toMatchObject({
+      ok: true,
+    });
   });
 
   it("preserves DeepSeek sub-cent API prices", () => {

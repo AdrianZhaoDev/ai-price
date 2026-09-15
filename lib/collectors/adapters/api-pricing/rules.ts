@@ -339,20 +339,19 @@ export function parseHunyuanApi(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
   const orderFor = modelOrderer();
   const offers: NormalizedOffer[] = [];
+  const isGlobalSource = /platform\.minimax\.io\//i.test(raw.sourceUrl);
+  const modelHeader = /模型|功能|服务|model|api|service/i;
   for (const [tableOrder, table] of pricingTables(raw.body).entries()) {
     const headerIndex = table.rows.findIndex((row) =>
-      row.some((cell) => /模型|功能|服务/.test(cell)),
+      row.some((cell) => modelHeader.test(cell)),
     );
     if (headerIndex < 0) continue;
     const headers = table.rows[headerIndex];
-    const modelIndex = headers.findIndex((cell) => /模型|功能|服务/.test(cell));
+    const modelIndex = headers.findIndex((cell) => modelHeader.test(cell));
     const columns = priceColumns(headers);
     if (!columns.length) continue;
     for (const row of table.rows.slice(headerIndex + 1)) {
-      const rawModelName = compactLabel(row[modelIndex] ?? "").replace(
-        /^image-01\s+image-01-live$/i,
-        "image-01image-01-live",
-      );
+      const rawModelName = compactLabel(row[modelIndex] ?? "");
       const modelName =
         rawModelName.match(/MiniMax-[A-Za-z0-9.()_-]+/i)?.[0] ?? rawModelName;
       const modelQualifier = compactLabel(rawModelName.replace(modelName, ""));
@@ -362,7 +361,10 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
         const value = numberFrom(cell);
         if (!validPrice(value) || !/[0-9]/.test(cell)) continue;
         const parsedUnit = normalizeTokenUnit(
-          `${column.label} ${cell} ${table.context}`,
+          `${column.label} ${cell} ${table.context}`.replace(
+            /\/\s*m\s+tokens?/gi,
+            "/ million tokens",
+          ),
         );
         const unitInfo =
           column.type !== "other" &&
@@ -377,12 +379,14 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
             parserVersion: "minimax-api-v7",
             modelName,
             modelOrder: orderFor(modelName),
-            priceLabel: compactLabel(column.label).replace(/\s+(?=元\/)/g, ""),
+            priceLabel: compactLabel(column.label),
             priceType: column.type,
             value,
             unit: unitInfo.unit,
             multiplier: unitInfo.multiplier,
-            category: `价目表 ${tableOrder + 1}`,
+            currency: isGlobalSource ? "USD" : "CNY",
+            region: isGlobalSource ? "全球" : "中国大陆",
+            category: table.context || `价目表 ${tableOrder + 1}`,
             tier: [
               modelQualifier,
               ...row

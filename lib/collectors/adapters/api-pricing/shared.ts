@@ -85,9 +85,11 @@ export function officialTables(html: string): OfficialTable[] {
 function markdownCell(value: string): string {
   return value
     .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/[*`]/g, "")
+    .replace(/\\([$|])/g, "$1")
+    .replace(/[*_`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
