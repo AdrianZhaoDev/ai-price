@@ -116,7 +116,7 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 |    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付              | `https://www.bigmodel.cn/claude-code`                                  |
 |    3 | Kimi                       | Andante 等会员套餐                         | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
 |    4 | 阶跃星辰                   | 周卡与四档月卡                             | `https://chat.stepfun.com/subscription`                                |
-|    5 | MiniMax                    | Token Plan                                 | `https://platform.minimax.cn/docs/guides/pricing-token-plan`           |
+|    5 | MiniMax                    | 全球 Token Plan（USD）                     | `https://platform.minimax.io/docs/guides/pricing-token-plan.md`        |
 |    6 | 通义千问                   | 个人 Token Plan                            | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
 |    7 | 百度千帆                   | Token 福利包                               | `https://cloud.baidu.com/doc/qianfan/s/Smoghsq3g`                      |
 |    8 | 讯飞星火                   | Token Plan                                 | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                        |
@@ -143,31 +143,32 @@ cached-input/input/output 三类价格信号；价格数量达到门槛但缺少
 
 ## 保留的国内官方 API 采集（16）
 
-| 排名 | 产品                 | 采集范围                                   | 官方入口                                                          |
-| ---: | -------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
-|    1 | DeepSeek             | 官网全部模型的输入、缓存与输出             | `https://api-docs.deepseek.com/zh-cn/quick_start/pricing/`        |
-|    2 | 豆包 / 火山方舟      | 公开价格卡中的全部模型与计费项             | `https://www.volcengine.com/product/ark`                          |
-|    3 | 通义千问 / 百炼      | 中国内地人民币模型表的全部行与阶梯         | `https://help.aliyun.com/zh/model-studio/model-pricing`           |
-|    4 | Kimi / Moonshot      | 官方数据块列出的全部模型与三类 Token 价格  | `https://platform.kimi.com/docs/pricing/chat-k3`                  |
-|    5 | 腾讯混元             | 语言、多模态、图片、视频、向量及批量任务表 | `https://cloud.tencent.com/document/product/1823/130055`          |
-|    6 | 文心 / 百度千帆      | 各模型、服务、子项与在线推理价             | `https://cloud.baidu.com/doc/qianfan-docs/s/Jm8r1826a`            |
-|    7 | 智谱 / BigModel      | 公开 JavaScript 中全部 GLM 模型价格组      | `https://bigmodel.cn/pricing`                                     |
-|    8 | MiniMax              | 语言、语音、视频、音乐等按量价目表         | `https://platform.minimax.cn/docs/guides/pricing-paygo`           |
-|    9 | 阶跃星辰             | Step Plan 主套餐和加购项                   | `https://platform.stepfun.com/docs/zh/step-plan/overview`         |
-|   10 | 讯飞星火             | 全部模型积分消耗，按标准成员公开比例折算   | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                   |
-|   11 | Xiaomi MiMo          | 人民币区的文本、语音及联网服务表           | `https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go`              |
-|   12 | 百川智能             | 主模型、向量、文件存储与助手等公开计费项   | `https://platform.baichuan-ai.com/prices`                         |
-|   13 | 美团 LongCat         | LongCat-2.0 全部限时折扣项                 | `https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0`      |
-|   14 | 硅基流动 SiliconFlow | 公开价格卡中的全部模型及输入、缓存、输出   | `https://siliconflow.cn/pricing`                                  |
-|   15 | 华为云 MaaS          | 官网表内全部模型与计费项                   | `https://support.huaweicloud.com/price-maas/price-maas-0002.html` |
-|   16 | 中国电信 TeleAI      | 公开产品数据中的全部金额与 QPS 单位        | `https://www.teleai.com.cn/product/Multimodal`                    |
+| 排名 | 产品                 | 采集范围                                      | 官方入口                                                          |
+| ---: | -------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+|    1 | DeepSeek             | 官网全部模型的输入、缓存与输出                | `https://api-docs.deepseek.com/zh-cn/quick_start/pricing/`        |
+|    2 | 豆包 / 火山方舟      | 公开价格卡中的全部模型与计费项                | `https://www.volcengine.com/product/ark`                          |
+|    3 | 通义千问 / 百炼      | 中国内地人民币模型表的全部行与阶梯            | `https://help.aliyun.com/zh/model-studio/model-pricing`           |
+|    4 | Kimi / Moonshot      | 官方数据块列出的全部模型与三类 Token 价格     | `https://platform.kimi.com/docs/pricing/chat-k3`                  |
+|    5 | 腾讯混元             | 语言、多模态、图片、视频、向量及批量任务表    | `https://cloud.tencent.com/document/product/1823/130055`          |
+|    6 | 文心 / 百度千帆      | 各模型、服务、子项与在线推理价                | `https://cloud.baidu.com/doc/qianfan-docs/s/Jm8r1826a`            |
+|    7 | 智谱 / BigModel      | 公开 JavaScript 中全部 GLM 模型价格组         | `https://bigmodel.cn/pricing`                                     |
+|    8 | MiniMax              | 全球语言、语音、视频、音乐等按量价目表（USD） | `https://platform.minimax.io/docs/guides/pricing-paygo.md`        |
+|    9 | 阶跃星辰             | Step Plan 主套餐和加购项                      | `https://platform.stepfun.com/docs/zh/step-plan/overview`         |
+|   10 | 讯飞星火             | 全部模型积分消耗，按标准成员公开比例折算      | `https://www.xfyun.cn/doc/spark/TokenPlan.html`                   |
+|   11 | Xiaomi MiMo          | 人民币区的文本、语音及联网服务表              | `https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go`              |
+|   12 | 百川智能             | 主模型、向量、文件存储与助手等公开计费项      | `https://platform.baichuan-ai.com/prices`                         |
+|   13 | 美团 LongCat         | LongCat-2.0 全部限时折扣项                    | `https://longcat.chat/platform/docs/zh/pricing/long-cat-2.0`      |
+|   14 | 硅基流动 SiliconFlow | 公开价格卡中的全部模型及输入、缓存、输出      | `https://siliconflow.cn/pricing`                                  |
+|   15 | 华为云 MaaS          | 官网表内全部模型与计费项                      | `https://support.huaweicloud.com/price-maas/price-maas-0002.html` |
+|   16 | 中国电信 TeleAI      | 公开产品数据中的全部金额与 QPS 单位           | `https://www.teleai.com.cn/product/Multimodal`                    |
 
 讯飞未公开统一按量后付费价，因此页面明确展示“标准成员折算”，不描述为按量价。
 TeleAI 当前公开的是 QPS 产品价，不伪装成 Token 单价。
 
-MiniMax 从 2026-09-04 起使用官方页面声明的 `platform.minimax.cn` canonical 文档域名。
-旧 `platform.minimaxi.com` 在 VPS 出站路径返回 HTTP 200 的 WAF 验证页，不能作为成功报价。
-来源 ID 保持不变；Token Plan 只接受明确标注人民币月付的公开价格，按量价继续保留各模型和计费档位。
+MiniMax 中国站 `platform.minimax.cn` 在 VPS 出站路径持续返回 WAF 拦截页，因此从
+2026-09-15 起改采无需登录且可直接读取的官方全球文档 `platform.minimax.io`。来源 ID
+保持不变，原币切换为 USD；Token Plan 只接受明确标注月付或年付的公开价格，按量价继续
+保留各模型和计费档位。旧 `platform.minimaxi.com` 同样不能作为成功报价。
 
 ## 保留的海外官方 API 采集（4）
 

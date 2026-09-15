@@ -23,7 +23,10 @@ import {
   parseStepFunApi,
   parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
-import { priceTypeFrom } from "@/lib/collectors/adapters/api-pricing/shared";
+import {
+  priceTypeFrom,
+  pricingTables,
+} from "@/lib/collectors/adapters/api-pricing/shared";
 import {
   parseLocalizedPrice,
   slugifyPlan,
@@ -207,11 +210,13 @@ export function parseMiniMaxTokenPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
   const rows =
-    allTableRows(raw.body).find((table) =>
-      table.some((cells) => cells[0] === "价格"),
-    ) ?? [];
+    pricingTables(raw.body).find((table) =>
+      table.rows.some((cells) => /^(?:价格|price)$/i.test(cells[0] ?? "")),
+    )?.rows ?? [];
   const names = rows[0]?.slice(1) ?? [];
-  const prices = rows.find((cells) => cells[0] === "价格")?.slice(1) ?? [];
+  const prices =
+    rows.find((cells) => /^(?:价格|price)$/i.test(cells[0] ?? ""))?.slice(1) ??
+    [];
 
   return names
     .map((name, index) => ({ name, price: prices[index] }))
@@ -219,22 +224,36 @@ export function parseMiniMaxTokenPlan(
       Boolean(
         item.name &&
         item.price &&
-        /^(?:¥|￥)\s*\d+(?:\.\d+)?\s*\/\s*月$/.test(item.price),
+        (/^(?:¥|￥)\s*\d+(?:\.\d+)?\s*\/\s*月$/.test(item.price) ||
+          /^\$\s*\d+(?:\.\d+)?\s*\/\s*(?:month|year)$/i.test(item.price)),
       ),
     )
-    .map(({ name, price }) =>
-      cnyOffer({
+    .flatMap(({ name, price }) => {
+      const billingPeriod = /\/\s*(?:月|month)$/i.test(price)
+        ? ("month" as const)
+        : /\/\s*(?:年|year)$/i.test(price)
+          ? ("year" as const)
+          : null;
+      if (!billingPeriod) return [];
+      const usd = /^\$/.test(price);
+      if (!usd && billingPeriod !== "month") return [];
+      const input = {
         providerSlug: "minimax-token-plan",
-        planSlug: `minimax-token-${slugifyPlan(name)}`,
+        planSlug: usd
+          ? `minimax-global-token-${slugifyPlan(name)}-${billingPeriod}`
+          : `minimax-token-${slugifyPlan(name)}`,
         planName: name,
         displayPrice: price,
-        billingPeriod: "month",
-        channel: "official_web",
+        billingPeriod,
+        channel: "official_web" as const,
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "minimax-token-plan-v2",
-      }),
-    );
+        parserVersion: "minimax-token-plan-v3",
+      };
+      if (/^(?:¥|￥)/.test(price)) return [cnyOffer(input)];
+      if (usd) return [usdOffer(input)];
+      return [];
+    });
 }
 
 export function parseStepPlan(raw: RawCollectionResult): NormalizedOffer[] {
@@ -1334,6 +1353,8 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "claude-api-pricing-official": 6,
   "gemini-api-pricing-official": 6,
   "grok-api-pricing-official": 9,
+  "minimax-token-plan-official": 3,
+  "minimax-paygo-official": 67,
 };
 
 const HUAWEI_MAAS_MINIMUM_OFFERS = 27;
@@ -1477,7 +1498,10 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
       }
     }
     const raw = await request;
-    return { ...raw, sourceUrl: this.sourceUrl };
+    return {
+      ...raw,
+      sourceUrl: this.sourceUrl,
+    };
   }
 
   async parse(raw: RawCollectionResult): Promise<NormalizedOffer[]> {
@@ -1703,9 +1727,11 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "minimax-token-plan-official",
     "minimax-token-plan",
-    "https://platform.minimax.cn/docs/guides/pricing-token-plan",
-    "minimax-token-plan-v2",
+    "https://platform.minimax.io/docs/guides/pricing-token-plan.md",
+    "minimax-token-plan-v3",
     parseMiniMaxTokenPlan,
+    undefined,
+    ["USD"],
   ),
   new OfficialPageAdapter(
     "step-plan-official",
@@ -1773,9 +1799,11 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
   new OfficialPageAdapter(
     "minimax-paygo-official",
     "minimax-api",
-    "https://platform.minimax.cn/docs/guides/pricing-paygo",
-    "minimax-api-v6",
+    "https://platform.minimax.io/docs/guides/pricing-paygo.md",
+    "minimax-api-v7",
     parseMiniMaxApi,
+    undefined,
+    ["USD"],
   ),
   new OfficialPageAdapter(
     "kimi-k3-pricing-official",

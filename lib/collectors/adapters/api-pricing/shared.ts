@@ -85,8 +85,10 @@ export function officialTables(html: string): OfficialTable[] {
 function markdownCell(value: string): string {
   return value
     .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/\\([$|])/g, "$1")
     .replace(/[*_`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -178,7 +180,7 @@ export function firstNumberFrom(value: string | undefined): number | null {
 
 export function priceTypeFrom(label: string): ApiPriceType {
   const normalized = label.replace(/\s+/g, "").toLowerCase();
-  if (/缓存.*写|cache.*write/.test(normalized)) return "cache_write";
+  if (/缓存.*写|cach(?:e|ing).*write/.test(normalized)) return "cache_write";
   if (/缓存未命中|未命中缓存|uncached|cachemiss/.test(normalized)) {
     return "input";
   }
@@ -207,6 +209,37 @@ export function normalizeTokenUnit(text: string): {
   multiplier: number;
 } {
   const normalized = text.replace(/\s+/g, "").toLowerCase();
+  if (/(?:百万|1m|million|\/m).*?(?:字符|characters?)/.test(normalized)) {
+    return { unit: "/百万字符", multiplier: 1 };
+  }
+  if (/\/(?:an?)?hours?|perhours?/.test(normalized)) {
+    return { unit: "/小时", multiplier: 1 };
+  }
+  if (/\/(?:an?)?seconds?|perseconds?/.test(normalized)) {
+    return { unit: "/秒", multiplier: 1 };
+  }
+  if (/(?:\/|per)(?:an?)?images?/.test(normalized)) {
+    return { unit: "/张", multiplier: 1 };
+  }
+  if (/(?:\/|per)(?:an?)?requests?/.test(normalized)) {
+    return { unit: "/次", multiplier: 1 };
+  }
+  if (/(?:\/|per)(?:an?)?voices?/.test(normalized)) {
+    return { unit: "/个声音", multiplier: 1 };
+  }
+  if (/(?:\/|per)(?:an?)?songs?|up-to-\d+minutesmusic/.test(normalized)) {
+    return { unit: "/首", multiplier: 1 };
+  }
+  const videoTier = normalized.match(/per(\d{3,4}p),(\d+)s(?:video)?/);
+  if (videoTier) {
+    return {
+      unit: `/条（${videoTier[1].toUpperCase()}，${videoTier[2]} 秒）`,
+      multiplier: 1,
+    };
+  }
+  if (/(?:\/|per)(?:an?)?videos?/.test(normalized)) {
+    return { unit: "/条", multiplier: 1 };
+  }
   if (/百万|1m|million/.test(normalized)) {
     return { unit: "/百万 tokens", multiplier: 1 };
   }

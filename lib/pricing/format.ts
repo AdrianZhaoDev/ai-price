@@ -250,6 +250,8 @@ export function formatOfferUnit(
 ): string {
   if (!unit || locale !== "en") return unit ?? fallback;
   let value = unit
+    .replace(/百万字符/g, "million characters")
+    .replace(/条（([^，]+)，(\d+) 秒）/g, "videos ($1, $2 seconds)")
     .replace(
       /(\d+(?:\.\d+)?)亿/g,
       (_, amount: string) => `${Number(amount) * 100}M`,
@@ -278,6 +280,9 @@ export function formatOfferUnit(
     .replace(/小时/g, "hours")
     .replace(/秒/g, "seconds")
     .replace(/字符/g, "characters")
+    .replace(/个声音/g, "voices")
+    .replace(/首/g, "songs")
+    .replace(/条/g, "videos")
     .replace(/天/g, " days")
     .replace(/月/g, "month")
     .replace(/按官方单位/g, "Official unit")
