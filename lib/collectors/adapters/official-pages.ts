@@ -72,6 +72,65 @@ function allTableRows(html: string): string[][][] {
   return tables;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+export function appendMarkdownTablesAsHtml(body: string): string {
+  const lines = body.split(/\r?\n/);
+  const tables: string[] = [];
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[index])) continue;
+    if (!/^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(lines[index + 1])) {
+      continue;
+    }
+
+    const rows: string[][] = [];
+    const parseRow = (line: string) =>
+      line
+        .trim()
+        .slice(1, -1)
+        .split("|")
+        .map((cell) =>
+          cell
+            .trim()
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+            .replace(/[*_`]/g, "")
+            .replace(/~~/g, ""),
+        );
+
+    rows.push(parseRow(lines[index]));
+    index += 2;
+    while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
+      rows.push(parseRow(lines[index]));
+      index += 1;
+    }
+    index -= 1;
+
+    tables.push(
+      `<table>${rows
+        .map(
+          (row, rowIndex) =>
+            `<tr>${row
+              .map((cell) =>
+                rowIndex === 0
+                  ? `<th>${escapeHtml(cell)}</th>`
+                  : `<td>${escapeHtml(cell)}</td>`,
+              )
+              .join("")}</tr>`,
+        )
+        .join("")}</table>`,
+    );
+  }
+
+  return tables.length ? `${body}\n${tables.join("\n")}` : body;
+}
+
 function numbers(value: string): number[] {
   return [...value.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
 }
@@ -232,7 +291,7 @@ export function parseMiniMaxTokenPlan(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "minimax-token-plan-v2",
+        parserVersion: "minimax-token-plan-v3",
       }),
     );
 }
@@ -1455,6 +1514,7 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
     private readonly parser: Parser,
     private readonly collectUrl = sourceUrl,
     readonly quoteCurrencies?: string[],
+    private readonly fallbackCollectUrl?: string,
   ) {}
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
@@ -1476,7 +1536,30 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
         sharedLargeOfficialFetch = { key, promise: request };
       }
     }
-    const raw = await request;
+    let raw: RawCollectionResult;
+    try {
+      raw = await request;
+    } catch (primaryError) {
+      if (!this.fallbackCollectUrl) throw primaryError;
+      try {
+        raw = await fetchPage(this.fallbackCollectUrl, {
+          observedAt: context.observedAt,
+          signal: context.signal,
+          timeoutMs: 30_000,
+          attempts: 2,
+        });
+        raw = { ...raw, body: appendMarkdownTablesAsHtml(raw.body) };
+      } catch (fallbackError) {
+        throw new CollectionError(
+          "FETCH_FAILED",
+          "Official source and rendered-text fallback both failed.",
+          {
+            primary: errorDiagnosticDetails(primaryError),
+            fallback: errorDiagnosticDetails(fallbackError),
+          },
+        );
+      }
+    }
     return { ...raw, sourceUrl: this.sourceUrl };
   }
 
@@ -1704,8 +1787,11 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "minimax-token-plan-official",
     "minimax-token-plan",
     "https://platform.minimax.cn/docs/guides/pricing-token-plan",
-    "minimax-token-plan-v2",
+    "minimax-token-plan-v3",
     parseMiniMaxTokenPlan,
+    undefined,
+    ["CNY"],
+    "https://r.jina.ai/https://platform.minimax.cn/docs/guides/pricing-token-plan",
   ),
   new OfficialPageAdapter(
     "step-plan-official",
@@ -1774,8 +1860,11 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "minimax-paygo-official",
     "minimax-api",
     "https://platform.minimax.cn/docs/guides/pricing-paygo",
-    "minimax-api-v6",
+    "minimax-api-v7",
     parseMiniMaxApi,
+    undefined,
+    ["CNY"],
+    "https://r.jina.ai/https://platform.minimax.cn/docs/guides/pricing-paygo",
   ),
   new OfficialPageAdapter(
     "kimi-k3-pricing-official",

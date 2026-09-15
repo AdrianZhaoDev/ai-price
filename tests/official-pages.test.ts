@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  appendMarkdownTablesAsHtml,
   officialPageHealthCheck,
   parseBaichuanPricing,
   parseBaiduPricing,
@@ -37,7 +38,10 @@ import {
   parseTraePricing,
 } from "@/lib/collectors/adapters/official-pages";
 import { hashContent } from "@/lib/collectors/http-client";
-import { parseHuaweiMaaSApi } from "@/lib/collectors/adapters/api-pricing/rules";
+import {
+  parseHuaweiMaaSApi,
+  parseMiniMaxApi,
+} from "@/lib/collectors/adapters/api-pricing/rules";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
 function raw(body: string): RawCollectionResult {
@@ -125,7 +129,7 @@ describe("official table adapters", () => {
       4900, 11900, 46900,
     ]);
     expect(
-      offers.every((offer) => offer.parserVersion === "minimax-token-plan-v2"),
+      offers.every((offer) => offer.parserVersion === "minimax-token-plan-v3"),
     ).toBe(true);
     for (const price of ["", "¥-49 /月", "$49 /月", "¥49 起", "¥49 /年"]) {
       expect(
@@ -143,6 +147,24 @@ describe("official table adapters", () => {
       "https://platform.minimax.cn/docs/guides/pricing-token-plan",
     );
     expect(adapter.healthCheck(offers)).toMatchObject({ ok: true });
+  });
+
+  it("parses MiniMax pricing tables from the official rendered-text fallback", () => {
+    const tokenPlan = appendMarkdownTablesAsHtml(`
+|  | **Plus** | **Max** | **Ultra** |
+| --- | --- | --- | --- |
+| **价格** | **¥49 /月** | **¥119 /月** | **¥469 /月** |
+`);
+    const paygo = appendMarkdownTablesAsHtml(`
+| **模型** | **输入价格** 元/百万 tokens | **输出价格** 元/百万 tokens | **缓存读取** 元/百万 tokens | **缓存写入** 元/百万 tokens |
+| --- | --- | --- | --- | --- |
+| **MiniMax-M2.7** | 2.1 | 8.4 | 0.42 | 2.625 |
+`);
+
+    expect(parseMiniMaxTokenPlan(raw(tokenPlan))).toHaveLength(3);
+    expect(
+      parseMiniMaxApi(raw(paygo)).map((offer) => offer.amountMinor),
+    ).toEqual([210, 840, 42, 262.5]);
   });
 
   it("preserves DeepSeek sub-cent API prices", () => {

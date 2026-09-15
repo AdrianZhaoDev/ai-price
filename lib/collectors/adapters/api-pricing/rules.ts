@@ -371,7 +371,7 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
           apiOffer({
             raw,
             providerSlug: "minimax-api",
-            parserVersion: "minimax-api-v6",
+            parserVersion: "minimax-api-v7",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel: compactLabel(column.label),
