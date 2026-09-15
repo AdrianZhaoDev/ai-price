@@ -226,6 +226,9 @@ ${completeRows}
 | Model | Price |
 | --- | --- |
 | Speech-Pro | \\$100 / 1M characters |
+| Image-Pro | \\$0.003 / image |
+| ASR-Pro | \\$0.30 / hour |
+| Video-Pro | \\$0.03 / second |
 `),
       sourceUrl: "https://platform.minimax.io/docs/guides/pricing-paygo.md",
     });
@@ -237,6 +240,11 @@ ${completeRows}
       displayPrice: "$100",
       unit: "/百万字符",
     });
+    expect(
+      completePaygo
+        .filter((offer) => /^(?:Image|ASR|Video)-Pro/.test(offer.rawPlanName))
+        .map((offer) => offer.unit),
+    ).toEqual(["/张", "/小时", "/秒"]);
     expect(paygoAdapter.healthCheck(completePaygo)).toMatchObject({ ok: true });
   });
 
