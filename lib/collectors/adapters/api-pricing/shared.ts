@@ -87,7 +87,7 @@ function markdownCell(value: string): string {
     .replace(/<br\s*\/?>/gi, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/[*_`]/g, "")
+    .replace(/[*`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  appendMarkdownTablesAsHtml,
   officialPageHealthCheck,
   parseBaichuanPricing,
   parseBaiduPricing,
@@ -38,10 +37,7 @@ import {
   parseTraePricing,
 } from "@/lib/collectors/adapters/official-pages";
 import { hashContent } from "@/lib/collectors/http-client";
-import {
-  parseHuaweiMaaSApi,
-  parseMiniMaxApi,
-} from "@/lib/collectors/adapters/api-pricing/rules";
+import { parseHuaweiMaaSApi } from "@/lib/collectors/adapters/api-pricing/rules";
 import type { RawCollectionResult } from "@/lib/collectors/types";
 
 function raw(body: string): RawCollectionResult {
@@ -149,22 +145,48 @@ describe("official table adapters", () => {
     expect(adapter.healthCheck(offers)).toMatchObject({ ok: true });
   });
 
-  it("parses MiniMax pricing tables from the official rendered-text fallback", () => {
-    const tokenPlan = appendMarkdownTablesAsHtml(`
+  it("keeps MiniMax fallback identities stable and downgrades its provenance", async () => {
+    const tokenPlan = `
 |  | **Plus** | **Max** | **Ultra** |
 | --- | --- | --- | --- |
 | **价格** | **¥49 /月** | **¥119 /月** | **¥469 /月** |
-`);
-    const paygo = appendMarkdownTablesAsHtml(`
+`;
+    const paygo = `
+## 语言模型
+
 | **模型** | **输入价格** 元/百万 tokens | **输出价格** 元/百万 tokens | **缓存读取** 元/百万 tokens | **缓存写入** 元/百万 tokens |
 | --- | --- | --- | --- | --- |
 | **MiniMax-M2.7** | 2.1 | 8.4 | 0.42 | 2.625 |
-`);
+`;
+
+    const paygoAdapter = officialPageAdapters.find(
+      (item) => item.id === "minimax-paygo-official",
+    )!;
+    const directPaygo = await paygoAdapter.parse(
+      raw(`<table><tr><th>模型</th><th>输入价格元/百万 tokens</th><th>输出价格元/百万 tokens</th><th>缓存读取元/百万 tokens</th><th>缓存写入元/百万 tokens</th></tr>
+      <tr><td>MiniMax-M2.7</td><td>2.1</td><td>8.4</td><td>0.42</td><td>2.625</td></tr></table>`),
+    );
+    const fallbackPaygo = await paygoAdapter.parse({
+      ...raw(paygo),
+      sourceUrl:
+        "https://r.jina.ai/https://platform.minimax.cn/docs/guides/pricing-paygo",
+    });
 
     expect(parseMiniMaxTokenPlan(raw(tokenPlan))).toHaveLength(3);
+    expect(fallbackPaygo.map((offer) => offer.amountMinor)).toEqual([
+      210, 840, 42, 262.5,
+    ]);
+    expect(fallbackPaygo.map((offer) => offer.canonicalPlanSlug)).toEqual(
+      directPaygo.map((offer) => offer.canonicalPlanSlug),
+    );
+    expect(fallbackPaygo.every((offer) => offer.status === "unpublished")).toBe(
+      true,
+    );
     expect(
-      parseMiniMaxApi(raw(paygo)).map((offer) => offer.amountMinor),
-    ).toEqual([210, 840, 42, 262.5]);
+      fallbackPaygo.every((offer) =>
+        offer.sourceUrl.startsWith("https://r.jina.ai/"),
+      ),
+    ).toBe(true);
   });
 
   it("preserves DeepSeek sub-cent API prices", () => {

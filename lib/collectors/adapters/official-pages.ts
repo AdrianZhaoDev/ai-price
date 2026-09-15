@@ -23,7 +23,10 @@ import {
   parseStepFunApi,
   parseTeleAiApi,
 } from "@/lib/collectors/adapters/api-pricing/rules";
-import { priceTypeFrom } from "@/lib/collectors/adapters/api-pricing/shared";
+import {
+  priceTypeFrom,
+  pricingTables,
+} from "@/lib/collectors/adapters/api-pricing/shared";
 import {
   parseLocalizedPrice,
   slugifyPlan,
@@ -70,65 +73,6 @@ function allTableRows(html: string): string[][][] {
     tables.push(tableRows(html, index));
   });
   return tables;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-export function appendMarkdownTablesAsHtml(body: string): string {
-  const lines = body.split(/\r?\n/);
-  const tables: string[] = [];
-
-  for (let index = 0; index < lines.length - 1; index += 1) {
-    if (!/^\s*\|.*\|\s*$/.test(lines[index])) continue;
-    if (!/^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(lines[index + 1])) {
-      continue;
-    }
-
-    const rows: string[][] = [];
-    const parseRow = (line: string) =>
-      line
-        .trim()
-        .slice(1, -1)
-        .split("|")
-        .map((cell) =>
-          cell
-            .trim()
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-            .replace(/[*_`]/g, "")
-            .replace(/~~/g, ""),
-        );
-
-    rows.push(parseRow(lines[index]));
-    index += 2;
-    while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) {
-      rows.push(parseRow(lines[index]));
-      index += 1;
-    }
-    index -= 1;
-
-    tables.push(
-      `<table>${rows
-        .map(
-          (row, rowIndex) =>
-            `<tr>${row
-              .map((cell) =>
-                rowIndex === 0
-                  ? `<th>${escapeHtml(cell)}</th>`
-                  : `<td>${escapeHtml(cell)}</td>`,
-              )
-              .join("")}</tr>`,
-        )
-        .join("")}</table>`,
-    );
-  }
-
-  return tables.length ? `${body}\n${tables.join("\n")}` : body;
 }
 
 function numbers(value: string): number[] {
@@ -266,9 +210,9 @@ export function parseMiniMaxTokenPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
   const rows =
-    allTableRows(raw.body).find((table) =>
-      table.some((cells) => cells[0] === "价格"),
-    ) ?? [];
+    pricingTables(raw.body).find((table) =>
+      table.rows.some((cells) => cells[0] === "价格"),
+    )?.rows ?? [];
   const names = rows[0]?.slice(1) ?? [];
   const prices = rows.find((cells) => cells[0] === "价格")?.slice(1) ?? [];
 
@@ -1548,7 +1492,6 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
           timeoutMs: 30_000,
           attempts: 2,
         });
-        raw = { ...raw, body: appendMarkdownTablesAsHtml(raw.body) };
       } catch (fallbackError) {
         throw new CollectionError(
           "FETCH_FAILED",
@@ -1560,11 +1503,19 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
         );
       }
     }
-    return { ...raw, sourceUrl: this.sourceUrl };
+    return {
+      ...raw,
+      sourceUrl:
+        raw.sourceUrl === this.fallbackCollectUrl
+          ? raw.sourceUrl
+          : this.sourceUrl,
+    };
   }
 
   async parse(raw: RawCollectionResult): Promise<NormalizedOffer[]> {
-    return this.parser(raw);
+    const offers = this.parser(raw);
+    if (raw.sourceUrl !== this.fallbackCollectUrl) return offers;
+    return offers.map((offer) => ({ ...offer, status: "unpublished" }));
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {

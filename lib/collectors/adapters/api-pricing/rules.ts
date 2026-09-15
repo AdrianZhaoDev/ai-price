@@ -339,7 +339,7 @@ export function parseHunyuanApi(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
   const orderFor = modelOrderer();
   const offers: NormalizedOffer[] = [];
-  for (const [tableOrder, table] of officialTables(raw.body).entries()) {
+  for (const [tableOrder, table] of pricingTables(raw.body).entries()) {
     const headerIndex = table.rows.findIndex((row) =>
       row.some((cell) => /模型|功能|服务/.test(cell)),
     );
@@ -349,7 +349,10 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
     const columns = priceColumns(headers);
     if (!columns.length) continue;
     for (const row of table.rows.slice(headerIndex + 1)) {
-      const rawModelName = compactLabel(row[modelIndex] ?? "");
+      const rawModelName = compactLabel(row[modelIndex] ?? "").replace(
+        /^image-01\s+image-01-live$/i,
+        "image-01image-01-live",
+      );
       const modelName =
         rawModelName.match(/MiniMax-[A-Za-z0-9.()_-]+/i)?.[0] ?? rawModelName;
       const modelQualifier = compactLabel(rawModelName.replace(modelName, ""));
@@ -374,12 +377,12 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
             parserVersion: "minimax-api-v7",
             modelName,
             modelOrder: orderFor(modelName),
-            priceLabel: compactLabel(column.label),
+            priceLabel: compactLabel(column.label).replace(/\s+(?=元\/)/g, ""),
             priceType: column.type,
             value,
             unit: unitInfo.unit,
             multiplier: unitInfo.multiplier,
-            category: table.context || `价目表 ${tableOrder + 1}`,
+            category: `价目表 ${tableOrder + 1}`,
             tier: [
               modelQualifier,
               ...row
