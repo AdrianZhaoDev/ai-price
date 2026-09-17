@@ -5,6 +5,7 @@ import {
   parseBaiduPricing,
   parseBaiduTokenPackage,
   parseCodeBuddyPricing,
+  isCodeBuddyPlanAsset,
   parseComatePricing,
   parseDeepSeekPricing,
   parseDoubaoPricing,
@@ -488,6 +489,53 @@ ${completeRows}
       ok: false,
       code: "ACCESS_BLOCKED",
     });
+    const current = parseTraePricing(
+      raw(
+        `<script id="__MODERN_ROUTER_DATA__">${JSON.stringify({
+          loaderData: {
+            "__header-footer-layout/pricing/page": {
+              productList: {
+                products: [
+                  {
+                    id: "1",
+                    display_price: "$0",
+                    product_extra: { subscription_extra: { period_type: 0 } },
+                  },
+                  {
+                    id: "2",
+                    display_price: "$20",
+                    product_extra: { subscription_extra: { period_type: 0 } },
+                  },
+                  {
+                    id: "30",
+                    display_price: "$60",
+                    product_extra: { subscription_extra: { period_type: 0 } },
+                  },
+                  {
+                    id: "32",
+                    display_price: "$200",
+                    product_extra: { subscription_extra: { period_type: 0 } },
+                  },
+                  {
+                    id: "33",
+                    display_price: "$166.67",
+                    product_extra: { subscription_extra: { period_type: 1 } },
+                  },
+                ],
+              },
+            },
+          },
+        })}</script>`,
+      ),
+    );
+    expect(current.map((offer) => offer.amountMinor)).toEqual([
+      0, 2000, 6000, 20000,
+    ]);
+    expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
+    expect(adapter?.healthCheck(current.slice(0, 3))).toMatchObject({
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+    });
   });
 
   it("parses coding plans from dynamic official JavaScript payloads", () => {
@@ -506,6 +554,15 @@ ${completeRows}
     expect(codebuddy.map((offer) => offer.amountMinor)).toEqual([
       0, 3900, 7000, 14000, 70000,
     ]);
+    const currentCodeBuddy =
+      'id:"free",prices:{monthly:{price:"限时免费"}} id:"youth",prices:{monthly:{price:"￥ 39"}} id:"standard",prices:{"monthly-auto":{price:"￥ 70"}} id:"advanced",prices:{"monthly-auto":{price:"￥ 140"}} id:"flagship",prices:{"monthly-auto":{price:"￥ 700"}}';
+    expect(isCodeBuddyPlanAsset(currentCodeBuddy)).toBe(true);
+    expect(
+      parseCodeBuddyPricing(raw(currentCodeBuddy)).map(
+        (offer) => offer.amountMinor,
+      ),
+    ).toEqual([0, 3900, 7000, 14000, 70000]);
+    expect(isCodeBuddyPlanAsset('id:"flagship",price:"¥198"')).toBe(false);
   });
 
   it("selects the latest compact GLM plan version and uses billed totals", () => {

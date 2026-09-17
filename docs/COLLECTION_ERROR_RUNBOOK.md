@@ -49,6 +49,8 @@ ORDER BY e.created_at DESC;"
 ## 3. 本地修复与测试
 
 在本机仓库修改，不得在 `/opt/ai-price/current` 中修：
+严格符合 `AGENTS.md`“单来源网页变更热修”的任务，可按其中的定向本地验证清单执行；
+其他采集修复仍执行下列完整检查。生产发布与验收步骤不因热修而省略。
 
 ```powershell
 Set-Location 'C:\Users\zhangjunjun\Documents\ai-price'
