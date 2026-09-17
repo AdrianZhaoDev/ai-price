@@ -532,6 +532,28 @@ ${completeRows}
       0, 2000, 6000, 20000,
     ]);
     expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
+    const fallback = raw(
+      `<script id="__MODERN_ROUTER_DATA__">${JSON.stringify({
+        loaderData: {
+          "__header-footer-layout/pricing/page": {
+            isProductListFallback: true,
+            productList: {
+              products: [
+                { id: "1", display_price: "$0", period_type: 0 },
+                { id: "2", display_price: "$0", period_type: 0 },
+                { id: "30", display_price: "$30", period_type: 0 },
+                { id: "32", display_price: "$100", period_type: 0 },
+              ],
+            },
+          },
+        },
+      })}</script>`,
+    );
+    expect(parseTraePricing(fallback)).toEqual([]);
+    expect(adapter?.healthCheck(parseTraePricing(fallback))).toMatchObject({
+      ok: false,
+      code: "ACCESS_BLOCKED",
+    });
     expect(adapter?.healthCheck(current.slice(0, 3))).toMatchObject({
       ok: false,
       code: "STRUCTURE_CHANGED",
