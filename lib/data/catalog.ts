@@ -29,7 +29,9 @@ export const modes: ModeDefinition[] = [
 const observedAt = "2026-07-23T18:00:00+08:00";
 const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
 const grokApiObservedAt = "2026-08-13T00:00:00+08:00";
-const traeObservedAt = "2026-09-17T03:46:00Z";
+const traeObservedAt = "2026-08-26T08:45:26Z";
+const traeFxRate = 6.7078078884;
+const traeFxObservedAt = "2026-09-17T00:00:00Z";
 const minimaxGlobalObservedAt = "2026-09-15T18:13:00+08:00";
 const globalApiFxRate = 1 / 0.14797;
 
@@ -1002,8 +1004,8 @@ export const providerCatalog: ProviderCatalogItem[] = [
         currency: "USD",
         displayPrice: "$0",
         convertedCny: 0,
-        fxRate: globalApiFxRate,
-        fxRateObservedAt: globalApiObservedAt,
+        fxRate: traeFxRate,
+        fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
         status: "verified",
         observedAt: traeObservedAt,
@@ -1012,12 +1014,12 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-pro",
         planId: "trae-速通-pro-monthly",
         planName: "Pro",
-        amountMinor: 2000,
+        amountMinor: 0,
         currency: "USD",
-        displayPrice: "$20",
-        convertedCny: Number((20 * globalApiFxRate).toFixed(2)),
-        fxRate: globalApiFxRate,
-        fxRateObservedAt: globalApiObservedAt,
+        displayPrice: "$0",
+        convertedCny: 0,
+        fxRate: traeFxRate,
+        fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
         status: "verified",
         observedAt: traeObservedAt,
@@ -1026,12 +1028,12 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-pro-plus",
         planId: "trae-速通-pro-monthly-plus",
         planName: "Pro+",
-        amountMinor: 6000,
+        amountMinor: 3000,
         currency: "USD",
-        displayPrice: "$60",
-        convertedCny: Number((60 * globalApiFxRate).toFixed(2)),
-        fxRate: globalApiFxRate,
-        fxRateObservedAt: globalApiObservedAt,
+        displayPrice: "$30",
+        convertedCny: Number((30 * traeFxRate).toFixed(6)),
+        fxRate: traeFxRate,
+        fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
         status: "verified",
         observedAt: traeObservedAt,
@@ -1040,12 +1042,12 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-ultra",
         planId: "trae-速通-ultra-monthly",
         planName: "Ultra",
-        amountMinor: 20000,
+        amountMinor: 10000,
         currency: "USD",
-        displayPrice: "$200",
-        convertedCny: Number((200 * globalApiFxRate).toFixed(2)),
-        fxRate: globalApiFxRate,
-        fxRateObservedAt: globalApiObservedAt,
+        displayPrice: "$100",
+        convertedCny: Number((100 * traeFxRate).toFixed(6)),
+        fxRate: traeFxRate,
+        fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
         status: "verified",
         observedAt: traeObservedAt,

@@ -803,6 +803,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   const loaderData = root?.loaderData as Record<string, unknown> | undefined;
   const pricingPage = loaderData?.["__header-footer-layout/pricing/page"] as
     Record<string, unknown> | undefined;
+  if (pricingPage?.isProductListFallback === true) return [];
   const liteProducts = (pricingPage?.productList ??
     pricingPage?.liteProducts) as Record<string, unknown> | undefined;
   const globalProducts = Array.isArray(liteProducts?.products)
@@ -872,7 +873,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
       channel: "official_web",
       sourceUrl: raw.sourceUrl,
       observedAt: raw.observedAt,
-      parserVersion: "trae-pricing-v6",
+      parserVersion: "trae-pricing-v7",
     } as const;
     return [isGlobal ? usdOffer(offer) : cnyOffer(offer)];
   });
@@ -1684,7 +1685,7 @@ class TraePricingAdapter implements PriceSourceAdapter {
   readonly id = "trae-pricing-official";
   readonly providerSlug = "trae-subscription";
   readonly sourceUrl = "https://www.trae.ai/pricing";
-  readonly parserVersion = "trae-pricing-v6";
+  readonly parserVersion = "trae-pricing-v7";
   readonly quoteCurrencies = ["USD"];
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
