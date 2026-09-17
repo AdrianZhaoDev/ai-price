@@ -72,4 +72,18 @@ describe("catalog contract", () => {
       new Set(["grok-4-6", "grok-4-5", "grok-4-3"]),
     );
   });
+
+  it("keeps the TRAE fallback offers comparable with a dated FX snapshot", () => {
+    const trae = providerCatalog.find(
+      (provider) => provider.id === "trae-subscription",
+    );
+    expect(trae?.offers.map((offer) => offer.amountMinor)).toEqual([
+      0, 2000, 6000, 20000,
+    ]);
+    for (const offer of trae?.offers ?? []) {
+      expect(offer.convertedCny).toBeTypeOf("number");
+      expect(offer.fxRate).toBeGreaterThan(0);
+      expect(offer.fxRateObservedAt).toBeTruthy();
+    }
+  });
 });
