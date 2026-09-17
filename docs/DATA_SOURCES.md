@@ -134,11 +134,12 @@ JavaScript 中解析；登录后才能看到且没有公开价目表的会员不
 Kimi 会员按公开表头定位月付列，兼容人民币地区页和 `kimi.ai` 中文国际页的 USD 月付；
 原币金额保持 USD，并沿用 FX 快照生成参考价；价格变化只与同币种历史基线比较，地区页
 从 CNY 迁移到 USD 时不会产生伪降价事件。TRAE 只使用公开价格页暴露的免登录数据；
-当前读取 `trae.ai` 全球官网公开路由数据 `productList` 中的月付 USD 套餐；2026-09-17
+当前读取 `trae.ai` 全球官网定价页自身调用的公开免登录
+`ug-normal.trae.ai/trae/api/v1/pay/sellable_product_list` 产品清单，限定月付 USD；2026-09-17
 官网只公开 Free、Pro、Pro+、Ultra 四档月付，Lite 不再出现在公开清单中，不使用受区域限制的中国站；
-如果官网返回 `isProductListFallback=true`，说明本次没有拿到实时公开价格，即使有四档
-旧数据也拒绝写入并保留最后有效报价。VPS 与其他地区可能得到不同金额，不能混作同一轮价格；
-若公开页不再提供可验证的价格载荷，采集报 `ACCESS_BLOCKED` 并保留最后有效报价。
+VPS 的页面 SSR 返回 `isProductListFallback=true`，不可采用其中的旧价；若官方产品清单
+无法返回完整四档月付报价，也拒绝写入并保留最后有效报价。VPS 与其他地区可能得到
+不同金额，不能混作同一轮价格；若官方公开入口不再提供可验证的价格载荷，采集失败。
 
 Huawei MaaS API 的健康检查要求至少 27 个报价、9 个已验证模型以及
 cached-input/input/output 三类价格信号；价格数量达到门槛但缺少模型或价格类型仍会报
