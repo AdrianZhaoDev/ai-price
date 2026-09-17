@@ -803,8 +803,8 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
   const loaderData = root?.loaderData as Record<string, unknown> | undefined;
   const pricingPage = loaderData?.["__header-footer-layout/pricing/page"] as
     Record<string, unknown> | undefined;
-  const liteProducts = pricingPage?.liteProducts as
-    Record<string, unknown> | undefined;
+  const liteProducts = (pricingPage?.productList ??
+    pricingPage?.liteProducts) as Record<string, unknown> | undefined;
   const globalProducts = Array.isArray(liteProducts?.products)
     ? liteProducts.products.filter((item): item is Record<string, unknown> => {
         if (typeof item !== "object" || item === null) return false;
@@ -872,7 +872,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
       channel: "official_web",
       sourceUrl: raw.sourceUrl,
       observedAt: raw.observedAt,
-      parserVersion: "trae-pricing-v5",
+      parserVersion: "trae-pricing-v6",
     } as const;
     return [isGlobal ? usdOffer(offer) : cnyOffer(offer)];
   });
@@ -1142,7 +1142,7 @@ export function parseCodeBuddyPricing(
         channel: "official_web",
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "codebuddy-pricing-v2",
+        parserVersion: "codebuddy-pricing-v3",
       }),
     ];
   });
@@ -1608,11 +1608,19 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 }
 
+export function isCodeBuddyPlanAsset(body: string): boolean {
+  return (
+    ["free", "youth", "standard", "advanced", "flagship"].every((id) =>
+      body.includes(`id:"${id}"`),
+    ) && /["']?monthly-auto["']?:\{price:"[¥￥]\s*\d/.test(body)
+  );
+}
+
 class CodeBuddyPricingAdapter implements PriceSourceAdapter {
   readonly id = "codebuddy-pricing-official";
   readonly providerSlug = "codebuddy-subscription";
   readonly sourceUrl = "https://www.codebuddy.cn/pricing/";
-  readonly parserVersion = "codebuddy-pricing-v2";
+  readonly parserVersion = "codebuddy-pricing-v3";
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
     const page = await fetchPage(this.sourceUrl, {
@@ -1656,11 +1664,7 @@ class CodeBuddyPricingAdapter implements PriceSourceAdapter {
           result.status === "fulfilled",
       )
       .map((result) => result.value)
-      .find(
-        (result) =>
-          result.body.includes("每月基础2000积分") &&
-          result.body.includes('id:"flagship"'),
-      );
+      .find((result) => isCodeBuddyPlanAsset(result.body));
     if (!asset) {
       throw new Error("CodeBuddy plan data asset was not found.");
     }
@@ -1680,7 +1684,7 @@ class TraePricingAdapter implements PriceSourceAdapter {
   readonly id = "trae-pricing-official";
   readonly providerSlug = "trae-subscription";
   readonly sourceUrl = "https://www.trae.ai/pricing";
-  readonly parserVersion = "trae-pricing-v5";
+  readonly parserVersion = "trae-pricing-v6";
   readonly quoteCurrencies = ["USD"];
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
@@ -1703,7 +1707,24 @@ class TraePricingAdapter implements PriceSourceAdapter {
           "TRAE global pricing page did not expose a public, unauthenticated monthly price payload.",
       };
     }
-    return officialPageHealthCheck(offers, 5);
+    const required = [
+      "trae-免费-monthly",
+      "trae-速通-pro-monthly",
+      "trae-速通-pro-monthly-plus",
+      "trae-速通-ultra-monthly",
+    ];
+    if (
+      required.some(
+        (slug) => !offers.some((offer) => offer.canonicalPlanSlug === slug),
+      )
+    ) {
+      return {
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        message: "TRAE global monthly product list is incomplete.",
+      };
+    }
+    return officialPageHealthCheck(offers, 4);
   }
 }
 
