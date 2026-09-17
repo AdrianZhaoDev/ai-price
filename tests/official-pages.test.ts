@@ -560,6 +560,97 @@ ${completeRows}
     });
   });
 
+  it("collects TRAE's anonymous official product list and rejects incomplete API data", async () => {
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "trae-pricing-official",
+    );
+    expect(adapter).toBeDefined();
+    const products = [
+      {
+        id: "1",
+        display_price: "$0",
+        product_extra: { subscription_extra: { period_type: 0 } },
+      },
+      {
+        id: "2",
+        display_price: "$20",
+        product_extra: { subscription_extra: { period_type: 0 } },
+      },
+      {
+        id: "30",
+        display_price: "$60",
+        product_extra: { subscription_extra: { period_type: 0 } },
+      },
+      {
+        id: "32",
+        display_price: "$200",
+        product_extra: { subscription_extra: { period_type: 0 } },
+      },
+      {
+        id: "33",
+        display_price: "$166.67",
+        product_extra: { subscription_extra: { period_type: 1 } },
+      },
+    ];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ billing_version: 3, products }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const collected = await adapter!.collect({
+        observedAt: new Date("2026-09-17T05:33:29Z"),
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://ug-normal.trae.ai/trae/api/v1/pay/sellable_product_list",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ type: 0, product_types: [0, 1, 4, 6] }),
+        }),
+      );
+      expect(collected.sourceUrl).toBe("https://www.trae.ai/pricing");
+      const offers = await adapter!.parse(collected);
+      expect(offers.map((offer) => offer.amountMinor)).toEqual([
+        0, 2000, 6000, 20000,
+      ]);
+      expect(
+        offers.every((offer) => offer.parserVersion === "trae-pricing-v8"),
+      ).toBe(true);
+      expect(adapter!.healthCheck(offers)).toMatchObject({ ok: true });
+      expect(
+        adapter!.healthCheck(
+          parseTraePricing(
+            raw(
+              JSON.stringify({
+                billing_version: 3,
+                products: products.filter((product) => product.id !== "32"),
+              }),
+            ),
+          ),
+        ),
+      ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+      expect(
+        adapter!.healthCheck(
+          parseTraePricing(
+            raw(
+              JSON.stringify({
+                billing_version: 3,
+                products: products.map((product) =>
+                  product.id === "30"
+                    ? { ...product, display_price: "$NaN" }
+                    : product,
+                ),
+              }),
+            ),
+          ),
+        ),
+      ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it("parses coding plans from dynamic official JavaScript payloads", () => {
     const glm = parseGlmCodingPlan(
       raw(

@@ -1,5 +1,5 @@
 import { load } from "cheerio";
-import { fetchPage } from "@/lib/collectors/http-client";
+import { fetchPage, hashContent } from "@/lib/collectors/http-client";
 import { errorDiagnosticDetails } from "@/lib/collectors/diagnostics";
 import {
   parseBaichuanApi,
@@ -805,7 +805,9 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
     Record<string, unknown> | undefined;
   if (pricingPage?.isProductListFallback === true) return [];
   const liteProducts = (pricingPage?.productList ??
-    pricingPage?.liteProducts) as Record<string, unknown> | undefined;
+    pricingPage?.liteProducts ??
+    (Array.isArray(root?.products) ? root : undefined)) as
+    Record<string, unknown> | undefined;
   const globalProducts = Array.isArray(liteProducts?.products)
     ? liteProducts.products.filter((item): item is Record<string, unknown> => {
         if (typeof item !== "object" || item === null) return false;
@@ -873,7 +875,7 @@ export function parseTraePricing(raw: RawCollectionResult): NormalizedOffer[] {
       channel: "official_web",
       sourceUrl: raw.sourceUrl,
       observedAt: raw.observedAt,
-      parserVersion: "trae-pricing-v7",
+      parserVersion: "trae-pricing-v8",
     } as const;
     return [isGlobal ? usdOffer(offer) : cnyOffer(offer)];
   });
@@ -1685,14 +1687,44 @@ class TraePricingAdapter implements PriceSourceAdapter {
   readonly id = "trae-pricing-official";
   readonly providerSlug = "trae-subscription";
   readonly sourceUrl = "https://www.trae.ai/pricing";
-  readonly parserVersion = "trae-pricing-v7";
+  readonly parserVersion = "trae-pricing-v8";
   readonly quoteCurrencies = ["USD"];
 
   async collect(context: CollectionContext): Promise<RawCollectionResult> {
-    return fetchPage(this.sourceUrl, {
-      observedAt: context.observedAt,
-      signal: context.signal,
-    });
+    // The pricing page's SSR can return isProductListFallback=true on the VPS.
+    // Its own public, anonymous product-list request still returns live prices.
+    const response = await fetch(
+      "https://ug-normal.trae.ai/trae/api/v1/pay/sellable_product_list",
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "user-agent":
+            "AIPriceAtlas/0.1 (+https://github.com/ai-price-atlas; public-price-monitor)",
+        },
+        body: JSON.stringify({ type: 0, product_types: [0, 1, 4, 6] }),
+        signal: context.signal
+          ? AbortSignal.any([context.signal, AbortSignal.timeout(20_000)])
+          : AbortSignal.timeout(20_000),
+      },
+    );
+    if (!response.ok) {
+      throw new CollectionError(
+        "HTTP_ERROR",
+        `TRAE official product list returned HTTP ${response.status}.`,
+        { status: response.status },
+      );
+    }
+    const body = await response.text();
+    return {
+      sourceUrl: this.sourceUrl,
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      body,
+      contentHash: hashContent(body),
+      observedAt: context.observedAt.toISOString(),
+    };
   }
 
   async parse(raw: RawCollectionResult): Promise<NormalizedOffer[]> {

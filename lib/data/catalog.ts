@@ -29,7 +29,7 @@ export const modes: ModeDefinition[] = [
 const observedAt = "2026-07-23T18:00:00+08:00";
 const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
 const grokApiObservedAt = "2026-08-13T00:00:00+08:00";
-const traeObservedAt = "2026-08-26T08:45:26Z";
+const traeObservedAt = "2026-09-17T05:33:29Z";
 const traeFxRate = 6.7078078884;
 const traeFxObservedAt = "2026-09-17T00:00:00Z";
 const minimaxGlobalObservedAt = "2026-09-15T18:13:00+08:00";
@@ -1014,10 +1014,10 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-pro",
         planId: "trae-速通-pro-monthly",
         planName: "Pro",
-        amountMinor: 0,
+        amountMinor: 2000,
         currency: "USD",
-        displayPrice: "$0",
-        convertedCny: 0,
+        displayPrice: "$20",
+        convertedCny: Number((20 * traeFxRate).toFixed(6)),
         fxRate: traeFxRate,
         fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
@@ -1028,10 +1028,10 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-pro-plus",
         planId: "trae-速通-pro-monthly-plus",
         planName: "Pro+",
-        amountMinor: 3000,
+        amountMinor: 6000,
         currency: "USD",
-        displayPrice: "$30",
-        convertedCny: Number((30 * traeFxRate).toFixed(6)),
+        displayPrice: "$60",
+        convertedCny: Number((60 * traeFxRate).toFixed(6)),
         fxRate: traeFxRate,
         fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",
@@ -1042,10 +1042,10 @@ export const providerCatalog: ProviderCatalogItem[] = [
         id: "trae-ultra",
         planId: "trae-速通-ultra-monthly",
         planName: "Ultra",
-        amountMinor: 10000,
+        amountMinor: 20000,
         currency: "USD",
-        displayPrice: "$100",
-        convertedCny: Number((100 * traeFxRate).toFixed(6)),
+        displayPrice: "$200",
+        convertedCny: Number((200 * traeFxRate).toFixed(6)),
         fxRate: traeFxRate,
         fxRateObservedAt: traeFxObservedAt,
         billingPeriod: "month",

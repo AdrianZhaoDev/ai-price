@@ -78,9 +78,9 @@ describe("catalog contract", () => {
       (provider) => provider.id === "trae-subscription",
     );
     expect(trae?.offers.map((offer) => offer.amountMinor)).toEqual([
-      0, 0, 3000, 10000,
+      0, 2000, 6000, 20000,
     ]);
-    expect(trae?.lastCheckedAt).toBe("2026-08-26T08:45:26Z");
+    expect(trae?.lastCheckedAt).toBe("2026-09-17T05:33:29Z");
     for (const offer of trae?.offers ?? []) {
       expect(offer.convertedCny).toBeTypeOf("number");
       expect(offer.fxRate).toBeGreaterThan(0);
