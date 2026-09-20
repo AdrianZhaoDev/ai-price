@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   collectDirectTransit,
@@ -100,6 +101,74 @@ describe("original station adapter", () => {
       }),
     ).toThrow();
   });
+  it("expands image-size request prices into separate offers without averaging", () => {
+    const raw = fixture();
+    const result = parse({
+      ...raw,
+      groups: [
+        {
+          ...raw.groups[0],
+          models: [
+            {
+              standard_model: "test-image",
+              billing_mode: "per_request",
+              price: { image_size_prices: { "2k": 0.08, "1k": 0.04 } },
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.offers).toHaveLength(2);
+    expect(result.offers).toMatchObject([
+      {
+        groupName: "standard / image 1k",
+        fixedPrice: 0.01,
+        fixedPriceUnit: "image (1k)",
+        billingMode: "per_request",
+        payload: { adapterVersion: "sub2api-public-v2", imageSize: "1k" },
+      },
+      {
+        groupName: "standard / image 2k",
+        fixedPrice: 0.02,
+        fixedPriceUnit: "image (2k)",
+        billingMode: "per_request",
+        payload: { adapterVersion: "sub2api-public-v2", imageSize: "2k" },
+      },
+    ]);
+    expect(new Set(result.offers.map((offer) => offer.id)).size).toBe(2);
+  });
+  it("retains a generic request price alongside image-size variants", () => {
+    const raw = fixture();
+    const result = parse({
+      ...raw,
+      groups: [
+        {
+          ...raw.groups[0],
+          models: [
+            {
+              standard_model: "test-image",
+              billing_mode: "per_request",
+              price: {
+                per_request_usd: 0.08,
+                image_size_prices: { "1k": 0.04 },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.offers).toHaveLength(2);
+    expect(result.offers[0]).toMatchObject({
+      groupName: "standard",
+      fixedPrice: 0.02,
+      fixedPriceUnit: "request",
+    });
+    expect(result.offers[1]).toMatchObject({
+      groupName: "standard / image 1k",
+      fixedPrice: 0.01,
+      fixedPriceUnit: "image (1k)",
+    });
+  });
   it.each([
     "currency",
     "credit_currency",
@@ -163,10 +232,33 @@ describe("original station adapter", () => {
         ],
       }),
     ).toThrow();
+    expect(() =>
+      parse({
+        ...raw,
+        groups: [
+          {
+            ...raw.groups[0],
+            models: [
+              {
+                standard_model: "test-image",
+                billing_mode: "per_request",
+                price: { image_size_prices: {} },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
   });
   it("uses stable IDs as models are added/removed, rejects duplicates and strips extra fields", () => {
     const raw = fixture();
     const original = parse(raw).offers[0].id;
+    expect(original).toBe(
+      `${directTransitSources[0].id}-${createHash("sha256")
+        .update(JSON.stringify(["standard", "test-model", "token"]))
+        .digest("hex")
+        .slice(0, 32)}`,
+    );
     const added = {
       ...raw.groups[0].models[0],
       standard_model: "another-model",

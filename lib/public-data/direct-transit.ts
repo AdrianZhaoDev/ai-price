@@ -11,6 +11,23 @@ export const directTransitSources = [
 export type DirectTransitSource = (typeof directTransitSources)[number];
 const text = z.string().trim().min(1).max(200);
 const price = z.number().finite().nonnegative();
+const imageSizePrices = z
+  .record(z.string().trim().min(1).max(40), price)
+  .superRefine((prices, context) => {
+    const sizes = Object.keys(prices);
+    if (sizes.length === 0) {
+      context.addIssue({
+        code: "custom",
+        message: "Image size prices must contain at least one size.",
+      });
+    }
+    if (sizes.length > 16) {
+      context.addIssue({
+        code: "custom",
+        message: "Image size prices contain too many sizes.",
+      });
+    }
+  });
 const modelSchema = z.object({
   standard_model: text,
   billing_mode: z.enum(["token", "per_request"]),
@@ -21,6 +38,7 @@ const modelSchema = z.object({
     cache_write_usd_per_token: price.optional(),
     image_output_usd_per_token: price.optional(),
     per_request_usd: price.optional(),
+    image_size_prices: imageSizePrices.optional(),
   }),
 });
 const sourceSchema = z.object({
@@ -74,77 +92,107 @@ export function parseDirectTransit(
   const sourceUrl = `${source.origin}/api/public/transit/v1/snapshot`;
   const seen = new Set<string>();
   const offers = raw.groups.flatMap((group) =>
-    group.models.map((model) => {
-      const key = JSON.stringify([
-        group.name,
-        model.standard_model,
-        model.billing_mode,
-      ]);
-      const id = `${source.id}-${createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
-      if (seen.has(id)) throw new Error("Duplicate original offer.");
-      seen.add(id);
-      const factor = group.rate_multiplier / raw.billing.recharge_multiplier;
-      const amount = (value: number | undefined, unit: number) =>
-        value === undefined ? null : value * factor * unit;
+    group.models.flatMap((model) => {
       if (
         model.billing_mode === "token" &&
         (model.price.input_usd_per_token === undefined ||
           model.price.output_usd_per_token === undefined)
       )
         throw new Error("Token price is incomplete.");
-      if (
-        model.billing_mode === "per_request" &&
-        model.price.per_request_usd === undefined
-      )
-        throw new Error("Request price is incomplete.");
-      return {
-        id,
-        stationId: source.id,
-        family: group.platform,
-        standardModel: model.standard_model,
-        groupName: group.name,
-        billingMode: model.billing_mode,
-        currency: "CNY",
-        // No cross-currency 'official discount' multiplier: USD credit is not USD cash.
-        inputPrice:
-          model.billing_mode === "token"
-            ? amount(model.price.input_usd_per_token, 1_000_000)
-            : null,
-        outputPrice:
-          model.billing_mode === "token"
-            ? amount(model.price.output_usd_per_token, 1_000_000)
-            : null,
-        cacheReadPrice:
-          model.billing_mode === "token"
-            ? amount(model.price.cache_read_usd_per_token, 1_000_000)
-            : null,
-        cacheWritePrice:
-          model.billing_mode === "token"
-            ? amount(model.price.cache_write_usd_per_token, 1_000_000)
-            : null,
-        imageOutputPrice:
-          model.billing_mode === "token"
-            ? amount(model.price.image_output_usd_per_token, 1_000_000)
-            : null,
-        fixedPrice:
-          model.billing_mode === "per_request"
-            ? amount(model.price.per_request_usd, 1)
-            : null,
-        fixedPriceCurrency: "CNY",
-        fixedPriceUnit: model.billing_mode === "per_request" ? "request" : null,
-        priceSourceUrl: sourceUrl,
-        priceSourceLabel: "原站公开报价折算 / Source-reported estimate",
-        lastVerifiedAt: raw.generated_at,
-        status: "verified",
-        accountPool: raw.disclosure.account_pool_type,
-        channelType: raw.disclosure.upstream_type,
-        payload: {
-          adapterVersion: "sub2api-public-v1",
-          pricingBasis: "CNY cost per million units or per request",
-          creditPerCny: raw.billing.recharge_multiplier,
-          groupRate: group.rate_multiplier,
-        },
+      const factor = group.rate_multiplier / raw.billing.recharge_multiplier;
+      const amount = (value: number | undefined, unit: number) =>
+        value === undefined ? null : value * factor * unit;
+      const makeOffer = (
+        imageSize: string | null,
+        requestPrice: number | undefined,
+      ) => {
+        const groupName = imageSize
+          ? `${group.name} / image ${imageSize}`
+          : group.name;
+        if (groupName.length > 160)
+          throw new Error("Image size group label is too long.");
+        const key = JSON.stringify([
+          group.name,
+          model.standard_model,
+          model.billing_mode,
+          ...(imageSize ? [`image:${imageSize}`] : []),
+        ]);
+        const id = `${source.id}-${createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
+        if (seen.has(id)) throw new Error("Duplicate original offer.");
+        seen.add(id);
+        return {
+          id,
+          stationId: source.id,
+          family: group.platform,
+          standardModel: model.standard_model,
+          groupName,
+          billingMode: model.billing_mode,
+          currency: "CNY",
+          // No cross-currency 'official discount' multiplier: USD credit is not USD cash.
+          inputPrice:
+            model.billing_mode === "token"
+              ? amount(model.price.input_usd_per_token, 1_000_000)
+              : null,
+          outputPrice:
+            model.billing_mode === "token"
+              ? amount(model.price.output_usd_per_token, 1_000_000)
+              : null,
+          cacheReadPrice:
+            model.billing_mode === "token"
+              ? amount(model.price.cache_read_usd_per_token, 1_000_000)
+              : null,
+          cacheWritePrice:
+            model.billing_mode === "token"
+              ? amount(model.price.cache_write_usd_per_token, 1_000_000)
+              : null,
+          imageOutputPrice:
+            model.billing_mode === "token"
+              ? amount(model.price.image_output_usd_per_token, 1_000_000)
+              : null,
+          fixedPrice:
+            model.billing_mode === "per_request"
+              ? amount(requestPrice, 1)
+              : null,
+          fixedPriceCurrency: "CNY",
+          fixedPriceUnit:
+            model.billing_mode === "per_request"
+              ? imageSize
+                ? `image (${imageSize})`
+                : "request"
+              : null,
+          priceSourceUrl: sourceUrl,
+          priceSourceLabel: "原站公开报价折算 / Source-reported estimate",
+          lastVerifiedAt: raw.generated_at,
+          status: "verified",
+          accountPool: raw.disclosure.account_pool_type,
+          channelType: raw.disclosure.upstream_type,
+          payload: {
+            adapterVersion: "sub2api-public-v2",
+            pricingBasis: "CNY cost per million units or per request",
+            creditPerCny: raw.billing.recharge_multiplier,
+            groupRate: group.rate_multiplier,
+            ...(imageSize ? { imageSize } : {}),
+          },
+        };
       };
+      if (model.billing_mode === "token") {
+        if (model.price.image_size_prices)
+          throw new Error("Token model contains request image prices.");
+        return [makeOffer(null, undefined)];
+      }
+      const requestPrices = [
+        ...(model.price.per_request_usd === undefined
+          ? []
+          : [{ imageSize: null, value: model.price.per_request_usd }]),
+        ...Object.entries(model.price.image_size_prices ?? {})
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([imageSize, value]) => ({ imageSize, value })),
+      ];
+      if (!requestPrices.length)
+        throw new Error("Request price is incomplete.");
+      return requestPrices.map(({ imageSize, value }) =>
+        makeOffer(imageSize, value),
+      );
     }),
   );
   if (!offers.length) throw new Error("Original source has no priced models.");
@@ -183,7 +231,7 @@ export function parseDirectTransit(
         accountPools: [raw.disclosure.account_pool_type],
         lastUpdatedAt: raw.generated_at,
         lastCollectedAt: collectedAt.toISOString(),
-        payload: { adapterVersion: "sub2api-public-v1" },
+        payload: { adapterVersion: "sub2api-public-v2" },
       },
     ],
     offers,
