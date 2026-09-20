@@ -165,6 +165,13 @@ describe("public collection error summaries", () => {
     expect(
       summarizeCollectionError({ name: "Error", code: "EAI_AGAIN" }),
     ).toEqual({ kind: "network", name: "Error", code: "EAI_AGAIN" });
+    for (const code of ["CERT_HAS_EXPIRED", "ERR_TLS_CERT_ALTNAME_INVALID"]) {
+      expect(summarizeCollectionError({ name: "TypeError", code })).toEqual({
+        kind: "network",
+        name: "TypeError",
+        code,
+      });
+    }
     for (const message of [
       "Select unique reviewed direct source IDs.",
       "Unknown direct source ID.",
