@@ -23,6 +23,7 @@ import {
   isPrivateOrReservedHostname,
   parseSafePublicHttpUrl,
 } from "@/lib/public-data/urls";
+import { summarizeCollectionError } from "@/lib/public-data/collection-errors";
 
 config({ path: [".env.local", ".env"] });
 
@@ -228,8 +229,12 @@ async function main(): Promise<void> {
         );
       }
       results[domain] = await publishDomain(domain);
-    } catch {
+    } catch (error) {
       // Driver errors can include SQL parameters. Never log the raw error.
+      console.error(
+        `Public ${domain} collection failed:`,
+        JSON.stringify(summarizeCollectionError(error)),
+      );
       results[domain] = {
         published: false,
         error:
@@ -243,7 +248,11 @@ async function main(): Promise<void> {
 }
 
 main()
-  .catch(() => {
+  .catch((error) => {
+    console.error(
+      "Public data collection failed:",
+      JSON.stringify(summarizeCollectionError(error)),
+    );
     console.error(
       "Public data collection failed. Check the configured source and database; sensitive diagnostics are suppressed.",
     );
