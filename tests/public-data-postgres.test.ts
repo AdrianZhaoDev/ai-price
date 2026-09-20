@@ -1082,6 +1082,26 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
       }),
     ).resolves.toMatchObject({ published: true });
   });
+  it("allows optional transit prices to disappear without treating them as jumps", async () => {
+    const station = transit();
+    station.offers[0].cacheReadPrice = 0.2;
+    station.offers[0].cacheWritePrice = 0.3;
+    station.offers[0].imageOutputPrice = 0.4;
+    await publishNextTransitSnapshot(station);
+    await expect(
+      publishNextTransitSnapshot({
+        ...station,
+        offers: [
+          {
+            ...station.offers[0],
+            cacheReadPrice: null,
+            cacheWritePrice: null,
+            imageOutputPrice: null,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ published: true });
+  });
   it("keeps anomaly checks across ID changes and rejects wholesale identity churn", async () => {
     const channel = channels();
     const station = transit();

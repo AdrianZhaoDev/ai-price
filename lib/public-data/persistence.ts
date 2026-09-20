@@ -70,8 +70,11 @@ function countCollapsed(previous: number, incoming: number): boolean {
 function assertStablePrice(
   previous: number | null | undefined,
   incoming: number | null | undefined,
+  allowMissing = false,
 ) {
   if (previous == null) return; // First observed price has no comparable baseline.
+  // Optional transit dimensions may disappear when a source stops quoting them.
+  if (allowMissing && incoming == null) return;
   if (
     incoming == null ||
     Math.abs(incoming - previous) > Math.abs(previous) * (0.5 + 1e-9)
@@ -1084,7 +1087,13 @@ export async function publishTransitSnapshot(
         "imageOutputPrice",
         "fixedPrice",
       ] as const)
-        assertStablePrice(prior[field], offer[field]);
+        assertStablePrice(
+          prior[field],
+          offer[field],
+          field === "cacheReadPrice" ||
+            field === "cacheWritePrice" ||
+            field === "imageOutputPrice",
+        );
       assertStablePrice(
         prior.combinedMultiplier,
         transitCombinedMultiplier(offer),
