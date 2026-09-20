@@ -1101,6 +1101,19 @@ describe.skipIf(!testUrl)("public snapshots in disposable PostgreSQL", () => {
         ],
       }),
     ).resolves.toMatchObject({ published: true });
+    await expect(
+      publishNextTransitSnapshot({
+        ...station,
+        offers: [
+          {
+            ...station.offers[0],
+            cacheReadPrice: 20,
+            cacheWritePrice: 30,
+            imageOutputPrice: 40,
+          },
+        ],
+      }),
+    ).rejects.toThrow("Price anomaly");
   });
   it("keeps anomaly checks across ID changes and rejects wholesale identity churn", async () => {
     const channel = channels();
