@@ -33,6 +33,12 @@ import {
   saveOfferBaselines,
 } from "@/lib/public-data/baselines";
 
+const OPTIONAL_TRANSIT_PRICE_FIELDS = [
+  "cacheReadPrice",
+  "cacheWritePrice",
+  "imageOutputPrice",
+] as const;
+
 export type PublicPublishResult = {
   domain: "channels" | "transit";
   generationId: string;
@@ -70,8 +76,11 @@ function countCollapsed(previous: number, incoming: number): boolean {
 function assertStablePrice(
   previous: number | null | undefined,
   incoming: number | null | undefined,
+  allowMissing = false,
 ) {
   if (previous == null) return; // First observed price has no comparable baseline.
+  // Optional transit dimensions may disappear when a source stops quoting them.
+  if (allowMissing && incoming == null) return;
   if (
     incoming == null ||
     Math.abs(incoming - previous) > Math.abs(previous) * (0.5 + 1e-9)
@@ -1059,12 +1068,13 @@ export async function publishTransitSnapshot(
     );
     for (const offer of snapshot.offers) {
       const retained = historical.get(offer.id);
+      const currentPrior = previousPrices.get(matches.get(offer.id) ?? "");
+      const historicalPrior = retained?.payload;
+      const prior = currentPrior ?? historicalPrior;
       if (retained && retained.identity[0] !== offer.stationId)
         throw new Error(
           "Offer source identity changed; previous snapshot retained for review.",
         );
-      const prior =
-        previousPrices.get(matches.get(offer.id) ?? "") ?? retained?.payload;
       if (!prior) continue;
       if (
         prior.currency !== offer.currency ||
@@ -1084,9 +1094,13 @@ export async function publishTransitSnapshot(
         "imageOutputPrice",
         "fixedPrice",
       ] as const)
-        assertStablePrice(prior[field], offer[field]);
+        assertStablePrice(
+          currentPrior?.[field] ?? historicalPrior?.[field],
+          offer[field],
+          OPTIONAL_TRANSIT_PRICE_FIELDS.some((name) => name === field),
+        );
       assertStablePrice(
-        prior.combinedMultiplier,
+        currentPrior?.combinedMultiplier ?? historicalPrior?.combinedMultiplier,
         transitCombinedMultiplier(offer),
       );
     }
@@ -1219,19 +1233,31 @@ export async function publishTransitSnapshot(
     await saveOfferBaselines(
       tx,
       "transit",
-      snapshot.offers.map((offer) => ({
-        id: offer.id,
-        identity: baselineIdentity(offer),
-        payload: {
+      snapshot.offers.map((offer) => {
+        const currentPrior = previousPrices.get(matches.get(offer.id) ?? "");
+        const historicalPrior = historical.get(offer.id)?.payload;
+        const payload: Record<string, unknown> = {
           ...offer,
           combinedMultiplier: transitCombinedMultiplier(offer),
           fixedPriceCurrency: offer.fixedPriceCurrency ?? null,
           fixedPriceUnit: offer.fixedPriceUnit ?? null,
-        },
-        firstSeenAt:
-          historical.get(offer.id)?.firstSeenAt ??
-          new Date(offer.lastVerifiedAt ?? snapshot.generatedAt),
-      })),
+        };
+        for (const field of OPTIONAL_TRANSIT_PRICE_FIELDS) {
+          if (payload[field] == null) {
+            const lastQuoted =
+              currentPrior?.[field] ?? historicalPrior?.[field];
+            if (lastQuoted != null) payload[field] = lastQuoted;
+          }
+        }
+        return {
+          id: offer.id,
+          identity: baselineIdentity(offer),
+          payload,
+          firstSeenAt:
+            historical.get(offer.id)?.firstSeenAt ??
+            new Date(offer.lastVerifiedAt ?? snapshot.generatedAt),
+        };
+      }),
     );
     await tx
       .update(publicDataGenerations)
