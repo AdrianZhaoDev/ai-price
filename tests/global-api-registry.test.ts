@@ -97,5 +97,12 @@ describe("global API adapter registry", () => {
         ...completeModels.filter((offer) => offer.modelName !== "gpt-6-luna"),
       ]),
     ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+    expect(
+      adapter.healthCheck(
+        completeModels.map((candidate, index) =>
+          index === 0 ? { ...candidate, amountMinor: 1_000_000 } : candidate,
+        ),
+      ),
+    ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
   });
 });

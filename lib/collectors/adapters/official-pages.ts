@@ -1480,6 +1480,8 @@ const OPENAI_REQUIRED_PRICE_TYPES = [
   "input",
   "output",
 ] as const;
+const OPENAI_MIN_AMOUNT_MINOR = 1;
+const OPENAI_MAX_AMOUNT_MINOR = 10_000;
 
 function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const rankingHealth = globalApiRankingHealthCheck(offers);
@@ -1512,6 +1514,31 @@ function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         requiredModels: [...OPENAI_REQUIRED_MODELS],
         requiredPriceTypes: [...OPENAI_REQUIRED_PRICE_TYPES],
         incompleteModels,
+      },
+    };
+  }
+  const abnormalOffers = offers.filter(
+    (offer) =>
+      OPENAI_REQUIRED_MODELS.includes(
+        offer.modelName as (typeof OPENAI_REQUIRED_MODELS)[number],
+      ) &&
+      (offer.amountMinor === null ||
+        offer.amountMinor < OPENAI_MIN_AMOUNT_MINOR ||
+        offer.amountMinor > OPENAI_MAX_AMOUNT_MINOR),
+  );
+  if (abnormalOffers.length > 0) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message: "OpenAI price table included an implausible GPT-6 amount.",
+      details: {
+        minimumAmountMinor: OPENAI_MIN_AMOUNT_MINOR,
+        maximumAmountMinor: OPENAI_MAX_AMOUNT_MINOR,
+        abnormalOffers: abnormalOffers.map((offer) => ({
+          modelName: offer.modelName,
+          priceType: offer.priceType,
+          amountMinor: offer.amountMinor,
+        })),
       },
     };
   }
