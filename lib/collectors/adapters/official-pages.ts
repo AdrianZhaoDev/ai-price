@@ -1480,8 +1480,29 @@ const OPENAI_REQUIRED_PRICE_TYPES = [
   "input",
   "output",
 ] as const;
-const OPENAI_MIN_AMOUNT_MINOR = 1;
-const OPENAI_MAX_AMOUNT_MINOR = 10_000;
+const OPENAI_STANDARD_AMOUNT_BOUNDS: Record<
+  (typeof OPENAI_REQUIRED_MODELS)[number],
+  Record<
+    (typeof OPENAI_REQUIRED_PRICE_TYPES)[number],
+    readonly [number, number]
+  >
+> = {
+  "gpt-6-astra": {
+    cached_input: [50, 150],
+    input: [500, 1_500],
+    output: [2_500, 7_500],
+  },
+  "gpt-6-sol": {
+    cached_input: [10, 30],
+    input: [100, 300],
+    output: [500, 1_500],
+  },
+  "gpt-6-luna": {
+    cached_input: [1, 2],
+    input: [5, 15],
+    output: [25, 75],
+  },
+};
 
 function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const rankingHealth = globalApiRankingHealthCheck(offers);
@@ -1517,23 +1538,35 @@ function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
       },
     };
   }
-  const abnormalOffers = offers.filter(
-    (offer) =>
-      OPENAI_REQUIRED_MODELS.includes(
-        offer.modelName as (typeof OPENAI_REQUIRED_MODELS)[number],
-      ) &&
+  const abnormalOffers = offers.filter((offer) => {
+    if (
+      offer.rankingEligible !== true ||
+      !offer.modelName ||
+      !offer.priceType
+    ) {
+      return false;
+    }
+    const modelBounds =
+      OPENAI_STANDARD_AMOUNT_BOUNDS[
+        offer.modelName as (typeof OPENAI_REQUIRED_MODELS)[number]
+      ];
+    const bounds =
+      modelBounds?.[
+        offer.priceType as (typeof OPENAI_REQUIRED_PRICE_TYPES)[number]
+      ];
+    return Boolean(
+      bounds &&
       (offer.amountMinor === null ||
-        offer.amountMinor < OPENAI_MIN_AMOUNT_MINOR ||
-        offer.amountMinor > OPENAI_MAX_AMOUNT_MINOR),
-  );
+        offer.amountMinor < bounds[0] ||
+        offer.amountMinor > bounds[1]),
+    );
+  });
   if (abnormalOffers.length > 0) {
     return {
       ok: false,
       code: "STRUCTURE_CHANGED",
       message: "OpenAI price table included an implausible GPT-6 amount.",
       details: {
-        minimumAmountMinor: OPENAI_MIN_AMOUNT_MINOR,
-        maximumAmountMinor: OPENAI_MAX_AMOUNT_MINOR,
         abnormalOffers: abnormalOffers.map((offer) => ({
           modelName: offer.modelName,
           priceType: offer.priceType,

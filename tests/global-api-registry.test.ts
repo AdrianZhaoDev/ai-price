@@ -7,6 +7,11 @@ function offer(
   rankingEligible = true,
   modelName = "Model",
 ): NormalizedOffer {
+  const verifiedAmounts: Record<string, Partial<Record<string, number>>> = {
+    "gpt-6-astra": { cached_input: 100, input: 1_000, output: 5_000 },
+    "gpt-6-sol": { cached_input: 20, input: 200, output: 1_000 },
+    "gpt-6-luna": { cached_input: 1, input: 10, output: 50 },
+  };
   return {
     providerSlug: "global-api",
     productSlug: "global-api",
@@ -17,7 +22,7 @@ function offer(
     region: "全球",
     storefront: null,
     currency: "USD",
-    amountMinor: 100,
+    amountMinor: verifiedAmounts[modelName]?.[priceType ?? ""] ?? 100,
     displayPrice: "$1",
     status: "verified",
     billingPeriod: "usage",
@@ -100,9 +105,15 @@ describe("global API adapter registry", () => {
     expect(
       adapter.healthCheck(
         completeModels.map((candidate, index) =>
-          index === 0 ? { ...candidate, amountMinor: 1_000_000 } : candidate,
+          index === 2 ? { ...candidate, amountMinor: 100 } : candidate,
         ),
       ),
     ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
+    expect(
+      adapter.healthCheck([
+        ...completeModels,
+        { ...completeModels[6], rankingEligible: false, amountMinor: 0 },
+      ]).ok,
+    ).toBe(true);
   });
 });
