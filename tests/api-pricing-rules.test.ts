@@ -472,19 +472,17 @@ describe("maintainable API pricing rules", () => {
       raw(`Prices per 1M tokens.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
+| gpt-6-astra | $10 | $1 | $50 |
+| gpt-6-sol | $2 | $0.20 | $10 |
+| gpt-6-luna | $0.10 | $0.01 | $0.50 |
 | gpt-5.6-sol | $5 | $0.50 | $30 |
-| gpt-5.6-terra | $2 | $0.20 | $12 |
-| gpt-5.6-luna | $0.20 | $0.02 | $1.20 |
 | gpt-5.5 | $5 | $0.50 | $30 |
-| gpt-5.5-pro | $30 | $3 | $180 |
 | gpt-5.4 | $2.50 | $0.25 | $15 |`),
     );
     expect([...new Set(openAi.map((offer) => offer.modelName))]).toEqual([
-      "gpt-5.6-sol",
-      "gpt-5.6-terra",
-      "gpt-5.6-luna",
-      "gpt-5.5",
-      "gpt-5.5-pro",
+      "gpt-6-astra",
+      "gpt-6-sol",
+      "gpt-6-luna",
     ]);
 
     const claude = parseClaudeApi(
@@ -541,6 +539,47 @@ describe("maintainable API pricing rules", () => {
     expect(offers.every((offer) => offer.rankingEligible === false)).toBe(true);
   });
 
+  it("separates OpenAI short- and long-context columns", () => {
+    const offers = parseOpenAiApi(
+      raw(`Prices per 1M tokens. Standard pricing data
+| Model | Short context input | Short context cached input | Short context cache writes | Short context output | Long context input | Long context cached input | Long context cache writes | Long context output |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-6-sol | $2.00 | $0.20 | $2.50 | $10.00 | $4.00 | $0.40 | $5.00 | $15.00 |`),
+    );
+
+    expect(offers).toHaveLength(8);
+    expect(offers.slice(0, 4).every((offer) => offer.rankingEligible)).toBe(
+      true,
+    );
+    expect(
+      offers.slice(0, 4).every((offer) => offer.priceTier === "标准实时"),
+    ).toBe(true);
+    expect(offers.slice(4).every((offer) => !offer.rankingEligible)).toBe(true);
+    expect(
+      offers.slice(4).every((offer) => offer.priceTier === "长上下文"),
+    ).toBe(true);
+  });
+
+  it("keeps explicit OpenAI long-context columns out of ranking regardless of order", () => {
+    const offers = parseOpenAiApi(
+      raw(`Prices per 1M tokens. Standard pricing data
+| Model | Long context input | Long context cached input | Long context output | Short context input | Short context cached input | Short context output |
+| --- | --- | --- | --- | --- | --- | --- |
+| gpt-6-sol | $4.00 | $0.40 | $15.00 | $2.00 | $0.20 | $10.00 |`),
+    );
+
+    expect(offers.slice(0, 3).every((offer) => !offer.rankingEligible)).toBe(
+      true,
+    );
+    expect(
+      offers.slice(0, 3).every((offer) => offer.priceTier === "长上下文"),
+    ).toBe(true);
+    expect(offers.slice(3).every((offer) => offer.rankingEligible)).toBe(true);
+    expect(
+      offers.slice(3).every((offer) => offer.priceTier === "标准实时"),
+    ).toBe(true);
+  });
+
   it("preserves Gemini long-context details and excludes storage charges", () => {
     const offers = parseGeminiApi(
       raw(`<h2>Gemini 3.6 Flash</h2><h3>Standard</h3><table>
@@ -575,17 +614,17 @@ describe("maintainable API pricing rules", () => {
 Prices per 1M tokens.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-sol | $2.00 | $0.20 | $12.00 |
+| gpt-6-sol | $2.00 | $0.20 | $10.00 |
 
 ## Per-request tools
 Prices per request.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-terra | $0.01 | $0.01 | $0.02 |`),
+| gpt-6-luna | $0.01 | $0.01 | $0.02 |`),
     );
 
     expect(new Set(offers.map((offer) => offer.modelName))).toEqual(
-      new Set(["gpt-5.6-sol"]),
+      new Set(["gpt-6-sol"]),
     );
   });
 });

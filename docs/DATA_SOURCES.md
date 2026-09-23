@@ -187,7 +187,7 @@ MiniMax 中国站 `platform.minimax.cn` 在 VPS 出站路径持续返回 WAF 拦
 模型详情不读取这些报价，也不再产生旧 API 排名事件。Batch、Flex、Priority、长上下文、
 免费层、退役或限量模型，以及图片、音频、工具调用等非 Token 项目不进入旧历史口径。
 为避免历史型号淹没当前价格，采集阶段只保留官网仍在售的最新主力系列：OpenAI
-保留 GPT-5.5 与 GPT-5.6 全系，Claude、Gemini 和 Grok 保留各自当前主力型号；
+保留 GPT-6 Astra、Sol 与 Luna，Claude、Gemini 和 Grok 保留各自当前主力型号；
 海外平台参与排行榜的模型上限为 10 个，国内平台仍为 2 个。
 
 xAI Grok API 当前主力型号包含 Grok 4.6；其公开短上下文标准价按每百万 tokens

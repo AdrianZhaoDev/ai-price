@@ -1352,7 +1352,7 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "longcat-pricing-official": 3,
   "siliconflow-pricing-official": 3,
   "teleai-pricing-official": 2,
-  "openai-api-pricing-official": 6,
+  "openai-api-pricing-official": 9,
   "claude-api-pricing-official": 6,
   "gemini-api-pricing-official": 6,
   "grok-api-pricing-official": 9,
@@ -1470,6 +1470,114 @@ export function globalApiRankingHealthCheck(
   };
 }
 
+const OPENAI_REQUIRED_MODELS = [
+  "gpt-6-astra",
+  "gpt-6-sol",
+  "gpt-6-luna",
+] as const;
+const OPENAI_REQUIRED_PRICE_TYPES = [
+  "cached_input",
+  "input",
+  "output",
+] as const;
+const OPENAI_STANDARD_AMOUNT_BOUNDS: Record<
+  (typeof OPENAI_REQUIRED_MODELS)[number],
+  Record<
+    (typeof OPENAI_REQUIRED_PRICE_TYPES)[number],
+    readonly [number, number]
+  >
+> = {
+  "gpt-6-astra": {
+    cached_input: [50, 150],
+    input: [500, 1_500],
+    output: [2_500, 7_500],
+  },
+  "gpt-6-sol": {
+    cached_input: [10, 30],
+    input: [100, 300],
+    output: [500, 1_500],
+  },
+  "gpt-6-luna": {
+    cached_input: [1, 2],
+    input: [5, 15],
+    output: [25, 75],
+  },
+};
+
+function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const rankingHealth = globalApiRankingHealthCheck(offers);
+  if (!rankingHealth.ok) return rankingHealth;
+  const typesByModel = new Map<string, Set<string>>();
+  for (const offer of offers) {
+    if (
+      offer.rankingEligible !== true ||
+      !offer.modelName ||
+      !offer.priceType
+    ) {
+      continue;
+    }
+    const types = typesByModel.get(offer.modelName) ?? new Set<string>();
+    types.add(offer.priceType);
+    typesByModel.set(offer.modelName, types);
+  }
+  const incompleteModels = OPENAI_REQUIRED_MODELS.filter((model) => {
+    const types = typesByModel.get(model);
+    return (
+      !types || OPENAI_REQUIRED_PRICE_TYPES.some((type) => !types.has(type))
+    );
+  });
+  if (incompleteModels.length > 0) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message: "OpenAI price table did not include every required GPT-6 model.",
+      details: {
+        requiredModels: [...OPENAI_REQUIRED_MODELS],
+        requiredPriceTypes: [...OPENAI_REQUIRED_PRICE_TYPES],
+        incompleteModels,
+      },
+    };
+  }
+  const abnormalOffers = offers.filter((offer) => {
+    if (
+      offer.rankingEligible !== true ||
+      !offer.modelName ||
+      !offer.priceType
+    ) {
+      return false;
+    }
+    const modelBounds =
+      OPENAI_STANDARD_AMOUNT_BOUNDS[
+        offer.modelName as (typeof OPENAI_REQUIRED_MODELS)[number]
+      ];
+    const bounds =
+      modelBounds?.[
+        offer.priceType as (typeof OPENAI_REQUIRED_PRICE_TYPES)[number]
+      ];
+    return Boolean(
+      bounds &&
+      (offer.amountMinor === null ||
+        offer.amountMinor < bounds[0] ||
+        offer.amountMinor > bounds[1]),
+    );
+  });
+  if (abnormalOffers.length > 0) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message: "OpenAI price table included an implausible GPT-6 amount.",
+      details: {
+        abnormalOffers: abnormalOffers.map((offer) => ({
+          modelName: offer.modelName,
+          priceType: offer.priceType,
+          amountMinor: offer.amountMinor,
+        })),
+      },
+    };
+  }
+  return rankingHealth;
+}
+
 export class OfficialPageAdapter implements PriceSourceAdapter {
   constructor(
     readonly id: string,
@@ -1521,6 +1629,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
     );
     if (!baseHealth.ok || !globalApiAdapterIds.has(this.id)) {
       return baseHealth;
+    }
+    if (this.id === "openai-api-pricing-official") {
+      return openAiApiHealthCheck(offers);
     }
     return globalApiRankingHealthCheck(offers);
   }
@@ -1975,7 +2086,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "openai-api-pricing-official",
     "openai-api",
     "https://developers.openai.com/api/docs/pricing",
-    "openai-api-v3",
+    "openai-api-v4",
     parseOpenAiApi,
     "https://developers.openai.com/api/docs/pricing.md",
     ["USD"],

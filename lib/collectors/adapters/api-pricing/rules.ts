@@ -919,11 +919,9 @@ type GlobalApiProvider = {
 
 const globalApiModelNames: Record<string, Array<[RegExp, string]>> = {
   "openai-api": [
-    [/^gpt-5\.6-sol$/i, "gpt-5.6-sol"],
-    [/^gpt-5\.6-terra$/i, "gpt-5.6-terra"],
-    [/^gpt-5\.6-luna$/i, "gpt-5.6-luna"],
-    [/^gpt-5\.5-pro$/i, "gpt-5.5-pro"],
-    [/^gpt-5\.5$/i, "gpt-5.5"],
+    [/^gpt-6-astra$/i, "gpt-6-astra"],
+    [/^gpt-6-sol$/i, "gpt-6-sol"],
+    [/^gpt-6-luna$/i, "gpt-6-luna"],
   ],
   "claude-api": [
     [/^Claude Fable 5(?=$|\s*(?:through|starting)\b)/i, "Claude Fable 5"],
@@ -1101,7 +1099,9 @@ function parseGlobalUsdTables(
       // tier signals from the table/section and model label only so a value
       // such as Grok's `500k` context cell cannot disable ranking eligibility.
       const tier = globalTier(
-        `${table.context} ${headers.join(" ")} ${rawModelName}`,
+        `${table.context} ${headers
+          .filter((header) => !/^(?:short|long) context\b/i.test(header))
+          .join(" ")} ${rawModelName}`,
       );
       for (const column of columns) {
         const cell = row[column.index] ?? "";
@@ -1116,10 +1116,13 @@ function parseGlobalUsdTables(
         }
         const value = firstNumberFrom(cell);
         if (!validPrice(value)) continue;
-        const columnTier =
-          column.occurrence > 0
-            ? { label: "长上下文", order: 50, rankingEligible: false }
-            : tier;
+        const columnTier = /long context|长上下文/i.test(column.label)
+          ? { label: "长上下文", order: 50, rankingEligible: false }
+          : /short context|短上下文/i.test(column.label)
+            ? tier
+            : column.occurrence > 0
+              ? { label: "长上下文", order: 50, rankingEligible: false }
+              : tier;
         offers.push(
           apiOffer({
             raw,
@@ -1147,7 +1150,7 @@ function parseGlobalUsdTables(
 export function parseOpenAiApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "openai-api",
-    parserVersion: "openai-api-v3",
+    parserVersion: "openai-api-v4",
   });
 }
 
