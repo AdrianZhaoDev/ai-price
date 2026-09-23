@@ -11,28 +11,28 @@ export const openAiFixture: GlobalApiFixture = {
 Prices per 1M tokens.
 | Model | Input | Cached input | Cache writes | Output | Input | Cached input | Cache writes | Output |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| gpt-5.6-luna | $2.00 | $0.20 | $2.50 | $12.00 | $4.00 | $0.40 | $5.00 | $18.00 |`,
+| gpt-6-astra | $10.00 | $1.00 | $12.50 | $50.00 | $20.00 | $2.00 | $25.00 | $75.00 |`,
   missingField: `| Model | Input |
 | --- | --- |
-| gpt-5.6-sol | $2.00 |`,
+| gpt-6-sol | $2.00 |`,
   modelChanges: `Prices per 1M tokens.
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-sol | $2.00 | $0.20 | $12.00 |
-| gpt-5.5 | $0.20 | $0.02 | $1.20 |`,
+| gpt-6-sol | $2.00 | $0.20 | $10.00 |
+| gpt-6-luna | $0.10 | $0.01 | $0.50 |`,
   invalidCurrencyUnit: `| Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-sol | €2.00 | €0.20 | €12.00 |
-| gpt-5.6-terra | $2 / request | $0.20 / request | $12 / request |`,
+| gpt-6-sol | €2.00 | €0.20 | €10.00 |
+| gpt-6-luna | $0.10 / request | $0.01 / request | $0.50 / request |`,
   mixedTiers: `Prices per 1M tokens.
 ### Standard
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-terra | $2.00 | $0.20 | $12.00 |
+| gpt-6-sol | $2.00 | $0.20 | $10.00 |
 ### Batch
 | Model | Input | Cached input | Output |
 | --- | --- | --- | --- |
-| gpt-5.6-terra | $1.00 | $0.10 | $6.00 |`,
+| gpt-6-sol | $1.00 | $0.10 | $5.00 |`,
 };
 
 export const claudeFixture: GlobalApiFixture = {

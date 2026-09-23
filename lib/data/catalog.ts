@@ -1977,8 +1977,9 @@ export const providerCatalog: ProviderCatalogItem[] = [
     status: "verified",
     lastCheckedAt: globalApiObservedAt,
     offers: globalApiOffers("openai-api", [
-      { name: "gpt-5.6-sol", cached: 0.5, input: 5, output: 30 },
-      { name: "gpt-5.6-terra", cached: 0.2, input: 2, output: 12 },
+      { name: "gpt-6-astra", cached: 1, input: 10, output: 50 },
+      { name: "gpt-6-sol", cached: 0.2, input: 2, output: 10 },
+      { name: "gpt-6-luna", cached: 0.01, input: 0.1, output: 0.5 },
     ]),
   },
   {

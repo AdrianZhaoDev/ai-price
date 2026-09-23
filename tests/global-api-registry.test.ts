@@ -54,6 +54,8 @@ describe("global API adapter registry", () => {
           adapter.sourceUrl.startsWith("https://") &&
           adapter.quoteCurrencies?.includes("USD") &&
           (adapter.parserVersion.endsWith("-v3") ||
+            (adapter.id === "openai-api-pricing-official" &&
+              adapter.parserVersion === "openai-api-v4") ||
             (adapter.id === "grok-api-pricing-official" &&
               adapter.parserVersion === "grok-api-v4")),
       ),
@@ -65,6 +67,9 @@ describe("global API adapter registry", () => {
       (item) => item.id === "openai-api-pricing-official",
     )!;
     const excluded = [
+      offer("cached_input", false),
+      offer("input", false),
+      offer("output", false),
       offer("cached_input", false),
       offer("input", false),
       offer("output", false),
