@@ -1470,6 +1470,54 @@ export function globalApiRankingHealthCheck(
   };
 }
 
+const OPENAI_REQUIRED_MODELS = [
+  "gpt-6-astra",
+  "gpt-6-sol",
+  "gpt-6-luna",
+] as const;
+const OPENAI_REQUIRED_PRICE_TYPES = [
+  "cached_input",
+  "input",
+  "output",
+] as const;
+
+function openAiApiHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const rankingHealth = globalApiRankingHealthCheck(offers);
+  if (!rankingHealth.ok) return rankingHealth;
+  const typesByModel = new Map<string, Set<string>>();
+  for (const offer of offers) {
+    if (
+      offer.rankingEligible !== true ||
+      !offer.modelName ||
+      !offer.priceType
+    ) {
+      continue;
+    }
+    const types = typesByModel.get(offer.modelName) ?? new Set<string>();
+    types.add(offer.priceType);
+    typesByModel.set(offer.modelName, types);
+  }
+  const incompleteModels = OPENAI_REQUIRED_MODELS.filter((model) => {
+    const types = typesByModel.get(model);
+    return (
+      !types || OPENAI_REQUIRED_PRICE_TYPES.some((type) => !types.has(type))
+    );
+  });
+  if (incompleteModels.length > 0) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message: "OpenAI price table did not include every required GPT-6 model.",
+      details: {
+        requiredModels: [...OPENAI_REQUIRED_MODELS],
+        requiredPriceTypes: [...OPENAI_REQUIRED_PRICE_TYPES],
+        incompleteModels,
+      },
+    };
+  }
+  return rankingHealth;
+}
+
 export class OfficialPageAdapter implements PriceSourceAdapter {
   constructor(
     readonly id: string,
@@ -1521,6 +1569,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
     );
     if (!baseHealth.ok || !globalApiAdapterIds.has(this.id)) {
       return baseHealth;
+    }
+    if (this.id === "openai-api-pricing-official") {
+      return openAiApiHealthCheck(offers);
     }
     return globalApiRankingHealthCheck(offers);
   }

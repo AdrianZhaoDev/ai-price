@@ -560,6 +560,26 @@ describe("maintainable API pricing rules", () => {
     ).toBe(true);
   });
 
+  it("keeps explicit OpenAI long-context columns out of ranking regardless of order", () => {
+    const offers = parseOpenAiApi(
+      raw(`Prices per 1M tokens. Standard pricing data
+| Model | Long context input | Long context cached input | Long context output | Short context input | Short context cached input | Short context output |
+| --- | --- | --- | --- | --- | --- | --- |
+| gpt-6-sol | $4.00 | $0.40 | $15.00 | $2.00 | $0.20 | $10.00 |`),
+    );
+
+    expect(offers.slice(0, 3).every((offer) => !offer.rankingEligible)).toBe(
+      true,
+    );
+    expect(
+      offers.slice(0, 3).every((offer) => offer.priceTier === "长上下文"),
+    ).toBe(true);
+    expect(offers.slice(3).every((offer) => offer.rankingEligible)).toBe(true);
+    expect(
+      offers.slice(3).every((offer) => offer.priceTier === "标准实时"),
+    ).toBe(true);
+  });
+
   it("preserves Gemini long-context details and excludes storage charges", () => {
     const offers = parseGeminiApi(
       raw(`<h2>Gemini 3.6 Flash</h2><h3>Standard</h3><table>

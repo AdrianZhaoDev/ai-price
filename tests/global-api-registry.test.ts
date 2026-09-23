@@ -5,12 +5,13 @@ import type { NormalizedOffer } from "@/lib/collectors/types";
 function offer(
   priceType: NormalizedOffer["priceType"],
   rankingEligible = true,
+  modelName = "Model",
 ): NormalizedOffer {
   return {
     providerSlug: "global-api",
     productSlug: "global-api",
-    canonicalPlanSlug: `model-${priceType}`,
-    rawPlanName: `Model · ${priceType}`,
+    canonicalPlanSlug: `${modelName}-${priceType}`,
+    rawPlanName: `${modelName} · ${priceType}`,
     mode: "api",
     channel: "official_api",
     region: "全球",
@@ -25,8 +26,8 @@ function offer(
     sourceUrl: "https://official.example/pricing",
     observedAt: "2026-07-31T00:00:00.000Z",
     parserVersion: "global-api-v3",
-    modelName: "Model",
-    modelSlug: "model",
+    modelName,
+    modelSlug: modelName,
     priceType,
     rankingEligible,
   };
@@ -82,13 +83,19 @@ describe("global API adapter registry", () => {
       ok: false,
       code: "STRUCTURE_CHANGED",
     });
+    const completeModels = ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"].flatMap(
+      (modelName) => [
+        offer("cached_input", true, modelName),
+        offer("input", true, modelName),
+        offer("output", true, modelName),
+      ],
+    );
+    expect(adapter.healthCheck([...excluded, ...completeModels]).ok).toBe(true);
     expect(
       adapter.healthCheck([
         ...excluded,
-        offer("cached_input"),
-        offer("input"),
-        offer("output"),
-      ]).ok,
-    ).toBe(true);
+        ...completeModels.filter((offer) => offer.modelName !== "gpt-6-luna"),
+      ]),
+    ).toMatchObject({ ok: false, code: "STRUCTURE_CHANGED" });
   });
 });

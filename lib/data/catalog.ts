@@ -29,6 +29,7 @@ export const modes: ModeDefinition[] = [
 const observedAt = "2026-07-23T18:00:00+08:00";
 const globalApiObservedAt = "2026-07-31T12:00:00+08:00";
 const grokApiObservedAt = "2026-08-13T00:00:00+08:00";
+const openAiApiObservedAt = "2026-09-23T00:00:00Z";
 const traeObservedAt = "2026-09-17T05:33:29Z";
 const traeFxRate = 6.7078078884;
 const traeFxObservedAt = "2026-09-17T00:00:00Z";
@@ -1975,12 +1976,16 @@ export const providerCatalog: ProviderCatalogItem[] = [
     sourceType: "official_api",
     color: "#111111",
     status: "verified",
-    lastCheckedAt: globalApiObservedAt,
-    offers: globalApiOffers("openai-api", [
-      { name: "gpt-6-astra", cached: 1, input: 10, output: 50 },
-      { name: "gpt-6-sol", cached: 0.2, input: 2, output: 10 },
-      { name: "gpt-6-luna", cached: 0.01, input: 0.1, output: 0.5 },
-    ]),
+    lastCheckedAt: openAiApiObservedAt,
+    offers: globalApiOffers(
+      "openai-api",
+      [
+        { name: "gpt-6-astra", cached: 1, input: 10, output: 50 },
+        { name: "gpt-6-sol", cached: 0.2, input: 2, output: 10 },
+        { name: "gpt-6-luna", cached: 0.01, input: 0.1, output: 0.5 },
+      ],
+      openAiApiObservedAt,
+    ),
   },
   {
     id: "claude-api",

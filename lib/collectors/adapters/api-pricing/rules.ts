@@ -1116,10 +1116,13 @@ function parseGlobalUsdTables(
         }
         const value = firstNumberFrom(cell);
         if (!validPrice(value)) continue;
-        const columnTier =
-          column.occurrence > 0
-            ? { label: "长上下文", order: 50, rankingEligible: false }
-            : tier;
+        const columnTier = /long context|长上下文/i.test(column.label)
+          ? { label: "长上下文", order: 50, rankingEligible: false }
+          : /short context|短上下文/i.test(column.label)
+            ? tier
+            : column.occurrence > 0
+              ? { label: "长上下文", order: 50, rankingEligible: false }
+              : tier;
         offers.push(
           apiOffer({
             raw,
