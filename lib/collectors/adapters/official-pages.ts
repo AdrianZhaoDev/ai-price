@@ -1,5 +1,6 @@
 import { load } from "cheerio";
 import { fetchPage, hashContent } from "@/lib/collectors/http-client";
+import { normalizeMiniMaxMarkdown } from "@/lib/collectors/adapters/api-pricing/minimax-markdown";
 import { errorDiagnosticDetails } from "@/lib/collectors/diagnostics";
 import {
   parseBaichuanApi,
@@ -210,7 +211,7 @@ export function parseMiniMaxTokenPlan(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
   const rows =
-    pricingTables(raw.body).find((table) =>
+    pricingTables(normalizeMiniMaxMarkdown(raw.body)).find((table) =>
       table.rows.some((cells) => /^(?:价格|price)$/i.test(cells[0] ?? "")),
     )?.rows ?? [];
   const names = rows[0]?.slice(1) ?? [];
@@ -248,7 +249,7 @@ export function parseMiniMaxTokenPlan(
         channel: "official_web" as const,
         sourceUrl: raw.sourceUrl,
         observedAt: raw.observedAt,
-        parserVersion: "minimax-token-plan-v3",
+        parserVersion: "minimax-token-plan-v4",
       };
       if (/^(?:¥|￥)/.test(price)) return [cnyOffer(input)];
       if (usd) return [usdOffer(input)];
@@ -1893,7 +1894,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "minimax-token-plan-official",
     "minimax-token-plan",
     "https://platform.minimax.io/docs/guides/pricing-token-plan.md",
-    "minimax-token-plan-v3",
+    "minimax-token-plan-v4",
     parseMiniMaxTokenPlan,
     undefined,
     ["USD"],
@@ -1965,7 +1966,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "minimax-paygo-official",
     "minimax-api",
     "https://platform.minimax.io/docs/guides/pricing-paygo.md",
-    "minimax-api-v7",
+    "minimax-api-v8",
     parseMiniMaxApi,
     undefined,
     ["USD"],
@@ -2095,9 +2096,9 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "claude-api-pricing-official",
     "claude-api",
     "https://platform.claude.com/docs/en/about-claude/pricing",
-    "claude-api-v3",
+    "claude-api-v4",
     parseClaudeApi,
-    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://platform.claude.com/docs/en/about-claude/pricing.md",
     ["USD"],
   ),
   new OfficialPageAdapter(
