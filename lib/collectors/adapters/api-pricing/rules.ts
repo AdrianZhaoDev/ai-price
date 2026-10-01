@@ -6,6 +6,7 @@
  * stay here so an official-page change has a single obvious edit point.
  */
 import { load } from "cheerio";
+import { normalizeMiniMaxMarkdown } from "@/lib/collectors/adapters/api-pricing/minimax-markdown";
 import type {
   NormalizedOffer,
   RawCollectionResult,
@@ -341,7 +342,9 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
   const offers: NormalizedOffer[] = [];
   const isGlobalSource = /platform\.minimax\.io\//i.test(raw.sourceUrl);
   const modelHeader = /模型|功能|服务|model|api|service/i;
-  for (const [tableOrder, table] of pricingTables(raw.body).entries()) {
+  for (const [tableOrder, table] of pricingTables(
+    normalizeMiniMaxMarkdown(raw.body),
+  ).entries()) {
     const headerIndex = table.rows.findIndex((row) =>
       row.some((cell) => modelHeader.test(cell)),
     );
@@ -379,7 +382,7 @@ export function parseMiniMaxApi(raw: RawCollectionResult): NormalizedOffer[] {
           apiOffer({
             raw,
             providerSlug: "minimax-api",
-            parserVersion: "minimax-api-v7",
+            parserVersion: "minimax-api-v8",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel: compactLabel(column.label),
@@ -1157,7 +1160,7 @@ export function parseOpenAiApi(raw: RawCollectionResult): NormalizedOffer[] {
 export function parseClaudeApi(raw: RawCollectionResult): NormalizedOffer[] {
   return parseGlobalUsdTables(raw, {
     providerSlug: "claude-api",
-    parserVersion: "claude-api-v3",
+    parserVersion: "claude-api-v4",
   });
 }
 

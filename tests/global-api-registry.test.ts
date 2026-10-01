@@ -60,6 +60,8 @@ describe("global API adapter registry", () => {
           adapter.sourceUrl.startsWith("https://") &&
           adapter.quoteCurrencies?.includes("USD") &&
           (adapter.parserVersion.endsWith("-v3") ||
+            (adapter.id === "claude-api-pricing-official" &&
+              adapter.parserVersion === "claude-api-v4") ||
             (adapter.id === "openai-api-pricing-official" &&
               adapter.parserVersion === "openai-api-v4") ||
             (adapter.id === "grok-api-pricing-official" &&

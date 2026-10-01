@@ -126,7 +126,7 @@ describe("official table adapters", () => {
       4900, 11900, 46900,
     ]);
     expect(
-      offers.every((offer) => offer.parserVersion === "minimax-token-plan-v3"),
+      offers.every((offer) => offer.parserVersion === "minimax-token-plan-v4"),
     ).toBe(true);
     for (const price of ["", "¥-49 /月", "$49 /月", "¥49 起", "¥49 /年"]) {
       expect(
