@@ -97,7 +97,11 @@ function reportUrl(value: string): string {
 function expectedStructuredTypes(requestedUrl: string): string[] {
   const path = new URL(requestedUrl).pathname.replace(/\/+$/, "") || "/";
   if (path.endsWith("/ai-model-release-watch")) return ["Article"];
-  if (path.endsWith("/privacy") || path.endsWith("/methodology")) {
+  if (
+    path.endsWith("/privacy") ||
+    path.endsWith("/methodology") ||
+    path.endsWith("/price-changes")
+  ) {
     return ["WebPage"];
   }
   return ["Dataset", "ItemList"];
@@ -404,6 +408,8 @@ export async function auditPublicSeo(
   const entries: PublicSeoAuditEntry[] = [];
   await mapConcurrent([...pageUrls].sort(), concurrency, async (url) => {
     const startedAt = performance.now();
+    let responseStatus: number | undefined;
+    let responseUrl: string | undefined;
     try {
       const { response, finalUrl } = await fetchAuditResponse(
         url,
@@ -411,23 +417,27 @@ export async function auditPublicSeo(
         timeoutMs,
         fetcher,
       );
-      const elapsedMs = Math.round(performance.now() - startedAt);
+      responseStatus = response.status;
+      responseUrl = reportUrl(finalUrl);
       if (!response.ok) {
         entries.push({
           url: reportUrl(url),
           finalUrl: reportUrl(finalUrl),
           status: response.status,
-          elapsedMs,
+          elapsedMs: Math.round(performance.now() - startedAt),
           state: "failed",
           failureKind: "http",
           issues: [],
         });
         return;
       }
+      // Reading the stream can time out or fail after successful HTTP headers.
+      // Keep transport failures outside the HTML parser's error boundary.
+      const html = await response.text();
       let inspected: ReturnType<typeof inspectPublicSeoHtml>;
       try {
         inspected = inspectPublicSeoHtml(
-          await response.text(),
+          html,
           url,
           response.headers.get("x-robots-tag") ?? "",
         );
@@ -436,7 +446,7 @@ export async function auditPublicSeo(
           url: reportUrl(url),
           finalUrl: reportUrl(finalUrl),
           status: response.status,
-          elapsedMs,
+          elapsedMs: Math.round(performance.now() - startedAt),
           state: "failed",
           failureKind: "parse",
           issues: [],
@@ -450,7 +460,7 @@ export async function auditPublicSeo(
         ...inspected,
         finalUrl: reportUrl(finalUrl),
         status: response.status,
-        elapsedMs,
+        elapsedMs: Math.round(performance.now() - startedAt),
         state: inspected.issues.length > 0 ? "failed" : "ok",
         failureKind: inspected.issues.length > 0 ? "seo" : undefined,
       });
@@ -458,6 +468,8 @@ export async function auditPublicSeo(
       const failureKind = classifyFailure(error);
       entries.push({
         url: reportUrl(url),
+        finalUrl: responseUrl,
+        status: responseStatus,
         elapsedMs: Math.round(performance.now() - startedAt),
         state: failureKind === "timeout" ? "incomplete" : "failed",
         failureKind,

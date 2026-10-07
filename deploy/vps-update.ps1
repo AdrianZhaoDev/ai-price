@@ -226,6 +226,23 @@ printf 'origin-cache=%s\n' "`$cache_status"
 [[ "`$http_status" == "301" ]]
 [[ "`$admin_status" == "307" ]]
 [[ "`$cache_status" == "HIT" ]]
+for path in /channels /en/channels /api-transit /en/api-transit /price-changes /en/price-changes; do
+  languages=("" "zh-CN" "zh-CN,zh;q=0.9")
+  # Explicit English routes also serve Chinese browsers after a language switch.
+  # English headers on unprefixed routes intentionally redirect, so warm their /en target.
+  if [[ "`$path" == /en/* ]]; then
+    languages+=("en" "en-US,en;q=0.9" "en-GB,en;q=0.9")
+  fi
+  for language in "`${languages[@]}"; do
+    curl -fsS --max-time 30 --resolve '$PublicDomain`:443:127.0.0.1' \
+      -H "Accept-Language: `$language" -o /dev/null "https://$PublicDomain`$path"
+    directory_cache=`$(curl -fsSI --max-time 30 --resolve '$PublicDomain`:443:127.0.0.1' \
+      -H "Accept-Language: `$language" "https://$PublicDomain`$path" | \
+      awk 'tolower(`$1) == "x-cache-status:" { gsub("\r", "", `$2); print `$2 }' | tail -n 1)
+    printf 'public-page-cache=%s language=%s %s\n' "`$path" "`$language" "`$directory_cache"
+    [[ "`$directory_cache" == "HIT" ]]
+  done
+done
 "@
   $deployCommand = $deployCommand.Replace("`r", "")
   ssh $SshAlias $deployCommand

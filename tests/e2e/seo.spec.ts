@@ -1,4 +1,22 @@
 import { expect, test } from "@playwright/test";
+import { inspectPublicSeoHtml } from "../../lib/public-seo-audit";
+
+test("audits both price-history pages using their WebPage schema", async ({
+  request,
+  isMobile,
+}) => {
+  test.skip(isMobile, "SEO output is device-independent.");
+  for (const path of ["/price-changes", "/en/price-changes"]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    const inspected = inspectPublicSeoHtml(
+      await response.text(),
+      `https://lowpriceradar.com${path}`,
+      response.headers()["x-robots-tag"] ?? "",
+    );
+    expect(inspected.issues).toEqual([]);
+  }
+});
 
 const publicPages = [
   {
