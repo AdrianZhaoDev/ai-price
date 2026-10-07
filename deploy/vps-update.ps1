@@ -226,6 +226,15 @@ printf 'origin-cache=%s\n' "`$cache_status"
 [[ "`$http_status" == "301" ]]
 [[ "`$admin_status" == "307" ]]
 [[ "`$cache_status" == "HIT" ]]
+for path in /channels /en/channels /api-transit /en/api-transit /price-changes /en/price-changes; do
+  curl -fsS --max-time 30 --resolve '$PublicDomain`:443:127.0.0.1' \
+    -H 'Accept-Language: zh-CN' -o /dev/null "https://$PublicDomain`$path"
+  directory_cache=`$(curl -fsSI --max-time 30 --resolve '$PublicDomain`:443:127.0.0.1' \
+    -H 'Accept-Language: zh-CN' "https://$PublicDomain`$path" | \
+    awk 'tolower(`$1) == "x-cache-status:" { gsub("\r", "", `$2); print `$2 }' | tail -n 1)
+  printf 'public-page-cache=%s %s\n' "`$path" "`$directory_cache"
+  [[ "`$directory_cache" == "HIT" ]]
+done
 "@
   $deployCommand = $deployCommand.Replace("`r", "")
   ssh $SshAlias $deployCommand

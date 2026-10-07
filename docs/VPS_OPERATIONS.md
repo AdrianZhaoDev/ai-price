@@ -91,11 +91,15 @@ production artifact + SHA-256 manifest
 脚本会等待；失败则停止，不会改动生产。也可明确指定 run：
 
 原子切换并启动新 release 后，脚本会执行一次仅含 `models-dev` 的目录同步，再对中英文
-首页、订阅页、发布追踪页、全部 SEO 落地页、active model 详情、API 目录与 sitemap
-做有限并发预热。新 release 不复用旧 release 的 ISR 文件缓存，并会清空站点专用的
+首页、订阅页、卡网目录、中转站目录、价格变化页、发布追踪页、全部 SEO 落地页、active model 详情、API 目录与 sitemap
+做有限并发预热；每次预热须读完响应正文，不能只收到流式 HTML 响应头就计为完成。新 release 不复用旧 release 的 ISR 文件缓存，并会清空站点专用的
 Nginx 公开页面微缓存；同步、预热或微缓存验收失败都会使发布验收失败。部署同步显式使用
 `NODE_ENV=production`，并与两个 systemd collector unit 共用
 `/run/ai-price-collect/collector.lock`，避免与四小时任务并发写库或跳过缓存失效。
+
+应用预热结束后，部署脚本再通过源站 HTTPS 预热中英文卡网、中转站和价格变化页，
+逐页复查 `X-Cache-Status: HIT`；避免长队列结束前应用短缓存已过期，首个访客仍承担冷查询。
+这些请求无 Cookie、无查询参数、不携带鉴权，不改变私有路径的缓存边界。
 
 ```powershell
 .\deploy\vps-update.ps1 -RunId 123456789

@@ -12,8 +12,8 @@ export const apiTransitPageMetadata = (locale: Locale) =>
     title: locale === "en" ? "API Transit Directory" : "API 中转站目录",
     description:
       locale === "en"
-        ? "Browse API transit website links or submit a website for inclusion."
-        : "浏览 API 中转站链接，或提交网址申请收录。",
+        ? "Find AI API transit websites with short introductions and direct links. Submit a website for review, and check each operator's current service terms."
+        : "浏览 AI API 中转站目录，通过网站名称、简短介绍和直达链接了解各站点服务，并可提交网站申请收录。收录申请须经审核后展示；使用前请到运营方网站核对可用模型、计费规则、服务条款及数据处理说明，目录收录不构成服务质量或价格保证。",
     locale,
   });
 export async function ApiTransitPage({

@@ -120,6 +120,16 @@ npm run audit:public-seo -- `
 
 对 Sitemap 中所有公共页面检查：
 
+正文读取阶段的超时也归为 `timeout` / `incomplete`，已收到 HTTP 200 响应头并不表示
+页面检查完成；正文传输中断归为 `network`，只有 HTML 检查器异常才归为 `parse`。
+耗时包含正文读取。中英文 `/price-changes` 使用 `WebPage`，不要误要求 Dataset/ItemList；
+价格目录仍须有 Dataset/ItemList，站点全局的 Organization/WebSite 不能替代页面数据。
+
+Ahrefs 的错误总数不代表相同数量的独立坏链接。修复前须核对当前 crawl 的来源页、
+目标 URL 和状态码；外部后台不可用时单列数据缺口，不用旧邮件摘要宣称已全部解决。
+自动探测 `/sitemap_index.xml` 的 404 不代表正式 `/sitemap.xml` 故障，除非实际站内链接
+或已提交的 Sitemap 指向前者。筛选参数页预期 noindex，不为消除警告而开放索引。
+
 - title、description 非空且各自唯一；
 - canonical 为自身规范 URL；
 - 不包含 noindex；

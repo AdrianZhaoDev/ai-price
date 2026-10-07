@@ -21,6 +21,8 @@ async function main() {
         });
         if (!response.ok)
           throw new Error(`Warm failed for ${path}: HTTP ${response.status}`);
+        // Next.js streams HTML: receiving headers does not mean rendering finished.
+        await response.arrayBuffer();
         warmed += 1;
       }),
     );

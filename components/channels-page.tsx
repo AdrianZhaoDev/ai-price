@@ -300,8 +300,8 @@ export const channelsPageMetadata = (locale: Locale) =>
       locale === "en" ? "Public AI Channel Offers" : "公开 AI 卡网报价目录",
     description:
       locale === "en"
-        ? "Browse public AI channel offers with source links, availability, deduplicated prices, and an explicit synthetic-data fallback when the public snapshot is not connected."
-        : "浏览公开 AI 卡网报价，查看来源、库存、去重后的价格和数据状态；数据库未接通时明确标注合成回退数据。",
+        ? "Compare public AI channel offers by product, merchant, price and availability. Check source links and update times; stale or unavailable data is labeled."
+        : "浏览公开 AI 卡网报价目录，按产品、商户、价格和库存状态筛选报价，查看去重后的商品信息、来源链接和更新时间。过期或暂不可用的数据会明确标注；购买前请前往商户核对规格、交付方式和实际售价，采价记录不代表平台对商户信誉的担保。",
     locale,
     keywords:
       locale === "en"

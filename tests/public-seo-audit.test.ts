@@ -66,6 +66,89 @@ describe("public SEO audit", () => {
     ).toContain("missing_json_ld");
   });
 
+  it.each(["/price-changes", "/en/price-changes"])(
+    "accepts WebPage on %s without accepting unrelated global schema",
+    (path) => {
+      const url = `https://example.test${path}`;
+      const page = validPage(url).replace('"Dataset"', '"WebPage"');
+      expect(inspectPublicSeoHtml(page, url).issues).toEqual([]);
+      expect(
+        inspectPublicSeoHtml(page.replace('"WebPage"', '"WebSite"'), url)
+          .issues,
+      ).toContain("missing_json_ld");
+    },
+  );
+
+  it.each([
+    ["TimeoutError", "incomplete", "timeout"],
+    ["AbortError", "incomplete", "timeout"],
+    ["TypeError", "failed", "network"],
+  ])(
+    "classifies %s while reading an HTTP 200 body",
+    async (name, state, kind) => {
+      const fetcher = vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/robots.txt")) return response("User-agent: *");
+        if (url.endsWith("/sitemap.xml")) {
+          return response(
+            "<urlset><url><loc>https://example.test/model</loc></url></urlset>",
+          );
+        }
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new DOMException("Body interrupted", name));
+            },
+          }),
+        );
+      });
+      const summary = await auditPublicSeo({
+        baseUrl: "https://example.test",
+        fetcher,
+        minimumUrls: 1,
+      });
+      expect(summary.entries[0]).toMatchObject({
+        status: 200,
+        finalUrl: "https://example.test/model",
+        state,
+        failureKind: kind,
+        issues: [],
+      });
+      expect(summary.incomplete).toBe(state === "incomplete" ? 1 : 0);
+      expect(summary.failed).toBe(state === "failed" ? 1 : 0);
+    },
+  );
+
+  it("includes response body delivery in elapsed time", async () => {
+    const clock = vi.spyOn(performance, "now");
+    let time = 100;
+    clock.mockImplementation(() => time);
+    try {
+      const fetcher = vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/robots.txt")) return response("User-agent: *");
+        if (url.endsWith("/sitemap.xml"))
+          return response(
+            "<urlset><url><loc>https://example.test/model</loc></url></urlset>",
+          );
+        const result = response(validPage(url));
+        vi.spyOn(result, "text").mockImplementation(async () => {
+          time += 500;
+          return validPage(url);
+        });
+        return result;
+      });
+      const summary = await auditPublicSeo({
+        baseUrl: "https://example.test",
+        fetcher,
+        minimumUrls: 1,
+      });
+      expect(summary.entries[0]).toMatchObject({ state: "ok", elapsedMs: 500 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("redacts canonical query strings and respects X-Robots-Tag", () => {
     const inspected = inspectPublicSeoHtml(
       `<!doctype html><html><head><title>Model</title><meta name="description" content="Model pricing."><link rel="canonical" href="https://example.test/model?token=secret"><script type="application/ld+json">{"@type":"Dataset"}</script></head></html>`,
