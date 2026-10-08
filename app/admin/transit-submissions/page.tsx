@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { AdminHeader } from "../admin-header";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "目录收录申请｜Low Price Radar" };
+export const metadata = { title: "中转站申请｜Low Price Radar" };
 
 const feedback: Record<string, string> = {
   created: "站点已添加并同步到公开目录。",
@@ -152,7 +152,7 @@ export default async function AdminTransitSubmissionsPage({
     <main className="admin-shell admin-directory-shell">
       <AdminHeader
         current="transit-submissions"
-        title="目录收录申请"
+        title="中转站申请"
         description="审核 API 中转站与卡网提交，并维护 API 中转站公开目录。"
       />
 
