@@ -1,6 +1,5 @@
 import { config } from "dotenv";
 import { collectDirectTransit } from "@/lib/public-data/direct-transit";
-import { collectDirectChannels } from "@/lib/public-data/direct-channels";
 import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import {
@@ -128,11 +127,9 @@ async function readSnapshot(domain: Domain): Promise<unknown> {
     domain === "channels" &&
     process.env.PUBLIC_CHANNELS_DIRECT_SOURCES?.trim()
   ) {
-    if (snapshotFile(domain) || snapshotUrl(domain))
-      throw new Error(
-        "Direct sources and imported channel snapshots are mutually exclusive.",
-      );
-    return collectDirectChannels(process.env.PUBLIC_CHANNELS_DIRECT_SOURCES);
+    throw new Error(
+      "Direct channel collection has been retired. Unset PUBLIC_CHANNELS_DIRECT_SOURCES.",
+    );
   }
   if (
     domain === "transit" &&
@@ -213,11 +210,6 @@ async function main(): Promise<void> {
         console.log(
           `Importing ${domain} snapshot from ${safeTargetLabel(safe)}.`,
         );
-      } else if (
-        domain === "channels" &&
-        process.env.PUBLIC_CHANNELS_DIRECT_SOURCES?.trim()
-      ) {
-        console.log("Collecting reviewed original merchant API.");
       } else if (
         domain === "transit" &&
         process.env.PUBLIC_TRANSIT_DIRECT_SOURCES?.trim()

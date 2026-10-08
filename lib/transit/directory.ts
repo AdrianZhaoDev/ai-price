@@ -25,30 +25,6 @@ export const defaultTransitDirectoryEntries = [
     createdAt: new Date("2026-09-09T00:00:00.000Z"),
     updatedAt: new Date("2026-09-09T00:00:00.000Z"),
   },
-  {
-    id: "00000000-0000-4000-8000-000000000002",
-    name: "CallAI",
-    websiteUrl: "https://sub.callai.one/",
-    descriptionZh: "提供多模型 AI API 中转服务。",
-    descriptionEn: "An API relay service for multiple AI models.",
-    rank: 20,
-    published: true,
-    sourceSubmissionId: null,
-    createdAt: new Date("2026-09-09T00:00:00.000Z"),
-    updatedAt: new Date("2026-09-09T00:00:00.000Z"),
-  },
-  {
-    id: "00000000-0000-4000-8000-000000000003",
-    name: "WAWA ZZ API",
-    websiteUrl: "https://wawazz.xyz/",
-    descriptionZh: "提供 AI API 中转调用服务。",
-    descriptionEn: "A gateway for AI API calls.",
-    rank: 30,
-    published: true,
-    sourceSubmissionId: null,
-    createdAt: new Date("2026-09-09T00:00:00.000Z"),
-    updatedAt: new Date("2026-09-09T00:00:00.000Z"),
-  },
 ] as const;
 
 export async function listPublicTransitDirectoryEntries() {
@@ -137,6 +113,7 @@ export async function reviewTransitSubmission(
 
     const now = new Date();
     if (decision === "approved" && input) {
+      if (submission.websiteKey?.startsWith("channels:")) return false;
       const websiteKey = transitWebsiteKey(input.websiteUrl);
       const [existing] = await tx
         .select({ id: transitDirectoryEntries.id })

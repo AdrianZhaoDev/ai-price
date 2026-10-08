@@ -59,7 +59,7 @@ test.describe("public channel and API transit directories", () => {
         );
       expect(
         structuredData.filter((value) =>
-          value.includes(path.includes("api-transit") ? "ItemList" : "Dataset"),
+          value.includes(path.includes("api-transit") ? "ItemList" : "WebPage"),
         ),
       ).toHaveLength(1);
       if (isMobile) {
@@ -73,21 +73,17 @@ test.describe("public channel and API transit directories", () => {
       }
     }
 
-    await page.goto("/channels?q=api&sort=price&limit=1");
-    await expect(page).toHaveURL(/\/channels\?q=api&sort=price&limit=1/);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.goto("/channels");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "还没有卡网报价。",
+    );
+    await expect(page.getByLabel("卡网网站")).toBeDisabled();
 
-    await page.goto("/en/channels?limit=1");
-    const offerPages = page.getByRole("navigation", { name: "Offer pages" });
-    if (await offerPages.count()) {
-      await offerPages.getByRole("link", { name: "Next page" }).click();
-      await expect(page).toHaveURL(/offset=1/);
-      await page
-        .getByRole("navigation", { name: "Offer pages" })
-        .getByRole("link", { name: "Previous page" })
-        .click();
-      await expect(page).toHaveURL(/offset=0/);
-    }
+    await page.goto("/en/channels");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "No channel offers yet.",
+    );
+    await expect(page.getByLabel("Channel website")).toBeDisabled();
 
     await page.goto("/api-transit?q=token&sort=stability&limit=1");
     await expect(page).toHaveURL(

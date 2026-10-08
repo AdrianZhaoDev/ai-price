@@ -38,6 +38,10 @@ beforeEach(() => {
 describe("transit directory repository", () => {
   it("uses the built-in directory when no write database is configured", async () => {
     databaseMocks.writeConfigured.mockReturnValue(false);
+    expect(defaultTransitDirectoryEntries).toHaveLength(1);
+    expect(defaultTransitDirectoryEntries[0]?.websiteUrl).toBe(
+      "https://ai.lowpriceradar.com/",
+    );
     expect(await listPublicTransitDirectoryEntries()).toEqual(
       defaultTransitDirectoryEntries,
     );
@@ -125,6 +129,40 @@ describe("transit directory repository", () => {
       }),
     );
     expect(tx.update).toHaveBeenCalledOnce();
+  });
+
+  it("does not publish a channel submission into the API transit directory", async () => {
+    const tx = {
+      select: vi.fn(() => ({
+        from: () => ({
+          where: () => ({
+            limit: () => ({
+              for: vi.fn().mockResolvedValue([
+                {
+                  id: "8590b2da-8047-4b95-8ef3-00cf745a172b",
+                  websiteKey: "channels:example.org",
+                },
+              ]),
+            }),
+          }),
+        }),
+      })),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    databaseMocks.database.transaction = vi.fn(
+      async (callback: (value: typeof tx) => unknown) => callback(tx),
+    );
+
+    expect(
+      await reviewTransitSubmission(
+        "8590b2da-8047-4b95-8ef3-00cf745a172b",
+        "approved",
+        input,
+      ),
+    ).toBe(false);
+    expect(tx.insert).not.toHaveBeenCalled();
+    expect(tx.update).not.toHaveBeenCalled();
   });
 
   it("unpublishes the linked directory row when rejecting an approval", async () => {

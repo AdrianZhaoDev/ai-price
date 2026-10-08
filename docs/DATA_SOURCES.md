@@ -18,8 +18,8 @@
 快照来源必须先经过人工审核，核对公开性、访问条款及拟展示的事实字段范围，并记录
 来源说明；不得使用需要登录、绕过访问控制、用户任意提交的 URL 或含凭据的接口。
 
-原站直采现支持 `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz` 和
-`PUBLIC_CHANNELS_DIRECT_SOURCES=redeemgpt-public`，范围、频率及价格单位见
+原站直采现支持 `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz`；卡网直采已停用，
+`PUBLIC_CHANNELS_DIRECT_SOURCES` 必须留空。历史范围、频率及价格单位见
 [`PUBLIC_DATA_SOURCE_REVIEW.md`](PUBLIC_DATA_SOURCE_REVIEW.md)。同一领域直采与快照
 URL/file 互斥。可先执行 `npm run collect:public -- --domain=all --dry-run`，不需要
 数据库且不写库。选定中转来源任一失败保留整批旧快照；商家和中转分别处理。
@@ -308,8 +308,9 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 ## API 中转站链接目录
 
 `/api-transit` 与 `/en/api-transit` 仅展示 `transit_directory_entries` 中已发布的网站标题和
-中英文一句话介绍，按 `rank` 从小到大排序，整行可点击且不显示原始网址。初始数据包括用户指定的
-`https://ai.lowpriceradar.com/`、CallAI 和 WAWA ZZ API。
+中英文一句话介绍，按 `rank` 从小到大排序，整行可点击且不显示原始网址。当前仅保留用户指定的
+`https://ai.lowpriceradar.com/`。CallAI 与 WAWA ZZ API 已于 2026-10-08 按用户要求从公开
+目录逻辑停用，迁移保留原记录以便审计和回滚，不影响中转报价采集历史。
 页面不读取报价数据库，不抓取或列出模型，不提供比价、筛选和可用性统计。
 该人工维护目录始终读取管理员写入目标，避免数据库读写目标分离时出现后台已保存但公开页未更新；
 它不加入公开报价快照镜像。
@@ -322,6 +323,11 @@ npx tsx scripts/collect-prices.ts --source=<adapter-id> --accept-plan-count-chan
 通过现有 SMTP 向 `ADMIN_EMAIL`（未配置时使用 `CONTACT_EMAIL`）发送纯文本通知。管理员在
 `/admin/transit-submissions` 中审核；通过时可修改标题、链接、中英文介绍、排序和公开状态。
 用户输入不会自动抓取或直接公开。
+
+`/channels` 与 `/en/channels` 在没有获准来源时展示“暂无卡网报价”，并复用同一套邮箱
+验证和限流基础设施，通过 `/api/channels/submissions` 接收卡网网站及简介。卡网申请使用
+独立去重命名空间，管理员通知会明确标注“卡网报价”；它不会被 API 中转目录审核动作误发布。
+停用前的卡网快照只保留作审计历史，页面和定时采集均不再使用。
 
 接口限制 8 KiB 请求体、2048 字符网址和 160 字符单行介绍。验证码发送按同一 IP 每 15 分钟
 5 次、同一邮箱每 15 分钟 3 次限制，内存键设置 10000 项硬上限并在到期或达到上限时回收。

@@ -6,7 +6,7 @@ for (const locale of ["", "/en"]) {
   }) => {
     await page.goto(`${locale}/api-transit`);
     const table = page.getByRole("table");
-    await expect(table.getByRole("row")).toHaveCount(4);
+    await expect(table.getByRole("row")).toHaveCount(2);
     await expect(table.getByRole("link").first()).toHaveAttribute(
       "href",
       "https://ai.lowpriceradar.com/",
@@ -109,6 +109,43 @@ for (const locale of ["", "/en"]) {
     }
   });
 }
+
+test("channel submissions use the reviewed directory workflow", async ({
+  page,
+}) => {
+  await page.goto("/channels");
+  await page.route(
+    "**/api/channels/submissions/verification",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        json:
+          route.request().method() === "POST"
+            ? { code: "code_sent", verificationId: "verification-id" }
+            : { code: "verified" },
+      });
+    },
+  );
+  await page.route("**/api/channels/submissions", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      email: "owner@example.com",
+      verificationId: "verification-id",
+      url: "https://channel.example.org/",
+      description: "公开卡网与报价。",
+      directory: "channels",
+    });
+    await route.fulfill({ status: 200, json: { code: "submitted" } });
+  });
+
+  await page.getByLabel("邮箱", { exact: true }).fill("owner@example.com");
+  await page.getByRole("button", { name: "发送验证码" }).click();
+  await page.getByLabel("邮箱验证码").fill("123456");
+  await page.getByRole("button", { name: "验证邮箱" }).click();
+  await page.getByLabel("卡网网站").fill("https://channel.example.org/");
+  await page.getByLabel("卡网与报价简介").fill("公开卡网与报价。");
+  await page.getByRole("button", { name: "提交申请" }).click();
+  await expect(page.getByRole("status")).toContainText("已提交");
+});
 
 test("failed submissions preserve the URL for retry", async ({ page }) => {
   await page.goto("/api-transit");

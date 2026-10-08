@@ -6,6 +6,7 @@ import {
   createTransitSubmission,
   createTransitSubmissionCode,
   createTransitSubmissionVerification,
+  directorySubmissionWebsiteKey,
   markTransitSubmissionNotification,
   transitWebsiteKey,
 } from "@/lib/transit/submissions";
@@ -41,6 +42,12 @@ describe("transit submission repository", () => {
     expect(transitWebsiteKey("https://api.example.com/")).not.toBe(
       transitWebsiteKey("https://example.com/"),
     );
+    expect(
+      directorySubmissionWebsiteKey("https://example.com/", "channels"),
+    ).toBe("channels:example.com");
+    expect(
+      directorySubmissionWebsiteKey("https://example.com/", "api-transit"),
+    ).toBe("example.com");
   });
 
   it("expires challenges, binds them to an email and permits at most five checks", async () => {

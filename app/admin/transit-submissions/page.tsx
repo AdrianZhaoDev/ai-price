@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { AdminHeader } from "../admin-header";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "中转站申请｜Low Price Radar" };
+export const metadata = { title: "目录收录申请｜Low Price Radar" };
 
 const feedback: Record<string, string> = {
   created: "站点已添加并同步到公开目录。",
@@ -152,8 +152,8 @@ export default async function AdminTransitSubmissionsPage({
     <main className="admin-shell admin-directory-shell">
       <AdminHeader
         current="transit-submissions"
-        title="中转站申请"
-        description="审核用户提交，并维护 API 中转站公开目录的内容与排序。"
+        title="目录收录申请"
+        description="审核 API 中转站与卡网提交，并维护 API 中转站公开目录。"
       />
 
       <section className="admin-metrics" aria-label="中转站申请统计">
@@ -192,6 +192,8 @@ export default async function AdminTransitSubmissionsPage({
         <div className="admin-directory-list">
           {submissions.map((submission) => {
             const approvedEntry = entriesBySubmission.get(submission.id);
+            const isChannelSubmission =
+              submission.websiteKey.startsWith("channels:");
             return (
               <article className="admin-directory-card" key={submission.id}>
                 <header>
@@ -206,6 +208,9 @@ export default async function AdminTransitSubmissionsPage({
                     <time dateTime={submission.createdAt.toISOString()}>
                       {formatTime(submission.createdAt)}
                     </time>
+                    <span className="admin-status" data-status="pending">
+                      {isChannelSubmission ? "卡网报价" : "API 中转"}
+                    </span>
                   </div>
                   <a
                     href={submission.websiteUrl}
@@ -219,31 +224,40 @@ export default async function AdminTransitSubmissionsPage({
                   邮箱已通过验证码验证；完整地址随管理员通知邮件发送，通知成功后按隐私规则从申请记录中清除。
                   通知状态：{submission.notificationStatus}。
                 </p>
+                {isChannelSubmission ? <p>{submission.description}</p> : null}
                 <form
                   action={`/api/admin/transit-submissions/${submission.id}/approve`}
                   method="post"
                 >
-                  <EntryFields
-                    defaults={{
-                      name:
-                        approvedEntry?.name ??
-                        suggestedName(submission.websiteUrl),
-                      websiteUrl:
-                        approvedEntry?.websiteUrl ?? submission.websiteUrl,
-                      descriptionZh:
-                        approvedEntry?.descriptionZh ?? submission.description,
-                      descriptionEn:
-                        approvedEntry?.descriptionEn ?? submission.description,
-                      rank: approvedEntry?.rank ?? nextRank,
-                      published: approvedEntry?.published ?? true,
-                    }}
-                  />
+                  {!isChannelSubmission ? (
+                    <EntryFields
+                      defaults={{
+                        name:
+                          approvedEntry?.name ??
+                          suggestedName(submission.websiteUrl),
+                        websiteUrl:
+                          approvedEntry?.websiteUrl ?? submission.websiteUrl,
+                        descriptionZh:
+                          approvedEntry?.descriptionZh ??
+                          submission.description,
+                        descriptionEn:
+                          approvedEntry?.descriptionEn ??
+                          submission.description,
+                        rank: approvedEntry?.rank ?? nextRank,
+                        published: approvedEntry?.published ?? true,
+                      }}
+                    />
+                  ) : null}
                   <div className="admin-directory-actions">
-                    <button className="primary-button" type="submit">
-                      {submission.reviewStatus === "approved"
-                        ? "更新并保持通过"
-                        : "同意并发布"}
-                    </button>
+                    {!isChannelSubmission ? (
+                      <button className="primary-button" type="submit">
+                        {submission.reviewStatus === "approved"
+                          ? "更新并保持通过"
+                          : "同意并发布"}
+                      </button>
+                    ) : (
+                      <span>卡网申请仅进入人工审核，不会自动发布。</span>
+                    )}
                     {submission.reviewStatus !== "rejected" ? (
                       <button
                         className="secondary-button"
@@ -260,7 +274,7 @@ export default async function AdminTransitSubmissionsPage({
             );
           })}
           {submissions.length === 0 ? (
-            <p className="admin-empty">当前没有中转站收录申请。</p>
+            <p className="admin-empty">当前没有目录收录申请。</p>
           ) : null}
         </div>
       </section>

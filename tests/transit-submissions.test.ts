@@ -15,7 +15,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/transit/submissions", () => ({
   createTransitSubmission: mocks.createSubmission,
   markTransitSubmissionNotification: mocks.markNotification,
-  transitWebsiteKey: (url: string) => new URL(url).hostname,
+  directorySubmissionWebsiteKey: (url: string, directory: string) =>
+    `${directory}:${new URL(url).hostname}`,
 }));
 vi.mock("@/lib/email/transport", () => ({
   isSmtpConfigured: mocks.configured,
@@ -28,6 +29,7 @@ vi.mock("@/lib/email/delivery", () => ({
 }));
 
 import { POST } from "@/app/api/transit/submissions/route";
+import { POST as postChannelSubmission } from "@/app/api/channels/submissions/route";
 
 function request(
   body: Record<string, unknown>,
@@ -90,6 +92,7 @@ describe("transit submissions", () => {
       websiteUrl: "https://ai.lowpriceradar.com/",
       description: "An AI API gateway.",
       ipAddress: "192.0.2.1",
+      directory: "api-transit",
     });
     expect(mocks.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,6 +104,41 @@ describe("transit submissions", () => {
       submissionId: "submission-id",
       status: "sent",
     });
+  });
+
+  it("labels channel submissions separately", async () => {
+    const response = await POST(
+      request({
+        url: "https://channel.example.org/",
+        directory: "channels",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.createSubmission).toHaveBeenCalledWith(
+      expect.objectContaining({ directory: "channels" }),
+    );
+    expect(mocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: "卡网报价收录申请",
+        text: expect.stringContaining("收录目录：卡网报价"),
+      }),
+    );
+  });
+
+  it("forces the channel directory at the channel endpoint", async () => {
+    const response = await postChannelSubmission(
+      request({
+        url: "https://channel.example.org/",
+        directory: "api-transit",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.createSubmission).toHaveBeenCalledWith(
+      expect.objectContaining({ directory: "channels" }),
+    );
+    expect(mocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "卡网报价收录申请" }),
+    );
   });
 
   it("resumes a pending duplicate notification before returning duplicate", async () => {

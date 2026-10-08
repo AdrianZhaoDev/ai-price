@@ -59,8 +59,8 @@ export function buildSitemap(
     Object.entries(CORE_PAGE_UPDATED_AT)
       .filter(
         ([path]) =>
-          !["/channels", "/api-transit"].includes(path) ||
-          isPublicDirectoryIndexingEnabled(),
+          path !== "/channels" &&
+          (path !== "/api-transit" || isPublicDirectoryIndexingEnabled()),
       )
       .map(([path, lastModified]) => ({
         url: absoluteUrl(localizedPath(locale, path)),
