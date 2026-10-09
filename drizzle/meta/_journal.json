@@ -127,6 +127,13 @@
       "when": 1788954975989,
       "tag": "0017_chilly_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791456000000,
+      "tag": "0018_keep_low_price_radar_api",
+      "breakpoints": true
     }
   ]
 }

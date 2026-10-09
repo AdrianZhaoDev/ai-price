@@ -296,6 +296,9 @@ channel-products 领域回填当前产品的平台/类型身份。新采集保�
 `0017` 新增管理员维护的 `transit_directory_entries`，并为中转站申请增加审核状态与时间。
 迁移会把原有三条静态目录记录写入新表，不删除申请、报价或采集数据。代码回滚可保留该表；
 旧版页面仍显示原静态目录，但不会读取后台后续修改，因此回滚期间不得继续审批或编辑目录。
+`0018` 将 CallAI 与 WAWA ZZ API 两条目录记录设为不公开，只保留 Low Price Radar API；
+不删除目录记录、申请、报价或采集历史。需要回滚时可把这两个精确 website_key 的
+`published` 恢复为 true，不需要恢复数据库备份。
 
 `0012` 为当前卡网报价新增 source_type；旧导入记录默认为 manual_snapshot，不能从
 来源展示名称推断 API/feed 类型。原站适配器显式写 public_api，后续 feed 应声明准确类型。
@@ -359,10 +362,10 @@ Web 先在数据库内对每张表做上限加一的有限计数，不传输正�
 再开启 PUBLIC_DATA_COLLECTION_ENABLED。Web/API 请求不能抓上游；API 保持
 private/no-store，HTML 沿用源站 15 分钟微缓存，读模型进程缓存 30 秒。
 
-原站直采使用 GitHub Variables `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz` 和
-`PUBLIC_CHANNELS_DIRECT_SOURCES=redeemgpt-public`；对应领域 SNAPSHOT_URL 留空。生产
-只能使用已通过 CI/复审并合并到 main 的版本。启用前核对约 2 个站点、63 条中转报价及
-1 条商家报价（条数会随原站变化，不是固定成功条件）；详细口径见来源准入记录。
+原站直采使用 GitHub Variable `PUBLIC_TRANSIT_DIRECT_SOURCES=sub-callai-one,wawazz`；
+`PUBLIC_CHANNELS_DIRECT_SOURCES` 留空，卡网页展示待收录状态。对应领域 SNAPSHOT_URL 留空。生产
+只能使用已通过 CI/复审并合并到 main 的版本。启用前核对约 2 个站点和 63 条中转报价
+（条数会随原站变化，不是固定成功条件）；详细口径见来源准入记录。
 
 除第 3.3 节验收外，还须检查中英文 `/channels`、`/api-transit` 返回 200、无演示
 商家/站点、canonical 正确；未就绪页面含 noindex 且 sitemap 不包含新栏目。

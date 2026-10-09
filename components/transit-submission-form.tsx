@@ -2,8 +2,21 @@
 import { useState, type FormEvent } from "react";
 import type { Locale } from "@/lib/i18n";
 import styles from "./transit-directory.module.css";
-export function TransitSubmissionForm({ locale }: { locale: Locale }) {
+export type SubmissionDirectory = "api-transit" | "channels";
+
+export function TransitSubmissionForm({
+  locale,
+  directory = "api-transit",
+}: {
+  locale: Locale;
+  directory?: SubmissionDirectory;
+}) {
   const en = locale === "en";
+  const isChannels = directory === "channels";
+  const endpoint = isChannels
+    ? "/api/channels/submissions"
+    : "/api/transit/submissions";
+  const fieldPrefix = isChannels ? "channel" : "transit";
   const [email, setEmail] = useState("");
   const [verificationId, setVerificationId] = useState("");
   const [code, setCode] = useState("");
@@ -22,7 +35,7 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
     setVerified(false);
     setVerificationId("");
     try {
-      const response = await fetch("/api/transit/submissions/verification", {
+      const response = await fetch(`${endpoint}/verification`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), locale }),
@@ -67,7 +80,7 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
     setPending("verify");
     setMessage("");
     try {
-      const response = await fetch("/api/transit/submissions/verification", {
+      const response = await fetch(`${endpoint}/verification`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -108,7 +121,7 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
     setPending("submit");
     setMessage("");
     try {
-      const response = await fetch("/api/transit/submissions", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -116,6 +129,7 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
           verificationId,
           url: url.trim(),
           description: description.trim(),
+          ...(isChannels ? { directory } : {}),
         }),
       });
       const result = (await response.json().catch(() => ({}))) as {
@@ -173,15 +187,23 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
   }
   return (
     <form className={styles.form} onSubmit={submit}>
-      <h2>{en ? "Submit a website" : "申请收录"}</h2>
+      <h2>
+        {isChannels
+          ? en
+            ? "Submit a channel"
+            : "申请收录卡网"
+          : en
+            ? "Submit a website"
+            : "申请收录"}
+      </h2>
       <div className={styles.controls}>
         <div>
-          <label htmlFor="transit-submission-email">
+          <label htmlFor={`${fieldPrefix}-submission-email`}>
             {en ? "Email" : "邮箱"}
           </label>
           <div className={styles.inlineControls}>
             <input
-              id="transit-submission-email"
+              id={`${fieldPrefix}-submission-email`}
               name="email"
               type="email"
               required
@@ -213,12 +235,12 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
         </div>
         {verificationId ? (
           <div>
-            <label htmlFor="transit-submission-code">
+            <label htmlFor={`${fieldPrefix}-submission-code`}>
               {en ? "Verification code" : "邮箱验证码"}
             </label>
             <div className={styles.inlineControls}>
               <input
-                id="transit-submission-code"
+                id={`${fieldPrefix}-submission-code`}
                 name="code"
                 type="text"
                 required
@@ -252,12 +274,18 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
           </div>
         ) : null}
       </div>
-      <label htmlFor="transit-submission-url">
-        {en ? "Website link" : "网站链接"}
+      <label htmlFor={`${fieldPrefix}-submission-url`}>
+        {isChannels
+          ? en
+            ? "Channel website"
+            : "卡网网站"
+          : en
+            ? "Website link"
+            : "网站链接"}
       </label>
       <div className={styles.controls}>
         <input
-          id="transit-submission-url"
+          id={`${fieldPrefix}-submission-url`}
           name="url"
           type="url"
           required
@@ -268,11 +296,17 @@ export function TransitSubmissionForm({ locale }: { locale: Locale }) {
           disabled={Boolean(pending) || !verified}
         />
         <div>
-          <label htmlFor="transit-submission-description">
-            {en ? "One-sentence introduction" : "一句话介绍"}
+          <label htmlFor={`${fieldPrefix}-submission-description`}>
+            {isChannels
+              ? en
+                ? "Channel and offer summary"
+                : "卡网与报价简介"
+              : en
+                ? "One-sentence introduction"
+                : "一句话介绍"}
           </label>
           <input
-            id="transit-submission-description"
+            id={`${fieldPrefix}-submission-description`}
             name="description"
             type="text"
             required

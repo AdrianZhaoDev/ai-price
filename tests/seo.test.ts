@@ -228,7 +228,7 @@ describe("SEO routes", () => {
       absoluteUrl("/methodology"),
       absoluteUrl("/privacy"),
     ]);
-    expect(urls.slice(0, 18)).toEqual([
+    expect(urls.slice(0, 16)).toEqual([
       absoluteUrl("/"),
       absoluteUrl("/china-ai-subscriptions"),
       absoluteUrl("/api-pricing"),
@@ -236,7 +236,6 @@ describe("SEO routes", () => {
       absoluteUrl("/privacy"),
       absoluteUrl("/ai-model-release-watch"),
       absoluteUrl("/price-changes"),
-      absoluteUrl("/channels"),
       absoluteUrl("/api-transit"),
       absoluteUrl("/en"),
       absoluteUrl("/en/china-ai-subscriptions"),
@@ -245,12 +244,11 @@ describe("SEO routes", () => {
       absoluteUrl("/en/privacy"),
       absoluteUrl("/en/ai-model-release-watch"),
       absoluteUrl("/en/price-changes"),
-      absoluteUrl("/en/channels"),
       absoluteUrl("/en/api-transit"),
     ]);
     expect(
       urls
-        .slice(18)
+        .slice(16)
         .every((url) =>
           landingPages.some(
             (page) =>

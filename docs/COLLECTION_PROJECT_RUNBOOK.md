@@ -7,7 +7,8 @@
 ## 1. 新增采集项目
 
 公开渠道/中转目录是独立领域，其第一手来源指商家/中转站自己的公开报价，不是品牌
-官方报价。使用 `lib/public-data/direct-channels.ts`、`direct-transit.ts` 注册受审原站 ID，
+官方报价。中转原站使用 `lib/public-data/direct-transit.ts` 注册受审 ID；卡网当前没有启用
+直采适配器，后续新增时应建立独立 adapter，
 输出公开快照 schema，不写入下述官方目录。逐来源记录 `PUBLIC_DATA_SOURCE_REVIEW.md`，
 保持只读、无认证、限频、明确币种/单位、异常保留旧快照，并补充脱敏结构 fixture。
 该例外不改变品牌官方来源规则。

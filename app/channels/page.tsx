@@ -4,7 +4,6 @@ import {
   type PublicDirectorySearchParams,
 } from "@/components/channels-page";
 import { channelsPageMetadata } from "@/components/channels-page";
-import { isPublicDirectoryIndexingEnabled } from "@/lib/public-data/indexing";
 
 export const revalidate = 300;
 
@@ -14,10 +13,8 @@ export async function generateMetadata({
   searchParams: PublicDirectorySearchParams;
 }): Promise<Metadata> {
   const metadata = channelsPageMetadata("zh-CN");
-  const params = await searchParams;
-  return Object.keys(params).length || !isPublicDirectoryIndexingEnabled()
-    ? { ...metadata, robots: { index: false, follow: true } }
-    : metadata;
+  await searchParams;
+  return { ...metadata, robots: { index: false, follow: true } };
 }
 
 export default function ChannelsRoute({

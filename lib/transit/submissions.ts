@@ -22,6 +22,7 @@ export const TRANSIT_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 export const TRANSIT_VERIFICATION_MAX_ATTEMPTS = 5;
 export const TRANSIT_SUBMISSION_WINDOW_MS = 5 * 60 * 1000;
 export const TRANSIT_SUBMISSION_WINDOW_LIMIT = 5;
+export type SubmissionDirectory = "api-transit" | "channels";
 
 type MemoryVerification = {
   emailHash: string;
@@ -87,6 +88,14 @@ export function transitWebsiteKey(url: string): string {
     .replace(/\.$/, "")
     .replace(/^www\./, "");
   return `${hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+}
+
+export function directorySubmissionWebsiteKey(
+  url: string,
+  directory: SubmissionDirectory,
+): string {
+  const key = transitWebsiteKey(url);
+  return directory === "channels" ? `channels:${key}` : key;
 }
 
 export function transitSubmissionEmailHash(email: string): string {
@@ -199,10 +208,14 @@ export async function createTransitSubmission(input: {
   websiteUrl: string;
   description: string;
   ipAddress: string;
+  directory?: SubmissionDirectory;
   now?: Date;
 }): Promise<TransitSubmissionResult> {
   const now = input.now ?? new Date();
-  const websiteKey = transitWebsiteKey(input.websiteUrl);
+  const websiteKey = directorySubmissionWebsiteKey(
+    input.websiteUrl,
+    input.directory ?? "api-transit",
+  );
   const normalizedEmail = normalizeEmail(input.email);
   const secret = emailTokenSecret();
   const emailHash = transitSubmissionEmailHash(normalizedEmail);
