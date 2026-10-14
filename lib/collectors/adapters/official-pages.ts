@@ -1054,6 +1054,16 @@ function validGlmCodingPriceText(value: string | undefined): value is string {
   return Number.isFinite(amount) && amount >= 0.01 && amount <= 100_000;
 }
 
+function isGlmCodingPriceData(body: string): boolean {
+  // The named ClaudeCode chunk also declares V2/V3 team UI configuration,
+  // without any quote data. Billing tables are in shared route dependencies.
+  return (
+    /\bstepUnit:"[^"]+"/.test(body) ||
+    /\{type:"[^"]+",unitKey:"[^"]+",productId:"/.test(body) ||
+    /\b(?:items|plans|products|prices)=\[\s*\]/.test(body)
+  );
+}
+
 export async function findCompleteGlmCodingPlanChunk(
   chunkPaths: string[],
   loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
@@ -1075,7 +1085,10 @@ export async function findCompleteGlmCodingPlanChunk(
         ),
       );
       if (!Number.isSafeInteger(version)) return null;
-      candidates.push({ raw, version, offers: parseGlmCodingPlan(raw) });
+      const offers = parseGlmCodingPlan(raw);
+      if (offers.length > 0 || isGlmCodingPriceData(raw.body)) {
+        candidates.push({ raw, version, offers });
+      }
     } catch (error) {
       if (signal?.aborted) throw error;
       loadFailed = true;
@@ -1088,10 +1101,14 @@ export async function findCompleteGlmCodingPlanChunk(
     ...candidates.map((candidate) => candidate.version),
   );
   const complete = candidates.filter(
-    (candidate) =>
-      candidate.version === highestVersion &&
-      candidate.offers.length >= GLM_CODING_PLAN_MINIMUM_OFFERS,
+    (candidate) => candidate.version === highestVersion,
   );
+  if (
+    complete.some(
+      (candidate) => candidate.offers.length < GLM_CODING_PLAN_MINIMUM_OFFERS,
+    )
+  )
+    return null;
   const fingerprints = new Set(
     complete.map(({ offers }) => glmCodingPlanOfferFingerprint(offers)),
   );
@@ -1141,8 +1158,17 @@ export function parseGlmCodingPlan(
     return declarations[0];
   }
   for (const product of raw.body.matchAll(
-    /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
+    /\{type:"([^"]+)",unitKey:"([^"]+)",productId:"[^"]+"[^}]{0,600}\}/gi,
   )) {
+    if (
+      !/^(?:lite|pro|max)$/i.test(product[1]) ||
+      !/^(?:month|quarter|year)$/i.test(product[2])
+    ) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "GLM compact prices contain an unverified plan or billing period.",
+      );
+    }
     const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
     const unit = product[2].toLowerCase() as keyof typeof periodNames;
     const salePrice = product[0].match(

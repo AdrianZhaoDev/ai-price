@@ -1054,6 +1054,16 @@ ${completeRows}
       expect(
         await findCompleteGlmCodingPlanChunk(["old.js", "new.js"], loader),
       ).toBeNull();
+      const sameVersion = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(current)
+        .mockResolvedValueOnce(newer);
+      expect(
+        await findCompleteGlmCodingPlanChunk(
+          ["full.js", "partial.js"],
+          sameVersion,
+        ),
+      ).toBeNull();
     }
     const conflicting = vi
       .fn<(path: string) => Promise<RawCollectionResult>>()
@@ -1067,6 +1077,19 @@ ${completeRows}
       .mockResolvedValue(current);
     expect(
       await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], identical),
+    ).toBe(current);
+    const uiConfiguration = raw(
+      'const u="V3",h=Object.freeze({pro:{productName:"标准版",desc:"团队管理"}});',
+    );
+    const withUi = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValueOnce(uiConfiguration)
+      .mockResolvedValueOnce(current);
+    expect(
+      await findCompleteGlmCodingPlanChunk(
+        ["ClaudeCode.js", "shared.js"],
+        withUi,
+      ),
     ).toBe(current);
   });
 
@@ -1141,6 +1164,31 @@ ${completeRows}
     );
     expect(rendered).toHaveLength(1);
     expect(rendered[0].amountMinor).toBe(11800);
+  });
+
+  it("rejects newly added GLM compact plan types and billing periods", () => {
+    const products = ["lite", "pro", "max"]
+      .flatMap((plan) =>
+        ["month", "quarter", "year"].map(
+          (period) =>
+            `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:118,renewAmount:118}`,
+        ),
+      )
+      .join(",");
+    for (const [plan, period] of [
+      ["ultra", "month"],
+      ["lite", "week"],
+      ["enterprise", "year"],
+      ["lite", "one_time"],
+    ]) {
+      expect(() =>
+        parseGlmCodingPlan(
+          raw(
+            `const a="V3",items=[${products},{type:"${plan}",unitKey:"${period}",productId:"new",salePrice:199,renewAmount:199}];`,
+          ),
+        ),
+      ).toThrow(/unverified plan or billing period/);
+    }
   });
 
   it("requires Huawei MaaS's current model and price-type baseline", () => {
