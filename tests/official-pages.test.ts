@@ -123,6 +123,10 @@ describe("official table adapters", () => {
       "USD -19/月",
       "USD 0/月",
       "USD 1e9/月",
+      "USD 1000000000/月",
+      "USD 10000.01/月",
+      "CNY 1000000000/月",
+      "CNY 100000.01/月",
       "USD 19/年",
       "USD 19 USD 15/月",
       "JPY 1900/月",
@@ -133,6 +137,13 @@ describe("official table adapters", () => {
           parseKimiMembership(raw(body.replace("USD 19/月", invalid))),
         ).ok,
       ).toBe(false);
+    }
+    for (const valid of ["USD 10000/月", "CNY 100000/月"]) {
+      expect(
+        adapter.healthCheck(
+          parseKimiMembership(raw(body.replace("USD 19/月", valid))),
+        ).ok,
+      ).toBe(true);
     }
     expect(
       adapter.healthCheck(

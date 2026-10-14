@@ -204,8 +204,19 @@ export function parseKimiMembership(
     const price = displayPrice.match(
       /^(USD|US\$|\$|CNY|RMB|¥|￥)\s*(\d+(?:\.\d{1,2})?)\s*(?:\/(?:月|month)|per month)?$/i,
     );
-    if (!price || Number(price[2]) <= 0) return [];
-    if (/^(?:CNY|RMB|¥|￥)$/i.test(price[1])) return [cnyOffer(offerInput)];
+    if (!price) return [];
+    const isCny = /^(?:CNY|RMB|¥|￥)$/i.test(price[1]);
+    const amount = Number(price[2]);
+    // Loose currency-specific ceilings catch corrupted amounts without tying
+    // the parser to today's four exact prices.
+    const maximumMonthlyAmount = isCny ? 100_000 : 10_000;
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > maximumMonthlyAmount
+    )
+      return [];
+    if (isCny) return [cnyOffer(offerInput)];
     return [usdOffer(offerInput)];
   });
 }
