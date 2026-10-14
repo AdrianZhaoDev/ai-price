@@ -1032,7 +1032,61 @@ export function glmCodingPlanPriceChunkPaths(
 }
 
 function glmCodingPlanVersionDeclarations(body: string) {
-  return [...body.matchAll(/(?:\bconst\s+|,)[\w$]+="V(\d+)"(?=[,;])/g)];
+  const tokens = glmCodingTokens(body);
+  const declarations: { version: number; index: number; end: number }[] = [];
+  const activeDeclarations = new Set<number>();
+  let depth = 0;
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === "symbol" && ["{", "[", "("].includes(token.text)) {
+      depth++;
+      continue;
+    }
+    if (token.kind === "symbol" && ["}", "]", ")"].includes(token.text)) {
+      activeDeclarations.delete(depth);
+      depth--;
+      continue;
+    }
+    if (token.kind === "symbol" && token.text === ";") {
+      activeDeclarations.delete(depth);
+      continue;
+    }
+    if (
+      token.kind === "word" &&
+      ["const", "let", "var"].includes(token.text) &&
+      (tokens[index + 1]?.kind === "word" ||
+        ["{", "["].includes(tokens[index + 1]?.text ?? ""))
+    ) {
+      activeDeclarations.add(depth);
+      continue;
+    }
+    const previous = tokens[index - 1];
+    const isDeclarator =
+      (previous?.kind === "word" &&
+        ["const", "let", "var"].includes(previous.text)) ||
+      (previous?.kind === "symbol" &&
+        previous.text === "," &&
+        activeDeclarations.has(depth));
+    const value = tokens[index + 2];
+    const next = tokens[index + 3];
+    if (
+      token.kind !== "word" ||
+      !isDeclarator ||
+      tokens[index + 1]?.kind !== "symbol" ||
+      tokens[index + 1]?.text !== "=" ||
+      value?.kind !== "string" ||
+      next?.kind !== "symbol" ||
+      ![",", ";"].includes(next.text)
+    )
+      continue;
+    const version = value.text.match(/^V(\d+)$/)?.[1];
+    if (version)
+      declarations.push({
+        version: Number(version),
+        index: previous.index,
+        end: value.end,
+      });
+  }
+  return declarations;
 }
 
 function glmCodingPlanOfferFingerprint(offers: NormalizedOffer[]): string {
@@ -1058,11 +1112,12 @@ type GlmCompactProduct = Partial<
   Record<"type" | "unitkey" | "productid" | "saleprice" | "renewamount", string>
 >;
 
-function glmCompactProducts(body: string): GlmCompactProduct[] {
-  if (!/\bproductId\b/i.test(body) || !/\bunitKey\b/i.test(body)) return [];
+function glmCodingTokens(body: string) {
   const tokens: {
     text: string;
     kind: "string" | "number" | "word" | "symbol" | "opaque";
+    index: number;
+    end: number;
   }[] = [];
   const regexPrefixes = new Set([
     "=",
@@ -1114,6 +1169,8 @@ function glmCompactProducts(body: string): GlmCompactProduct[] {
           text !== undefined && !(character === "`" && text.includes("${"))
             ? "string"
             : "opaque",
+        index: start,
+        end: index,
       });
       continue;
     }
@@ -1132,27 +1189,48 @@ function glmCompactProducts(body: string): GlmCompactProduct[] {
         if (next === "/" && !inClass) break;
       }
       while (/[a-z]/i.test(body[index] ?? "")) index++;
-      tokens.push({ text: body.slice(start, index), kind: "opaque" });
+      tokens.push({
+        text: body.slice(start, index),
+        kind: "opaque",
+        index: start,
+        end: index,
+      });
       continue;
     }
     const number = body
       .slice(index)
       .match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)?.[0];
     if (number) {
-      tokens.push({ text: number, kind: "number" });
+      tokens.push({
+        text: number,
+        kind: "number",
+        index,
+        end: index + number.length,
+      });
       index += number.length;
       continue;
     }
     const word = body.slice(index).match(/^[$A-Za-z_][\w$]*/)?.[0];
     if (word) {
-      tokens.push({ text: word, kind: "word" });
+      tokens.push({
+        text: word,
+        kind: "word",
+        index,
+        end: index + word.length,
+      });
       index += word.length;
       continue;
     }
-    tokens.push({ text: character, kind: "symbol" });
+    tokens.push({ text: character, kind: "symbol", index, end: index + 1 });
     index++;
   }
 
+  return tokens;
+}
+
+function glmCompactProducts(body: string): GlmCompactProduct[] {
+  if (!/\bproductId\b/i.test(body) || !/\bunitKey\b/i.test(body)) return [];
+  const tokens = glmCodingTokens(body);
   const frames: {
     opener: string;
     fields: GlmCompactProduct;
@@ -1244,8 +1322,8 @@ export async function findCompleteGlmCodingPlanChunk(
       const raw = await loadChunk(chunkPath);
       const version = Math.max(
         0,
-        ...glmCodingPlanVersionDeclarations(raw.body).map((match) =>
-          Number(match[1]),
+        ...glmCodingPlanVersionDeclarations(raw.body).map(
+          (match) => match.version,
         ),
       );
       if (!Number.isSafeInteger(version)) return null;
@@ -1290,17 +1368,14 @@ export function parseGlmCodingPlan(
   const compactOffers = new Map<string, NormalizedOffer>();
   const versions = glmCodingPlanVersionDeclarations(raw.body);
   if (versions.length > 0) {
-    const highest = Math.max(...versions.map((version) => Number(version[1])));
+    const highest = Math.max(...versions.map((version) => version.version));
     if (!Number.isSafeInteger(highest)) return [];
     const declarations = versions.flatMap((version, index) => {
-      if (Number(version[1]) !== highest) return [];
+      if (version.version !== highest) return [];
       return [
         parseGlmCodingPlan({
           ...raw,
-          body: raw.body.slice(
-            version.index! + version[0].length,
-            versions[index + 1]?.index,
-          ),
+          body: raw.body.slice(version.end, versions[index + 1]?.index),
         }),
       ];
     });

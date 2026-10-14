@@ -1226,6 +1226,39 @@ ${completeRows}
     ).toEqual([]);
   });
 
+  it("ignores fake GLM version declarations in comments, strings, templates and regex literals", async () => {
+    const products = (price: number) =>
+      ["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{productId:"${plan}-${period}",type:"${plan}",unitKey:"${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .join(",");
+    const decoy = `,x="V4",items=[${products(49)}]`;
+    const actual = `const a="V3",items=[${products(118)}];`;
+    const escapedRegex = decoy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const body of [
+      `/*${decoy}*/${actual}`,
+      `${actual}/*${decoy}*/`,
+      `const description=${JSON.stringify(decoy)};${actual}`,
+      `const description=\`${decoy}\`;${actual}`,
+      `const pattern=/${escapedRegex}/g;${actual}`,
+      `function unused(a=0,x="V4",items=[]){return items;} ${actual}`,
+    ]) {
+      const offers = parseGlmCodingPlan(raw(body));
+      expect(offers).toHaveLength(9);
+      expect(offers.every((offer) => offer.amountMinor === 11800)).toBe(true);
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValue(raw(body));
+      expect(
+        await findCompleteGlmCodingPlanChunk(["current.js"], loader),
+      ).not.toBeNull();
+    }
+  });
+
   it("requires Huawei MaaS's current model and price-type baseline", () => {
     const baseline = parseHuaweiMaaSApi(
       raw(readFileSync("tests/fixtures/huawei-maas-2026-10-14.html", "utf8")),
