@@ -161,6 +161,22 @@ describe("official table adapters", () => {
     ).toBe(false);
   });
 
+  it("does not select an annual monthly-equivalent column placed before Kimi's monthly column", () => {
+    const body = `<table><tr><th>Plan</th><th>Annual (monthly equivalent)</th><th>Monthly</th></tr>
+      <tr><td>Plus</td><td>USD 15/month</td><td>USD 19/month</td></tr>
+      <tr><td>Pro</td><td>USD 31/month</td><td>USD 39/month</td></tr>
+      <tr><td>Max</td><td>USD 79/month</td><td>USD 99/month</td></tr>
+      <tr><td>Ultra</td><td>USD 159/month</td><td>USD 199/month</td></tr></table>`;
+    expect(
+      parseKimiMembership(raw(body)).map((offer) => offer.amountMinor),
+    ).toEqual([1900, 3900, 9900, 19900]);
+    expect(
+      parseKimiMembership(
+        raw(body.replace("<th>Monthly</th>", "<th>Yearly</th>")),
+      ),
+    ).toEqual([]);
+  });
+
   it.each(["Enterprise", "Allegro", "Plus"])(
     "rejects Kimi's four-row table when Ultra is replaced by %s",
     (replacement) => {
@@ -840,12 +856,14 @@ ${completeRows}
     const glm = parseGlmCodingPlan(
       raw(
         [
+          'const a="V2",items=[',
           '{type:"lite",unitKey:"month",productId:"lite-v2",salePrice:49,renewAmount:49}',
           '{type:"pro",unitKey:"month",productId:"pro-v2",salePrice:149,renewAmount:149}',
           '{type:"max",unitKey:"month",productId:"max-v2",salePrice:469,renewAmount:469}',
           '{type:"lite",unitKey:"quarter",productId:"lite-quarter-v2",salePrice:132.3,renewAmount:132.3}',
           '{type:"pro",unitKey:"quarter",productId:"pro-quarter-v2",salePrice:402.3,renewAmount:402.3}',
           '{type:"max",unitKey:"quarter",productId:"max-quarter-v2",salePrice:1266.3,renewAmount:1266.3}',
+          '],b="V3",items=[',
           '{type:"lite",unitKey:"month",productId:"lite-v3",salePrice:118,renewAmount:118}',
           '{type:"pro",unitKey:"month",productId:"pro-v3",salePrice:538,renewAmount:538}',
           '{type:"max",unitKey:"month",productId:"max-v3",salePrice:1078,renewAmount:1078}',
@@ -855,6 +873,7 @@ ${completeRows}
           '{type:"lite",unitKey:"year",productId:"lite-year-v3",salePrice:82.6,renewAmount:991.2}',
           '{type:"pro",unitKey:"year",productId:"pro-year-v3",salePrice:376.6,renewAmount:4519.2}',
           '{type:"max",unitKey:"year",productId:"max-year-v3",salePrice:754.6,renewAmount:9055.2}',
+          "];",
         ].join(","),
       ),
     );
@@ -1049,6 +1068,79 @@ ${completeRows}
     expect(
       await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], identical),
     ).toBe(current);
+  });
+
+  it("rejects conflicting highest-version GLM declarations and duplicate plan prices within a chunk", () => {
+    const products = (price: number) =>
+      ["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .join(",");
+    const first = `const a="V3",items=[${products(118)}]`;
+    const same = `,b="V3",items=[${products(118)}];`;
+    const conflicting = `,b="V3",items=[${products(49)}];`;
+    expect(parseGlmCodingPlan(raw(first + same))).toHaveLength(9);
+    expect(() => parseGlmCodingPlan(raw(first + conflicting))).toThrow(
+      /Conflicting/,
+    );
+    expect(() => parseGlmCodingPlan(raw(`${first},b="V3",items=[];`))).toThrow(
+      /incomplete/,
+    );
+    expect(() =>
+      parseGlmCodingPlan(
+        raw(
+          `const a="V3",items=[${products(118)},{type:"lite",unitKey:"month",productId:"duplicate",salePrice:49,renewAmount:49}];`,
+        ),
+      ),
+    ).toThrow(/Conflicting/);
+  });
+
+  it("validates GLM decimal amounts before creating any display string", () => {
+    for (const period of ["month", "quarter", "year"]) {
+      const payload = (price: string) =>
+        raw(
+          `{type:"lite",unitKey:"${period}",productId:"plan",salePrice:${price},renewAmount:${price}}`,
+        );
+      for (const invalid of [
+        "0",
+        "0.0000006",
+        "0.000001",
+        "0.001",
+        "100000.001",
+        "1000000",
+        "1e9",
+        "NaN",
+        "-118",
+      ]) {
+        expect(parseGlmCodingPlan(payload(invalid))).toEqual([]);
+      }
+      for (const [valid, amountMinor] of [
+        ["0.01", 1],
+        ["118.25", 11825],
+        ["100000", 10000000],
+      ] as const) {
+        expect(parseGlmCodingPlan(payload(valid))).toMatchObject([
+          { amountMinor },
+        ]);
+      }
+    }
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"old",productName:"Lite",salePrice:0.0000006,unit:"month",version:"v2"}',
+        ),
+      ),
+    ).toEqual([]);
+    expect(parseGlmCodingPlan(raw("Lite\n￥0.0000006/月"))).toEqual([]);
+    const rendered = parseGlmCodingPlan(
+      raw("Lite\n￥118/月\n下个季度续费金额：￥0.0000006"),
+    );
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0].amountMinor).toBe(11800);
   });
 
   it("requires Huawei MaaS's current model and price-type baseline", () => {

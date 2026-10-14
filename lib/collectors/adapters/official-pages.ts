@@ -173,17 +173,18 @@ function usdOffer(
 export function parseKimiMembership(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
+  const isMonthlyHeader = (cell: string) =>
+    /连续包月|月付|monthly/i.test(cell) &&
+    !/年|annual|year|equivalent/i.test(cell);
   const rows = allTableRows(raw.body).find((candidate) => {
     const header = candidate[0]?.join(" ") ?? "";
     return (
-      /套餐|方案|plan/i.test(header) && /连续包月|月付|monthly/i.test(header)
+      /套餐|方案|plan/i.test(header) && candidate[0]?.some(isMonthlyHeader)
     );
   });
   if (!rows) return [];
 
-  const monthlyIndex = (rows[0] ?? []).findIndex((cell) =>
-    /连续包月|月付|monthly/i.test(cell),
-  );
+  const monthlyIndex = (rows[0] ?? []).findIndex(isMonthlyHeader);
   if (monthlyIndex < 0) return [];
 
   return rows.slice(1).flatMap((cells) => {
@@ -1034,6 +1035,25 @@ function glmCodingPlanVersionDeclarations(body: string) {
   return [...body.matchAll(/(?:\bconst\s+|,)[\w$]+="V(\d+)"(?=[,;])/g)];
 }
 
+function glmCodingPlanOfferFingerprint(offers: NormalizedOffer[]): string {
+  return JSON.stringify(
+    offers
+      .map((offer) => [
+        offer.canonicalPlanSlug,
+        offer.currency,
+        offer.billingPeriod,
+        offer.amountMinor,
+      ])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+  );
+}
+
+function validGlmCodingPriceText(value: string | undefined): value is string {
+  if (!value || !/^\d+(?:\.\d{1,2})?$/.test(value)) return false;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0.01 && amount <= 100_000;
+}
+
 export async function findCompleteGlmCodingPlanChunk(
   chunkPaths: string[],
   loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
@@ -1073,20 +1093,7 @@ export async function findCompleteGlmCodingPlanChunk(
       candidate.offers.length >= GLM_CODING_PLAN_MINIMUM_OFFERS,
   );
   const fingerprints = new Set(
-    complete.map(({ offers }) =>
-      JSON.stringify(
-        offers
-          .map((offer) => [
-            offer.canonicalPlanSlug,
-            offer.currency,
-            offer.billingPeriod,
-            offer.amountMinor,
-          ])
-          .sort((left, right) =>
-            String(left[0]).localeCompare(String(right[0])),
-          ),
-      ),
-    ),
+    complete.map(({ offers }) => glmCodingPlanOfferFingerprint(offers)),
   );
   return fingerprints.size === 1 ? complete[0].raw : null;
 }
@@ -1101,45 +1108,72 @@ export function parseGlmCodingPlan(
   } as const;
   const compactOffers = new Map<string, NormalizedOffer>();
   const versions = glmCodingPlanVersionDeclarations(raw.body);
-  const latestVersion = versions.reduce<RegExpMatchArray | undefined>(
-    (latest, version) =>
-      !latest || Number(version[1]) >= Number(latest[1]) ? version : latest,
-    undefined,
-  );
-  const nextVersion = latestVersion
-    ? versions.find((version) => version.index! > latestVersion.index!)
-    : undefined;
-  const compactBody = latestVersion
-    ? raw.body.slice(latestVersion.index, nextVersion?.index)
-    : raw.body;
-  for (const product of compactBody.matchAll(
+  if (versions.length > 0) {
+    const highest = Math.max(...versions.map((version) => Number(version[1])));
+    if (!Number.isSafeInteger(highest)) return [];
+    const declarations = versions.flatMap((version, index) => {
+      if (Number(version[1]) !== highest) return [];
+      return [
+        parseGlmCodingPlan({
+          ...raw,
+          body: raw.body.slice(
+            version.index! + version[0].length,
+            versions[index + 1]?.index,
+          ),
+        }),
+      ];
+    });
+    if (declarations.length === 1) return declarations[0];
+    const fingerprints = new Set(
+      declarations.map(glmCodingPlanOfferFingerprint),
+    );
+    if (
+      fingerprints.size !== 1 ||
+      declarations.some(
+        (offers) => offers.length < GLM_CODING_PLAN_MINIMUM_OFFERS,
+      )
+    ) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "Conflicting or incomplete GLM tables share the highest version.",
+      );
+    }
+    return declarations[0];
+  }
+  for (const product of raw.body.matchAll(
     /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
   )) {
     const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
-    const unit = product[2] as keyof typeof periodNames;
-    const salePrice = Number(
-      product[0].match(/salePrice:(\d+(?:\.\d+)?)(?=[,}])/)?.[1],
-    );
-    const renewalTotal = Number(
-      product[0].match(/renewAmount:(\d+(?:\.\d+)?)(?=[,}])/)?.[1],
-    );
+    const unit = product[2].toLowerCase() as keyof typeof periodNames;
+    const salePrice = product[0].match(
+      /salePrice:(\d+(?:\.\d+)?)(?=[,}])/,
+    )?.[1];
+    const renewalTotal = product[0].match(
+      /renewAmount:(\d+(?:\.\d+)?)(?=[,}])/,
+    )?.[1];
     const price = unit === "month" ? salePrice : renewalTotal;
-    if (!Number.isFinite(price) || price <= 0) continue;
+    if (!validGlmCodingPriceText(price)) continue;
 
-    compactOffers.set(
-      `${plan}-${unit}`,
-      cnyOffer({
-        providerSlug: "glm-coding-plan",
-        planSlug: `glm-coding-${plan.toLowerCase()}-${unit}`,
-        planName: `${plan} · ${periodNames[unit]}`,
-        displayPrice: `¥${price}`,
-        billingPeriod: unit,
-        channel: "official_web",
-        sourceUrl: raw.sourceUrl,
-        observedAt: raw.observedAt,
-        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
-      }),
-    );
+    const key = `${plan}-${unit}`;
+    const offer = cnyOffer({
+      providerSlug: "glm-coding-plan",
+      planSlug: `glm-coding-${plan.toLowerCase()}-${unit}`,
+      planName: `${plan} · ${periodNames[unit]}`,
+      displayPrice: `¥${price}`,
+      billingPeriod: unit,
+      channel: "official_web",
+      sourceUrl: raw.sourceUrl,
+      observedAt: raw.observedAt,
+      parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
+    });
+    const previous = compactOffers.get(key);
+    if (previous && previous.amountMinor !== offer.amountMinor) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "Conflicting GLM quotes share a plan identity.",
+      );
+    }
+    compactOffers.set(key, offer);
   }
   if (compactOffers.size > 0 || versions.length > 0)
     return [...compactOffers.values()];
@@ -1153,7 +1187,7 @@ export function parseGlmCodingPlan(
     const salePrice = product[0].match(/salePrice:([\d.]+)/)?.[1];
     const unit = product[0].match(/unit:"(month|quarter|year)"/)?.[1] as
       keyof typeof periodNames | undefined;
-    if (!salePrice || !unit) return [];
+    if (!validGlmCodingPriceText(salePrice) || !unit) return [];
     return [
       cnyOffer({
         providerSlug: "glm-coding-plan",
@@ -1176,13 +1210,13 @@ export function parseGlmCodingPlan(
     ),
   ].flatMap((product) => {
     const monthlyPrices = [...product[2].matchAll(/[¥￥]\s*([\d.]+)\/月/g)].map(
-      (match) => Number(match[1]),
+      (match) => match[1],
     );
-    const quarterTotal = Number(
-      product[2].match(/下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/)?.[1],
-    );
+    const quarterTotal = product[2].match(
+      /下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/,
+    )?.[1];
     const standardMonth = monthlyPrices[1] ?? monthlyPrices[0];
-    if (!Number.isFinite(standardMonth)) {
+    if (!validGlmCodingPriceText(standardMonth)) {
       return [];
     }
 
@@ -1200,7 +1234,7 @@ export function parseGlmCodingPlan(
         parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
-    if (!Number.isFinite(quarterTotal)) return offers;
+    if (!validGlmCodingPriceText(quarterTotal)) return offers;
     return [
       ...offers,
       cnyOffer({
