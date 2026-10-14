@@ -1030,22 +1030,65 @@ export function glmCodingPlanPriceChunkPaths(
   });
 }
 
+function glmCodingPlanVersionDeclarations(body: string) {
+  return [...body.matchAll(/(?:\bconst\s+|,)[\w$]+="V(\d+)"(?=[,;])/g)];
+}
+
 export async function findCompleteGlmCodingPlanChunk(
   chunkPaths: string[],
   loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
   signal?: AbortSignal,
 ): Promise<RawCollectionResult | null> {
+  const candidates: {
+    raw: RawCollectionResult;
+    version: number;
+    offers: NormalizedOffer[];
+  }[] = [];
+  let loadFailed = false;
   for (const chunkPath of chunkPaths) {
     try {
       const raw = await loadChunk(chunkPath);
-      if (parseGlmCodingPlan(raw).length >= GLM_CODING_PLAN_MINIMUM_OFFERS) {
-        return raw;
-      }
+      const version = Math.max(
+        0,
+        ...glmCodingPlanVersionDeclarations(raw.body).map((match) =>
+          Number(match[1]),
+        ),
+      );
+      if (!Number.isSafeInteger(version)) return null;
+      candidates.push({ raw, version, offers: parseGlmCodingPlan(raw) });
     } catch (error) {
       if (signal?.aborted) throw error;
+      loadFailed = true;
     }
   }
-  return null;
+  // A failed dependency could contain the current version. Never accept an
+  // older complete table while another relevant route asset is unverified.
+  if (loadFailed || candidates.length === 0) return null;
+  const highestVersion = Math.max(
+    ...candidates.map((candidate) => candidate.version),
+  );
+  const complete = candidates.filter(
+    (candidate) =>
+      candidate.version === highestVersion &&
+      candidate.offers.length >= GLM_CODING_PLAN_MINIMUM_OFFERS,
+  );
+  const fingerprints = new Set(
+    complete.map(({ offers }) =>
+      JSON.stringify(
+        offers
+          .map((offer) => [
+            offer.canonicalPlanSlug,
+            offer.currency,
+            offer.billingPeriod,
+            offer.amountMinor,
+          ])
+          .sort((left, right) =>
+            String(left[0]).localeCompare(String(right[0])),
+          ),
+      ),
+    ),
+  );
+  return fingerprints.size === 1 ? complete[0].raw : null;
 }
 
 export function parseGlmCodingPlan(
@@ -1057,9 +1100,7 @@ export function parseGlmCodingPlan(
     year: "年付",
   } as const;
   const compactOffers = new Map<string, NormalizedOffer>();
-  const versions = [
-    ...raw.body.matchAll(/(?:\bconst\s+|,)[\w$]+="V(\d+)"(?=[,;])/g),
-  ];
+  const versions = glmCodingPlanVersionDeclarations(raw.body);
   const latestVersion = versions.reduce<RegExpMatchArray | undefined>(
     (latest, version) =>
       !latest || Number(version[1]) >= Number(latest[1]) ? version : latest,

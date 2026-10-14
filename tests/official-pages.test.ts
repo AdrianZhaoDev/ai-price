@@ -897,7 +897,7 @@ ${completeRows}
     ]);
   });
 
-  it("continues after a failed GLM chunk candidate", async () => {
+  it("loads remaining GLM candidates but rejects an unverified route dependency", async () => {
     const complete = raw(
       [
         '{type:"lite",unitKey:"month",productId:"lite-month",salePrice:118,renewAmount:118}',
@@ -918,7 +918,7 @@ ${completeRows}
 
     await expect(
       findCompleteGlmCodingPlanChunk(["first.js", "second.js"], loadChunk),
-    ).resolves.toBe(complete);
+    ).resolves.toBeNull();
     expect(loadChunk).toHaveBeenNthCalledWith(1, "first.js");
     expect(loadChunk).toHaveBeenNthCalledWith(2, "second.js");
   });
@@ -994,6 +994,61 @@ ${completeRows}
     );
     expect(incompleteLatest).toHaveLength(8);
     expect(adapter.healthCheck(incompleteLatest).ok).toBe(false);
+  });
+
+  it("selects the highest GLM version across all route chunks and rejects ambiguous or incomplete current prices", async () => {
+    const block = (version: number, price: number, count = 9) =>
+      raw(
+        `const v="V${version}",items=[${["lite", "pro", "max"]
+          .flatMap((plan) =>
+            ["month", "quarter", "year"].map(
+              (period) =>
+                `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+            ),
+          )
+          .slice(0, count)
+          .join(",")}];`,
+      );
+    const old = block(2, 49);
+    const current = block(3, 118);
+    for (const candidates of [
+      [old, current],
+      [current, old],
+    ]) {
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(candidates[0])
+        .mockResolvedValueOnce(candidates[1]);
+      expect(
+        await findCompleteGlmCodingPlanChunk(
+          ["ClaudeCode.js", "3323.js"],
+          loader,
+        ),
+      ).toBe(current);
+      expect(loader).toHaveBeenCalledTimes(2);
+    }
+    for (const newer of [block(3, 118, 8), block(3, 118, 0)]) {
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(old)
+        .mockResolvedValueOnce(newer);
+      expect(
+        await findCompleteGlmCodingPlanChunk(["old.js", "new.js"], loader),
+      ).toBeNull();
+    }
+    const conflicting = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(block(3, 99));
+    expect(
+      await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], conflicting),
+    ).toBeNull();
+    const identical = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValue(current);
+    expect(
+      await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], identical),
+    ).toBe(current);
   });
 
   it("requires Huawei MaaS's current model and price-type baseline", () => {
