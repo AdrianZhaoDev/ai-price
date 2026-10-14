@@ -1438,10 +1438,13 @@ function kimiMembershipHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const missingPlans = KIMI_MEMBERSHIP_REQUIRED_PLANS.filter(
     (slug) => !planSlugs.has(slug),
   );
+  const currencies = new Set(offers.map((offer) => offer.currency));
   if (
     offers.length !== KIMI_MEMBERSHIP_REQUIRED_PLANS.length ||
     planSlugs.size !== offers.length ||
     missingPlans.length > 0 ||
+    currencies.size !== 1 ||
+    [...currencies].some((currency) => !["USD", "CNY"].includes(currency)) ||
     offers.some((offer) => offer.billingPeriod !== "month")
   ) {
     return {
@@ -1453,6 +1456,7 @@ function kimiMembershipHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         requiredPlans: [...KIMI_MEMBERSHIP_REQUIRED_PLANS],
         missingPlans,
         parsedPlans: [...planSlugs].sort(),
+        currencies: [...currencies].sort(),
       },
     };
   }
@@ -1463,6 +1467,9 @@ const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
 // CNY minor units per million tokens. Current public prices are far below this
 // loose ceiling; corrupted positive numbers must not become live quotes.
 const HUAWEI_MAAS_MAX_AMOUNT_MINOR = 1_000_000;
+// price_observations.amount_minor has scale 2; smaller positive values cannot
+// reliably preserve this paid-price baseline when persisted.
+const HUAWEI_MAAS_MIN_AMOUNT_MINOR = 0.01;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",
@@ -1571,6 +1578,7 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
     (offer) =>
       offer.currency !== "CNY" ||
       offer.unit !== "/百万 tokens" ||
+      offer.amountMinor! < HUAWEI_MAAS_MIN_AMOUNT_MINOR ||
       offer.amountMinor! > HUAWEI_MAAS_MAX_AMOUNT_MINOR,
   );
   if (
@@ -1596,6 +1604,7 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         missingPlans,
         unexpectedPlans,
         maximumAmountMinor: HUAWEI_MAAS_MAX_AMOUNT_MINOR,
+        minimumAmountMinor: HUAWEI_MAAS_MIN_AMOUNT_MINOR,
         abnormalOffers: abnormalOffers.map((offer) => ({
           planSlug: offer.canonicalPlanSlug,
           amountMinor: offer.amountMinor,

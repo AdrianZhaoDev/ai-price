@@ -138,13 +138,20 @@ describe("official table adapters", () => {
         ).ok,
       ).toBe(false);
     }
-    for (const valid of ["USD 10000/月", "CNY 100000/月"]) {
-      expect(
-        adapter.healthCheck(
-          parseKimiMembership(raw(body.replace("USD 19/月", valid))),
-        ).ok,
-      ).toBe(true);
-    }
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(raw(body.replace("USD 19/月", "USD 10000/月"))),
+      ).ok,
+    ).toBe(true);
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(
+          raw(
+            body.replaceAll("USD", "CNY").replace("CNY 19/月", "CNY 100000/月"),
+          ),
+        ),
+      ).ok,
+    ).toBe(true);
     expect(
       adapter.healthCheck(
         parseKimiMembership(
@@ -174,6 +181,48 @@ describe("official table adapters", () => {
       });
     },
   );
+
+  it("requires a single supported currency across Kimi's four plans", () => {
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    )!;
+    const body = `<table><tr><th>套餐</th><th>月付</th></tr>
+      <tr><td>Plus</td><td>USD 19/月</td></tr>
+      <tr><td>Pro</td><td>USD 39/月</td></tr>
+      <tr><td>Max</td><td>USD 99/月</td></tr>
+      <tr><td>Ultra</td><td>USD 199/月</td></tr></table>`;
+    const current = parseKimiMembership(raw(body));
+    expect(adapter.healthCheck(current).ok).toBe(true);
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(raw(body.replaceAll("USD", "CNY"))),
+      ).ok,
+    ).toBe(true);
+    for (const mixed of [
+      body.replace("USD 19/月", "CNY 19/月"),
+      body.replaceAll("USD", "CNY").replace("CNY 19/月", "USD 19/月"),
+    ]) {
+      const offers = parseKimiMembership(raw(mixed));
+      expect(offers).toHaveLength(4);
+      expect(adapter.healthCheck(offers)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: { currencies: ["CNY", "USD"] },
+      });
+    }
+    expect(
+      adapter.healthCheck(
+        current.map((offer) => ({ ...offer, currency: "EUR" })),
+      ).ok,
+    ).toBe(false);
+    for (const excessive of ["CNY 100000.01/月", "CNY 1000000000/月"]) {
+      const offers = parseKimiMembership(
+        raw(body.replaceAll("USD", "CNY").replace("CNY 19/月", excessive)),
+      );
+      expect(offers).toHaveLength(3);
+      expect(adapter.healthCheck(offers).ok).toBe(false);
+    }
+  });
 
   it("accepts reordered current Kimi plans but rejects an extra or legacy plan set", () => {
     const adapter = officialPageAdapters.find(
@@ -1045,8 +1094,11 @@ ${completeRows}
       html.replace("<td>0.75</td>", "<td></td>"),
       html.replace("<td>0.75</td>", "<td>1000000000</td>"),
       html.replace("<td>0.75</td>", "<td>10000.01</td>"),
+      html.replace("<td>0.75</td>", "<td>0</td>"),
+      html.replace("<td>0.75</td>", "<td>0.000001</td>"),
       html.replace("<td>0.75</td>", "<td>1e9</td>"),
       html.replace("思考模式：7.5", "思考模式：1000000000"),
+      html.replace("思考模式：7.5", "思考模式：0"),
       html.replace("思考模式：7.5", "思考模式：1e9"),
     ]) {
       expect(adapter?.healthCheck(parseHuaweiMaaSApi(raw(broken))).ok).toBe(
@@ -1057,6 +1109,13 @@ ${completeRows}
       adapter?.healthCheck(
         parseHuaweiMaaSApi(
           raw(html.replace("<td>0.75</td>", "<td>10000</td>")),
+        ),
+      ).ok,
+    ).toBe(true);
+    expect(
+      adapter?.healthCheck(
+        parseHuaweiMaaSApi(
+          raw(html.replace("<td>0.75</td>", "<td>0.0001</td>")),
         ),
       ).ok,
     ).toBe(true);
