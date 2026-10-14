@@ -1479,6 +1479,62 @@ const HUAWEI_MAAS_REQUIRED_PRICE_TYPES = [
   "output",
 ] as const;
 
+// Exact public quote identities verified on 2026-10-14. Amount changes remain
+// collectable; tier/model additions or removals require a new verified baseline.
+const HUAWEI_MAAS_VERIFIED_OFFER_SLUGS = [
+  "openpangu-2-0-pro-cached_input-输入-缓存命中-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-input-输入-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-output-输出-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-cached_input-输入-缓存命中-华为云-maas-否-token-32k",
+  "openpangu-2-0-pro-input-输入-华为云-maas-否-token-32k",
+  "openpangu-2-0-pro-output-输出-华为云-maas-否-token-32k",
+  "openpangu-2-0-flash-cached_input-输入-缓存命中-华为云-maas-否",
+  "openpangu-2-0-flash-input-输入-华为云-maas-否",
+  "openpangu-2-0-flash-output-输出-华为云-maas-否",
+  "glm-5-3-cached_input-输入-缓存命中-华为云-maas-否",
+  "glm-5-3-input-输入-华为云-maas-否",
+  "glm-5-3-output-输出-华为云-maas-否",
+  "glm-5-2-arkts-spark-cached_input-输入-缓存命中-华为云-maas-否",
+  "glm-5-2-arkts-spark-input-输入-华为云-maas-否",
+  "glm-5-2-arkts-spark-output-输出-华为云-maas-否",
+  "glm-5-2-input-输入-华为云-maas-是-时段1",
+  "glm-5-2-output-输出-华为云-maas-是-时段1",
+  "glm-5-2-input-输入-华为云-maas-是-时段2",
+  "glm-5-2-output-输出-华为云-maas-是-时段2",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-input-输入-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-output-输出-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-input-输入-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-output-输出-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-input-输入-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-output-输出-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-token-32k-时段2",
+  "glm-5-1-input-输入-华为云-maas-是-token-32k-时段2",
+  "glm-5-1-output-输出-华为云-maas-是-token-32k-时段2",
+  "kimi-k2-6-input-输入-华为云-maas-是-时段1",
+  "kimi-k2-6-output-输出-华为云-maas-是-时段1",
+  "kimi-k2-6-input-输入-华为云-maas-是-时段2",
+  "kimi-k2-6-output-输出-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-cached_input-输入-缓存命中-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-input-输入-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-output-输出-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-cached_input-输入-缓存命中-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-input-输入-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-output-输出-华为云-maas-是-时段2",
+  "deepseek-v4-flash-input-输入-华为云-maas-是-时段1",
+  "deepseek-v4-flash-output-输出-华为云-maas-是-时段1",
+  "deepseek-v4-flash-input-输入-华为云-maas-是-时段2",
+  "deepseek-v4-flash-output-输出-华为云-maas-是-时段2",
+  "qwen3-30b-a3b-input-输入-华为云-maas-否",
+  "qwen3-30b-a3b-output-输出-华为云-maas-否-思考模式",
+  "qwen3-30b-a3b-output-输出-华为云-maas-否-非思考模式",
+  "qwen3-32b-input-输入-华为云-maas-否",
+  "qwen3-32b-output-输出-华为云-maas-否-思考模式",
+  "qwen3-32b-output-输出-华为云-maas-否-非思考模式",
+] as const;
+
 function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const baseHealth = officialPageHealthCheck(
     offers,
@@ -1500,7 +1556,22 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const missingModels = HUAWEI_MAAS_REQUIRED_MODELS.filter(
     (modelName) => !modelNames.has(modelName),
   );
-  if (missingModels.length > 0 || missingPriceTypes.length > 0) {
+  const planSlugs = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+  const verifiedSlugs = new Set<string>(HUAWEI_MAAS_VERIFIED_OFFER_SLUGS);
+  const missingPlans = HUAWEI_MAAS_VERIFIED_OFFER_SLUGS.filter(
+    (slug) => !planSlugs.has(slug),
+  );
+  const unexpectedPlans = [...planSlugs].filter(
+    (slug) => slug === null || !verifiedSlugs.has(slug),
+  );
+  if (
+    missingModels.length > 0 ||
+    missingPriceTypes.length > 0 ||
+    missingPlans.length > 0 ||
+    unexpectedPlans.length > 0 ||
+    offers.length !== verifiedSlugs.size ||
+    planSlugs.size !== offers.length
+  ) {
     return {
       ok: false,
       code: "STRUCTURE_CHANGED",
@@ -1512,6 +1583,8 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         missingModels,
         priceTypes: [...priceTypes].sort(),
         missingPriceTypes,
+        missingPlans,
+        unexpectedPlans,
       },
     };
   }

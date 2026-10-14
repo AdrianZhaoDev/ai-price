@@ -917,32 +917,9 @@ ${completeRows}
   });
 
   it("requires Huawei MaaS's current model and price-type baseline", () => {
-    const sample = parseGlmCodingPlan(
-      raw(
-        '{type:"lite",unitKey:"month",productId:"lite",salePrice:118,renewAmount:118}',
-      ),
-    )[0]!;
-    const modelNames = [
-      "openPangu-2.0-Pro",
-      "openPangu-2.0-Flash",
-      "GLM-5.3",
-      "GLM-5.2-Arkts-Spark",
-      "GLM-5.2",
-      "GLM-5.1",
-      "Kimi-K2.6",
-      "DeepSeek-V4.1-Flash",
-      "DeepSeek-V4-Flash",
-      "Qwen3-30B-A3B",
-      "Qwen3-32B",
-    ];
-    const priceTypes = ["cached_input", "input", "output"] as const;
-    const baseline = Array.from({ length: 51 }, (_, index) => ({
-      ...sample,
-      canonicalPlanSlug: `huawei-model-${index}`,
-      rawPlanName: `${modelNames[index % modelNames.length]} · Price ${index}`,
-      modelName: modelNames[index % modelNames.length],
-      priceType: priceTypes[index % priceTypes.length],
-    }));
+    const baseline = parseHuaweiMaaSApi(
+      raw(readFileSync("tests/fixtures/huawei-maas-2026-10-14.html", "utf8")),
+    );
     const adapter = officialPageAdapters.find(
       (candidate) => candidate.id === "huawei-maas-pricing-official",
     );
@@ -967,6 +944,53 @@ ${completeRows}
       code: "STRUCTURE_CHANGED",
       details: { missingModels: expect.any(Array) },
     });
+  });
+
+  it("rejects same-count Huawei tier replacements and duplicate identities", () => {
+    const html = readFileSync(
+      "tests/fixtures/huawei-maas-2026-10-14.html",
+      "utf8",
+    );
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "huawei-maas-pricing-official",
+    )!;
+    const baseline = parseHuaweiMaaSApi(raw(html));
+    for (const changedHtml of [
+      html.replace("0≤Token&lt;32K", "0≤Token&lt;64K"),
+      html.replace("<td>时段1</td>", "<td>时段3</td>"),
+    ]) {
+      const replacement = parseHuaweiMaaSApi(raw(changedHtml));
+      expect(replacement).toHaveLength(51);
+      expect(adapter.healthCheck(replacement)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: {
+          missingModels: [],
+          missingPriceTypes: [],
+          missingPlans: expect.any(Array),
+          unexpectedPlans: expect.any(Array),
+        },
+      });
+      expect(
+        adapter.healthCheck(replacement).details?.missingPlans,
+      ).not.toEqual([]);
+      expect(
+        adapter.healthCheck(replacement).details?.unexpectedPlans,
+      ).not.toEqual([]);
+    }
+    expect(adapter.healthCheck([baseline[1], ...baseline.slice(1)]).ok).toBe(
+      false,
+    );
+    expect(adapter.healthCheck([...baseline, baseline[0]]).ok).toBe(false);
+    expect(adapter.healthCheck([...baseline].reverse()).ok).toBe(true);
+    expect(
+      adapter.healthCheck(
+        baseline.map((offer) => ({
+          ...offer,
+          amountMinor: offer.amountMinor! + 1,
+        })),
+      ).ok,
+    ).toBe(true);
   });
 
   it("accepts the current Huawei MaaS public pricing table", () => {
