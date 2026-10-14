@@ -965,6 +965,37 @@ ${completeRows}
     }
   });
 
+  it("selects GLM's highest numeric version independently of declaration order", () => {
+    const block = (version: number, price: number, count = 9) =>
+      `v${version}="V${version}",items=[${["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{type:"${plan}",unitKey:"${period}",productId:"v${version}-${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .slice(0, count)
+        .join(",")}]`;
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "glm-coding-plan-official",
+    )!;
+    for (const body of [
+      `const ${block(2, 49)},${block(3, 118)};`,
+      `const ${block(3, 118)},${block(2, 49)};`,
+      `const ${block(10, 118)},${block(3, 49)};`,
+    ]) {
+      const offers = parseGlmCodingPlan(raw(body));
+      expect(offers).toHaveLength(9);
+      expect(offers.every((offer) => offer.amountMinor === 11800)).toBe(true);
+      expect(adapter.healthCheck(offers).ok).toBe(true);
+    }
+    const incompleteLatest = parseGlmCodingPlan(
+      raw(`const ${block(3, 118, 8)},${block(2, 49)};`),
+    );
+    expect(incompleteLatest).toHaveLength(8);
+    expect(adapter.healthCheck(incompleteLatest).ok).toBe(false);
+  });
+
   it("requires Huawei MaaS's current model and price-type baseline", () => {
     const baseline = parseHuaweiMaaSApi(
       raw(readFileSync("tests/fixtures/huawei-maas-2026-10-14.html", "utf8")),
@@ -1096,9 +1127,13 @@ ${completeRows}
       html.replace("<td>0.75</td>", "<td>10000.01</td>"),
       html.replace("<td>0.75</td>", "<td>0</td>"),
       html.replace("<td>0.75</td>", "<td>0.000000001</td>"),
+      html.replace("<td>0.75</td>", "<td>0.000000006</td>"),
+      html.replace("<td>0.75</td>", "<td>0.0000006</td>"),
+      html.replace("<td>0.75</td>", "<td>10000.000000004</td>"),
       html.replace("<td>0.75</td>", "<td>1e9</td>"),
       html.replace("思考模式：7.5", "思考模式：1000000000"),
       html.replace("思考模式：7.5", "思考模式：0"),
+      html.replace("思考模式：7.5", "思考模式：0.000000006"),
       html.replace("思考模式：7.5", "思考模式：1e9"),
     ]) {
       expect(adapter?.healthCheck(parseHuaweiMaaSApi(raw(broken))).ok).toBe(
@@ -1115,7 +1150,7 @@ ${completeRows}
     expect(
       adapter?.healthCheck(
         parseHuaweiMaaSApi(
-          raw(html.replace("<td>0.75</td>", "<td>0.00000001</td>")),
+          raw(html.replace("<td>0.75</td>", "<td>0.000001</td>")),
         ),
       ).ok,
     ).toBe(true);

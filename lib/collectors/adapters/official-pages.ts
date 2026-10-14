@@ -1058,10 +1058,18 @@ export function parseGlmCodingPlan(
   } as const;
   const compactOffers = new Map<string, NormalizedOffer>();
   const versions = [
-    ...raw.body.matchAll(/(?:\bconst\s+|,)[\w$]+="V\d+"(?=[,;])/g),
+    ...raw.body.matchAll(/(?:\bconst\s+|,)[\w$]+="V(\d+)"(?=[,;])/g),
   ];
-  const compactBody = versions.length
-    ? raw.body.slice(versions.at(-1)!.index)
+  const latestVersion = versions.reduce<RegExpMatchArray | undefined>(
+    (latest, version) =>
+      !latest || Number(version[1]) >= Number(latest[1]) ? version : latest,
+    undefined,
+  );
+  const nextVersion = latestVersion
+    ? versions.find((version) => version.index! > latestVersion.index!)
+    : undefined;
+  const compactBody = latestVersion
+    ? raw.body.slice(latestVersion.index, nextVersion?.index)
     : raw.body;
   for (const product of compactBody.matchAll(
     /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
