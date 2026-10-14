@@ -173,17 +173,18 @@ function usdOffer(
 export function parseKimiMembership(
   raw: RawCollectionResult,
 ): NormalizedOffer[] {
+  const isMonthlyHeader = (cell: string) =>
+    /连续包月|月付|monthly/i.test(cell) &&
+    !/年|annual|year|equivalent/i.test(cell);
   const rows = allTableRows(raw.body).find((candidate) => {
     const header = candidate[0]?.join(" ") ?? "";
     return (
-      /套餐|方案|plan/i.test(header) && /连续包月|月付|monthly/i.test(header)
+      /套餐|方案|plan/i.test(header) && candidate[0]?.some(isMonthlyHeader)
     );
   });
   if (!rows) return [];
 
-  const monthlyIndex = (rows[0] ?? []).findIndex((cell) =>
-    /连续包月|月付|monthly/i.test(cell),
-  );
+  const monthlyIndex = (rows[0] ?? []).findIndex(isMonthlyHeader);
   if (monthlyIndex < 0) return [];
 
   return rows.slice(1).flatMap((cells) => {
@@ -199,11 +200,25 @@ export function parseKimiMembership(
       channel: "official_web" as const,
       sourceUrl: raw.sourceUrl,
       observedAt: raw.observedAt,
-      parserVersion: "kimi-membership-v2",
+      parserVersion: "kimi-membership-v3",
     };
-    if (/¥|￥/.test(displayPrice)) return [cnyOffer(offerInput)];
-    if (/\$/.test(displayPrice)) return [usdOffer(offerInput)];
-    return [];
+    const price = displayPrice.match(
+      /^(USD|US\$|\$|CNY|RMB|¥|￥)\s*(\d+(?:\.\d{1,2})?)\s*(?:\/(?:月|month)|per month)?$/i,
+    );
+    if (!price) return [];
+    const isCny = /^(?:CNY|RMB|¥|￥)$/i.test(price[1]);
+    const amount = Number(price[2]);
+    // Loose currency-specific ceilings catch corrupted amounts without tying
+    // the parser to today's four exact prices.
+    const maximumMonthlyAmount = isCny ? 100_000 : 10_000;
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > maximumMonthlyAmount
+    )
+      return [];
+    if (isCny) return [cnyOffer(offerInput)];
+    return [usdOffer(offerInput)];
   });
 }
 
@@ -961,16 +976,53 @@ export function parseHuaweiTokenPlan(
     });
 }
 
-const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v7";
+const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v8";
 const GLM_CODING_PLAN_MINIMUM_OFFERS = 9;
 
-export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
+export function glmCodingPlanPriceChunkPaths(
+  runtimeBody: string,
+  appBody = "",
+): string[] {
   const paths: string[] = [];
   for (const match of runtimeBody.matchAll(
     /(?:"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)"|"?(ClaudeCode)"?):"([a-f0-9]+)"/g,
   )) {
     const path = `${match[1] ?? match[2]}.${match[3]}.js`;
     if (!paths.includes(path)) paths.push(path);
+  }
+  // Webpack 5 separates numeric chunk IDs, names and JS hashes. Only follow
+  // dependencies of the official Coding Plan route, never the CSS hash map.
+  const loader = runtimeBody.match(/\.u=function\([^)]*\)\{([\s\S]*?)\},/)?.[1];
+  if (loader) {
+    const maps = [...loader.matchAll(/\{([^{}]*)\}\[\w+\]/g)].map(
+      (map) =>
+        new Map(
+          [...map[1].matchAll(/(\d+):"([^"\\]+)"/g)].map((entry) => [
+            entry[1],
+            entry[2],
+          ]),
+        ),
+    );
+    const [names, hashes] = maps;
+    const ids = new Set<string>();
+    for (const [id, name] of names ?? []) {
+      if (/^ClaudeCode(?:~(?:SpecialArea~)?subscribe-overview)?$/.test(name)) {
+        ids.add(id);
+      }
+    }
+    for (const route of appBody.matchAll(
+      /path:"\/(?:glm-coding|claude-code)",(?:name:[^,]+,)?component:\(\)=>Promise\.all\(\[([^\]]+)\]\)/g,
+    )) {
+      for (const match of route[1].matchAll(/\.e\((\d+)\)/g)) ids.add(match[1]);
+    }
+    for (const id of ids) {
+      const name = names?.get(id) ?? id;
+      const hash = hashes?.get(id);
+      if (!/^[\w~-]+$/.test(name) || !hash || !/^[a-f0-9]+$/.test(hash))
+        continue;
+      const path = `${name}.${hash}.js`;
+      if (!paths.includes(path)) paths.push(path);
+    }
   }
   return paths.sort((left, right) => {
     const leftIsPriceChunk = left.startsWith("ClaudeCode.");
@@ -979,22 +1031,330 @@ export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
   });
 }
 
+function glmCodingPlanVersionDeclarations(body: string) {
+  const tokens = glmCodingTokens(body);
+  const declarations: { version: number; index: number; end: number }[] = [];
+  const activeDeclarations = new Set<number>();
+  let depth = 0;
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === "symbol" && ["{", "[", "("].includes(token.text)) {
+      depth++;
+      continue;
+    }
+    if (token.kind === "symbol" && ["}", "]", ")"].includes(token.text)) {
+      activeDeclarations.delete(depth);
+      depth--;
+      continue;
+    }
+    if (token.kind === "symbol" && token.text === ";") {
+      activeDeclarations.delete(depth);
+      continue;
+    }
+    if (
+      token.kind === "word" &&
+      ["const", "let", "var"].includes(token.text) &&
+      (tokens[index + 1]?.kind === "word" ||
+        ["{", "["].includes(tokens[index + 1]?.text ?? ""))
+    ) {
+      activeDeclarations.add(depth);
+      continue;
+    }
+    const previous = tokens[index - 1];
+    const isDeclarator =
+      (previous?.kind === "word" &&
+        ["const", "let", "var"].includes(previous.text)) ||
+      (previous?.kind === "symbol" &&
+        previous.text === "," &&
+        activeDeclarations.has(depth));
+    const value = tokens[index + 2];
+    const next = tokens[index + 3];
+    if (
+      token.kind !== "word" ||
+      !isDeclarator ||
+      tokens[index + 1]?.kind !== "symbol" ||
+      tokens[index + 1]?.text !== "=" ||
+      value?.kind !== "string" ||
+      next?.kind !== "symbol" ||
+      ![",", ";"].includes(next.text)
+    )
+      continue;
+    const version = value.text.match(/^V(\d+)$/)?.[1];
+    if (version)
+      declarations.push({
+        version: Number(version),
+        index: previous.index,
+        end: value.end,
+      });
+  }
+  return declarations;
+}
+
+function glmCodingPlanOfferFingerprint(offers: NormalizedOffer[]): string {
+  return JSON.stringify(
+    offers
+      .map((offer) => [
+        offer.canonicalPlanSlug,
+        offer.currency,
+        offer.billingPeriod,
+        offer.amountMinor,
+      ])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+  );
+}
+
+function validGlmCodingPriceText(value: string | undefined): value is string {
+  if (!value || !/^\d+(?:\.\d{1,2})?$/.test(value)) return false;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0.01 && amount <= 100_000;
+}
+
+type GlmCompactProduct = Partial<
+  Record<"type" | "unitkey" | "productid" | "saleprice" | "renewamount", string>
+>;
+
+function glmCodingTokens(body: string) {
+  const tokens: {
+    text: string;
+    kind: "string" | "number" | "word" | "symbol" | "opaque";
+    index: number;
+    end: number;
+  }[] = [];
+  const regexPrefixes = new Set([
+    "=",
+    ":",
+    ",",
+    "(",
+    "[",
+    "{",
+    "!",
+    "?",
+    ";",
+    ">",
+    "return",
+  ]);
+  for (let index = 0; index < body.length;) {
+    const character = body[index];
+    if (/\s/.test(character)) {
+      index++;
+      continue;
+    }
+    if (character === "/" && body[index + 1] === "/") {
+      const end = body.indexOf("\n", index + 2);
+      index = end < 0 ? body.length : end + 1;
+      continue;
+    }
+    if (character === "/" && body[index + 1] === "*") {
+      const end = body.indexOf("*/", index + 2);
+      index = end < 0 ? body.length : end + 2;
+      continue;
+    }
+    if (['"', "'", "`"].includes(character)) {
+      const start = index++;
+      while (index < body.length && body[index] !== character) {
+        index += body[index] === "\\" ? 2 : 1;
+      }
+      const literal = body.slice(start, Math.min(++index, body.length));
+      let text: string | undefined;
+      try {
+        text =
+          character === '"'
+            ? JSON.parse(literal)
+            : literal.slice(1, -1).replace(/\\(['"\\])/g, "$1");
+      } catch {
+        /* Unsupported escape: retain a non-scalar token. */
+      }
+      tokens.push({
+        text: text ?? literal,
+        kind:
+          text !== undefined && !(character === "`" && text.includes("${"))
+            ? "string"
+            : "opaque",
+        index: start,
+        end: index,
+      });
+      continue;
+    }
+    const previous = tokens.at(-1);
+    if (character === "/" && (!previous || regexPrefixes.has(previous.text))) {
+      const start = index++;
+      let inClass = false;
+      while (index < body.length) {
+        const next = body[index++];
+        if (next === "\\") {
+          index++;
+          continue;
+        }
+        if (next === "[") inClass = true;
+        if (next === "]") inClass = false;
+        if (next === "/" && !inClass) break;
+      }
+      while (/[a-z]/i.test(body[index] ?? "")) index++;
+      tokens.push({
+        text: body.slice(start, index),
+        kind: "opaque",
+        index: start,
+        end: index,
+      });
+      continue;
+    }
+    const number = body
+      .slice(index)
+      .match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)?.[0];
+    if (number) {
+      tokens.push({
+        text: number,
+        kind: "number",
+        index,
+        end: index + number.length,
+      });
+      index += number.length;
+      continue;
+    }
+    const word = body.slice(index).match(/^[$A-Za-z_][\w$]*/)?.[0];
+    if (word) {
+      tokens.push({
+        text: word,
+        kind: "word",
+        index,
+        end: index + word.length,
+      });
+      index += word.length;
+      continue;
+    }
+    tokens.push({ text: character, kind: "symbol", index, end: index + 1 });
+    index++;
+  }
+
+  return tokens;
+}
+
+function glmCompactProducts(body: string): GlmCompactProduct[] {
+  if (!/\bproductId\b/i.test(body) || !/\bunitKey\b/i.test(body)) return [];
+  const tokens = glmCodingTokens(body);
+  const frames: {
+    opener: string;
+    fields: GlmCompactProduct;
+    literalId: boolean;
+    literalMoney: boolean;
+  }[] = [];
+  const products: GlmCompactProduct[] = [];
+  const keys = new Set([
+    "type",
+    "unitkey",
+    "productid",
+    "saleprice",
+    "renewamount",
+  ]);
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === "symbol" && ["{", "[", "("].includes(token.text)) {
+      frames.push({
+        opener: token.text,
+        fields: {},
+        literalId: false,
+        literalMoney: false,
+      });
+      continue;
+    }
+    if (token.kind === "symbol" && ["}", "]", ")"].includes(token.text)) {
+      const frame = frames.pop();
+      if (
+        frame?.opener === "{" &&
+        "productid" in frame.fields &&
+        ("type" in frame.fields || "unitkey" in frame.fields) &&
+        (frame.literalId ||
+          (frame.fields.type && frame.fields.unitkey && frame.literalMoney))
+      ) {
+        products.push(frame.fields);
+      }
+      continue;
+    }
+    const frame = frames.at(-1);
+    const key = token.text.toLowerCase() as keyof GlmCompactProduct;
+    if (
+      frame?.opener !== "{" ||
+      !["word", "string"].includes(token.kind) ||
+      !keys.has(key) ||
+      tokens[index + 1]?.text !== ":" ||
+      tokens[index + 1]?.kind !== "symbol" ||
+      !["{", ","].includes(tokens[index - 1]?.text ?? "")
+    )
+      continue;
+    const value = tokens[index + 2];
+    const delimiter = tokens[index + 3];
+    const literal = Boolean(
+      value &&
+      ["string", "number"].includes(value.kind) &&
+      delimiter?.kind === "symbol" &&
+      [",", "}"].includes(delimiter.text),
+    );
+    frame.fields[key] = literal ? value.text : undefined;
+    if (key === "productid")
+      frame.literalId = literal && value.kind === "string";
+    if (["saleprice", "renewamount"].includes(key) && literal)
+      frame.literalMoney = true;
+  }
+  return products;
+}
+
+function isGlmCodingPriceData(body: string): boolean {
+  // The named ClaudeCode chunk also declares V2/V3 team UI configuration,
+  // without any quote data. Billing tables are in shared route dependencies.
+  return (
+    /\bstepUnit:"[^"]+"/.test(body) ||
+    glmCompactProducts(body).length > 0 ||
+    /\b(?:items|plans|products|prices)=\[\s*\]/.test(body)
+  );
+}
+
 export async function findCompleteGlmCodingPlanChunk(
   chunkPaths: string[],
   loadChunk: (chunkPath: string) => Promise<RawCollectionResult>,
   signal?: AbortSignal,
 ): Promise<RawCollectionResult | null> {
+  const candidates: {
+    raw: RawCollectionResult;
+    version: number;
+    offers: NormalizedOffer[];
+  }[] = [];
+  let loadFailed = false;
   for (const chunkPath of chunkPaths) {
     try {
       const raw = await loadChunk(chunkPath);
-      if (parseGlmCodingPlan(raw).length >= GLM_CODING_PLAN_MINIMUM_OFFERS) {
-        return raw;
+      const version = Math.max(
+        0,
+        ...glmCodingPlanVersionDeclarations(raw.body).map(
+          (match) => match.version,
+        ),
+      );
+      if (!Number.isSafeInteger(version)) return null;
+      const offers = parseGlmCodingPlan(raw);
+      if (offers.length > 0 || isGlmCodingPriceData(raw.body)) {
+        candidates.push({ raw, version, offers });
       }
     } catch (error) {
       if (signal?.aborted) throw error;
+      loadFailed = true;
     }
   }
-  return null;
+  // A failed dependency could contain the current version. Never accept an
+  // older complete table while another relevant route asset is unverified.
+  if (loadFailed || candidates.length === 0) return null;
+  const highestVersion = Math.max(
+    ...candidates.map((candidate) => candidate.version),
+  );
+  const complete = candidates.filter(
+    (candidate) => candidate.version === highestVersion,
+  );
+  if (
+    complete.some(
+      (candidate) => candidate.offers.length < GLM_CODING_PLAN_MINIMUM_OFFERS,
+    )
+  )
+    return null;
+  const fingerprints = new Set(
+    complete.map(({ offers }) => glmCodingPlanOfferFingerprint(offers)),
+  );
+  return fingerprints.size === 1 ? complete[0].raw : null;
 }
 
 export function parseGlmCodingPlan(
@@ -1006,35 +1366,76 @@ export function parseGlmCodingPlan(
     year: "年付",
   } as const;
   const compactOffers = new Map<string, NormalizedOffer>();
-  for (const product of raw.body.matchAll(
-    /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
-  )) {
-    const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
-    const unit = product[2] as keyof typeof periodNames;
-    const salePrice = Number(product[0].match(/salePrice:([\d.]+)/)?.[1]);
-    const renewalTotal = Number(product[0].match(/renewAmount:([\d.]+)/)?.[1]);
-    const price =
-      unit === "month" || !Number.isFinite(renewalTotal)
-        ? salePrice
-        : renewalTotal;
-    if (!Number.isFinite(price)) continue;
-
-    compactOffers.set(
-      `${plan}-${unit}`,
-      cnyOffer({
-        providerSlug: "glm-coding-plan",
-        planSlug: `glm-coding-${plan.toLowerCase()}-${unit}`,
-        planName: `${plan} · ${periodNames[unit]}`,
-        displayPrice: `¥${price}`,
-        billingPeriod: unit,
-        channel: "official_web",
-        sourceUrl: raw.sourceUrl,
-        observedAt: raw.observedAt,
-        parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
-      }),
+  const versions = glmCodingPlanVersionDeclarations(raw.body);
+  if (versions.length > 0) {
+    const highest = Math.max(...versions.map((version) => version.version));
+    if (!Number.isSafeInteger(highest)) return [];
+    const declarations = versions.flatMap((version, index) => {
+      if (version.version !== highest) return [];
+      return [
+        parseGlmCodingPlan({
+          ...raw,
+          body: raw.body.slice(version.end, versions[index + 1]?.index),
+        }),
+      ];
+    });
+    if (declarations.length === 1) return declarations[0];
+    const fingerprints = new Set(
+      declarations.map(glmCodingPlanOfferFingerprint),
     );
+    if (
+      fingerprints.size !== 1 ||
+      declarations.some(
+        (offers) => offers.length < GLM_CODING_PLAN_MINIMUM_OFFERS,
+      )
+    ) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "Conflicting or incomplete GLM tables share the highest version.",
+      );
+    }
+    return declarations[0];
   }
-  if (compactOffers.size > 0) return [...compactOffers.values()];
+  for (const product of glmCompactProducts(raw.body)) {
+    if (
+      !/^(?:lite|pro|max)$/i.test(product.type ?? "") ||
+      !/^(?:month|quarter|year)$/i.test(product.unitkey ?? "")
+    ) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "GLM compact prices contain an unverified plan or billing period.",
+      );
+    }
+    const plan = `${product.type![0].toUpperCase()}${product.type!.slice(1).toLowerCase()}`;
+    const unit = product.unitkey!.toLowerCase() as keyof typeof periodNames;
+    const salePrice = product.saleprice;
+    const renewalTotal = product.renewamount;
+    const price = unit === "month" ? salePrice : renewalTotal;
+    if (!validGlmCodingPriceText(price)) continue;
+
+    const key = `${plan}-${unit}`;
+    const offer = cnyOffer({
+      providerSlug: "glm-coding-plan",
+      planSlug: `glm-coding-${plan.toLowerCase()}-${unit}`,
+      planName: `${plan} · ${periodNames[unit]}`,
+      displayPrice: `¥${price}`,
+      billingPeriod: unit,
+      channel: "official_web",
+      sourceUrl: raw.sourceUrl,
+      observedAt: raw.observedAt,
+      parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
+    });
+    const previous = compactOffers.get(key);
+    if (previous && previous.amountMinor !== offer.amountMinor) {
+      throw new CollectionError(
+        "STRUCTURE_CHANGED",
+        "Conflicting GLM quotes share a plan identity.",
+      );
+    }
+    compactOffers.set(key, offer);
+  }
+  if (compactOffers.size > 0 || versions.length > 0)
+    return [...compactOffers.values()];
 
   const dynamicOffers = [
     ...raw.body.matchAll(
@@ -1045,7 +1446,7 @@ export function parseGlmCodingPlan(
     const salePrice = product[0].match(/salePrice:([\d.]+)/)?.[1];
     const unit = product[0].match(/unit:"(month|quarter|year)"/)?.[1] as
       keyof typeof periodNames | undefined;
-    if (!salePrice || !unit) return [];
+    if (!validGlmCodingPriceText(salePrice) || !unit) return [];
     return [
       cnyOffer({
         providerSlug: "glm-coding-plan",
@@ -1068,13 +1469,13 @@ export function parseGlmCodingPlan(
     ),
   ].flatMap((product) => {
     const monthlyPrices = [...product[2].matchAll(/[¥￥]\s*([\d.]+)\/月/g)].map(
-      (match) => Number(match[1]),
+      (match) => match[1],
     );
-    const quarterTotal = Number(
-      product[2].match(/下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/)?.[1],
-    );
+    const quarterTotal = product[2].match(
+      /下个季度续费金额[：:]\s*[¥￥]\s*([\d.]+)/,
+    )?.[1];
     const standardMonth = monthlyPrices[1] ?? monthlyPrices[0];
-    if (!Number.isFinite(standardMonth)) {
+    if (!validGlmCodingPriceText(standardMonth)) {
       return [];
     }
 
@@ -1092,7 +1493,7 @@ export function parseGlmCodingPlan(
         parserVersion: GLM_CODING_PLAN_PARSER_VERSION,
       }),
     ];
-    if (!Number.isFinite(quarterTotal)) return offers;
+    if (!validGlmCodingPriceText(quarterTotal)) return offers;
     return [
       ...offers,
       cnyOffer({
@@ -1361,14 +1762,65 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "minimax-paygo-official": 67,
 };
 
-const HUAWEI_MAAS_MINIMUM_OFFERS = 27;
+const KIMI_MEMBERSHIP_REQUIRED_PLANS = [
+  "kimi-plus-monthly",
+  "kimi-pro-monthly",
+  "kimi-max-monthly",
+  "kimi-ultra-monthly",
+] as const;
+
+function kimiMembershipHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const baseHealth = officialPageHealthCheck(
+    offers,
+    KIMI_MEMBERSHIP_REQUIRED_PLANS.length,
+  );
+  if (!baseHealth.ok) return baseHealth;
+
+  const planSlugs = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+  const missingPlans = KIMI_MEMBERSHIP_REQUIRED_PLANS.filter(
+    (slug) => !planSlugs.has(slug),
+  );
+  const currencies = new Set(offers.map((offer) => offer.currency));
+  if (
+    offers.length !== KIMI_MEMBERSHIP_REQUIRED_PLANS.length ||
+    planSlugs.size !== offers.length ||
+    missingPlans.length > 0 ||
+    currencies.size !== 1 ||
+    [...currencies].some((currency) => !["USD", "CNY"].includes(currency)) ||
+    offers.some((offer) => offer.billingPeriod !== "month")
+  ) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message:
+        "Kimi monthly price table did not match its verified four-plan baseline.",
+      details: {
+        requiredPlans: [...KIMI_MEMBERSHIP_REQUIRED_PLANS],
+        missingPlans,
+        parsedPlans: [...planSlugs].sort(),
+        currencies: [...currencies].sort(),
+      },
+    };
+  }
+  return baseHealth;
+}
+
+const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
+// CNY minor units per million tokens. Current public prices are far below this
+// loose ceiling; corrupted positive numbers must not become live quotes.
+const HUAWEI_MAAS_MAX_AMOUNT_MINOR = 1_000_000;
+// price_observations.amount_minor has scale 6; smaller positive values cannot
+// reliably preserve this paid-price baseline when persisted.
+const HUAWEI_MAAS_MIN_AMOUNT_MINOR = 0.000001;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",
+  "GLM-5.3",
+  "GLM-5.2-Arkts-Spark",
   "GLM-5.2",
   "GLM-5.1",
   "Kimi-K2.6",
-  "DeepSeek-V4-Pro",
+  "DeepSeek-V4.1-Flash",
   "DeepSeek-V4-Flash",
   "Qwen3-30B-A3B",
   "Qwen3-32B",
@@ -1377,6 +1829,62 @@ const HUAWEI_MAAS_REQUIRED_PRICE_TYPES = [
   "cached_input",
   "input",
   "output",
+] as const;
+
+// Exact public quote identities verified on 2026-10-14. Amount changes remain
+// collectable; tier/model additions or removals require a new verified baseline.
+const HUAWEI_MAAS_VERIFIED_OFFER_SLUGS = [
+  "openpangu-2-0-pro-cached_input-输入-缓存命中-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-input-输入-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-output-输出-华为云-maas-否-0-token-32k",
+  "openpangu-2-0-pro-cached_input-输入-缓存命中-华为云-maas-否-token-32k",
+  "openpangu-2-0-pro-input-输入-华为云-maas-否-token-32k",
+  "openpangu-2-0-pro-output-输出-华为云-maas-否-token-32k",
+  "openpangu-2-0-flash-cached_input-输入-缓存命中-华为云-maas-否",
+  "openpangu-2-0-flash-input-输入-华为云-maas-否",
+  "openpangu-2-0-flash-output-输出-华为云-maas-否",
+  "glm-5-3-cached_input-输入-缓存命中-华为云-maas-否",
+  "glm-5-3-input-输入-华为云-maas-否",
+  "glm-5-3-output-输出-华为云-maas-否",
+  "glm-5-2-arkts-spark-cached_input-输入-缓存命中-华为云-maas-否",
+  "glm-5-2-arkts-spark-input-输入-华为云-maas-否",
+  "glm-5-2-arkts-spark-output-输出-华为云-maas-否",
+  "glm-5-2-input-输入-华为云-maas-是-时段1",
+  "glm-5-2-output-输出-华为云-maas-是-时段1",
+  "glm-5-2-input-输入-华为云-maas-是-时段2",
+  "glm-5-2-output-输出-华为云-maas-是-时段2",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-input-输入-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-output-输出-华为云-maas-是-0-token-32k-时段1",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-input-输入-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-output-输出-华为云-maas-是-0-token-32k-时段2",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-input-输入-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-output-输出-华为云-maas-是-token-32k-时段1",
+  "glm-5-1-cached_input-输入-缓存命中-华为云-maas-是-token-32k-时段2",
+  "glm-5-1-input-输入-华为云-maas-是-token-32k-时段2",
+  "glm-5-1-output-输出-华为云-maas-是-token-32k-时段2",
+  "kimi-k2-6-input-输入-华为云-maas-是-时段1",
+  "kimi-k2-6-output-输出-华为云-maas-是-时段1",
+  "kimi-k2-6-input-输入-华为云-maas-是-时段2",
+  "kimi-k2-6-output-输出-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-cached_input-输入-缓存命中-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-input-输入-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-output-输出-华为云-maas-是-时段1",
+  "deepseek-v4-1-flash-cached_input-输入-缓存命中-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-input-输入-华为云-maas-是-时段2",
+  "deepseek-v4-1-flash-output-输出-华为云-maas-是-时段2",
+  "deepseek-v4-flash-input-输入-华为云-maas-是-时段1",
+  "deepseek-v4-flash-output-输出-华为云-maas-是-时段1",
+  "deepseek-v4-flash-input-输入-华为云-maas-是-时段2",
+  "deepseek-v4-flash-output-输出-华为云-maas-是-时段2",
+  "qwen3-30b-a3b-input-输入-华为云-maas-否",
+  "qwen3-30b-a3b-output-输出-华为云-maas-否-思考模式",
+  "qwen3-30b-a3b-output-输出-华为云-maas-否-非思考模式",
+  "qwen3-32b-input-输入-华为云-maas-否",
+  "qwen3-32b-output-输出-华为云-maas-否-思考模式",
+  "qwen3-32b-output-输出-华为云-maas-否-非思考模式",
 ] as const;
 
 function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
@@ -1400,18 +1908,51 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const missingModels = HUAWEI_MAAS_REQUIRED_MODELS.filter(
     (modelName) => !modelNames.has(modelName),
   );
-  if (missingModels.length > 0 || missingPriceTypes.length > 0) {
+  const planSlugs = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+  const verifiedSlugs = new Set<string>(HUAWEI_MAAS_VERIFIED_OFFER_SLUGS);
+  const missingPlans = HUAWEI_MAAS_VERIFIED_OFFER_SLUGS.filter(
+    (slug) => !planSlugs.has(slug),
+  );
+  const unexpectedPlans = [...planSlugs].filter(
+    (slug) => slug === null || !verifiedSlugs.has(slug),
+  );
+  const abnormalOffers = offers.filter(
+    (offer) =>
+      offer.currency !== "CNY" ||
+      offer.unit !== "/百万 tokens" ||
+      offer.amountMinor! < HUAWEI_MAAS_MIN_AMOUNT_MINOR ||
+      offer.amountMinor! > HUAWEI_MAAS_MAX_AMOUNT_MINOR,
+  );
+  if (
+    missingModels.length > 0 ||
+    missingPriceTypes.length > 0 ||
+    missingPlans.length > 0 ||
+    unexpectedPlans.length > 0 ||
+    abnormalOffers.length > 0 ||
+    offers.length !== verifiedSlugs.size ||
+    planSlugs.size !== offers.length
+  ) {
     return {
       ok: false,
       code: "STRUCTURE_CHANGED",
       message:
-        "Huawei MaaS price table did not include its verified model and price-type baseline.",
+        "Huawei MaaS price table did not match its verified quote baseline.",
       details: {
         modelCount: modelNames.size,
         requiredModels: [...HUAWEI_MAAS_REQUIRED_MODELS],
         missingModels,
         priceTypes: [...priceTypes].sort(),
         missingPriceTypes,
+        missingPlans,
+        unexpectedPlans,
+        maximumAmountMinor: HUAWEI_MAAS_MAX_AMOUNT_MINOR,
+        minimumAmountMinor: HUAWEI_MAAS_MIN_AMOUNT_MINOR,
+        abnormalOffers: abnormalOffers.map((offer) => ({
+          planSlug: offer.canonicalPlanSlug,
+          amountMinor: offer.amountMinor,
+          currency: offer.currency,
+          unit: offer.unit,
+        })),
       },
     };
   }
@@ -1621,6 +2162,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
+    if (this.id === "kimi-membership-official") {
+      return kimiMembershipHealthCheck(offers);
+    }
     if (this.id === "huawei-maas-pricing-official") {
       return huaweiMaaSHealthCheck(offers);
     }
@@ -1668,7 +2212,20 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         observedAt: context.observedAt,
         signal: context.signal,
       });
-      const chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      let chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      if (/\.u=function\(/.test(runtime.body)) {
+        const appPath = $("script[src]")
+          .map((_, element) => $(element).attr("src"))
+          .get()
+          .find((src) => /\/app\.[a-f0-9]+\.js$/i.test(src));
+        if (!appPath)
+          throw new Error("GLM Coding Plan route asset was not found.");
+        const app = await fetchPage(new URL(appPath, runtimeUrl).toString(), {
+          observedAt: context.observedAt,
+          signal: context.signal,
+        });
+        chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body, app.body);
+      }
       if (chunkPaths.length === 0) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
@@ -1689,28 +2246,14 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         "GLM Coding Plan price chunks did not contain all billing periods.",
       );
     } catch (primaryError) {
-      const renderedFallbackUrl =
-        "https://r.jina.ai/https://bigmodel.cn/claude-code";
-      try {
-        const rendered = await fetchPage(renderedFallbackUrl, {
-          observedAt: context.observedAt,
-          signal: context.signal,
-          timeoutMs: 30_000,
-          attempts: 2,
-        });
-        return { ...rendered, sourceUrl: this.sourceUrl };
-      } catch (fallbackError) {
-        throw new CollectionError(
-          "FETCH_FAILED",
-          "GLM Coding Plan official page and rendered fallback both failed.",
-          {
-            primaryUrl: this.sourceUrl,
-            fallbackUrl: renderedFallbackUrl,
-            primaryError: errorDiagnosticDetails(primaryError),
-            fallbackError: errorDiagnosticDetails(fallbackError),
-          },
-        );
-      }
+      throw new CollectionError(
+        "FETCH_FAILED",
+        "GLM Coding Plan official assets did not provide complete prices.",
+        {
+          primaryUrl: this.sourceUrl,
+          primaryError: errorDiagnosticDetails(primaryError),
+        },
+      );
     }
   }
 
@@ -1719,7 +2262,35 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, GLM_CODING_PLAN_MINIMUM_OFFERS);
+    const base = officialPageHealthCheck(
+      offers,
+      GLM_CODING_PLAN_MINIMUM_OFFERS,
+    );
+    if (!base.ok) return base;
+    const ids = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+    const complete = ["lite", "pro", "max"].every((plan) =>
+      ["month", "quarter", "year"].every((period) =>
+        ids.has(`glm-coding-${plan}-${period}`),
+      ),
+    );
+    if (
+      !complete ||
+      ids.size !== offers.length ||
+      offers.some(
+        (offer) =>
+          offer.amountMinor === null ||
+          offer.amountMinor <= 0 ||
+          offer.amountMinor > 10_000_000,
+      )
+    ) {
+      return {
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        message:
+          "GLM Coding Plan billing periods were incomplete or duplicated.",
+      };
+    }
+    return base;
   }
 }
 
@@ -1878,7 +2449,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "kimi-membership-official",
     "kimi-membership",
     "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
-    "kimi-membership-v2",
+    "kimi-membership-v3",
     parseKimiMembership,
     undefined,
     ["USD"],
@@ -2073,7 +2644,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v7",
+    "huawei-maas-api-v8",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(

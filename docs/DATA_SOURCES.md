@@ -114,7 +114,7 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 | ---: | -------------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
 |    1 | 智谱 GLM 资源包            | 限量 Token 资源包                   | `https://bigmodel.cn/activity`                                         |
 |    2 | 智谱 GLM Coding Plan       | Lite / Pro / Max 月、季、年付       | `https://www.bigmodel.cn/claude-code`                                  |
-|    3 | Kimi                       | Andante 等会员套餐                  | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
+|    3 | Kimi                       | Plus / Pro / Max / Ultra 月付       | `https://www.kimi.ai/zh-hans/help/membership/membership-pricing`       |
 |    4 | 阶跃星辰                   | 周卡与四档月卡                      | `https://chat.stepfun.com/subscription`                                |
 |    5 | MiniMax                    | 全球 Token Plan（USD）              | `https://platform.minimax.io/docs/guides/pricing-token-plan.md`        |
 |    6 | 通义千问                   | 个人 Token Plan                     | `https://help.aliyun.com/zh/model-studio/token-plan-personal-overview` |
@@ -131,7 +131,10 @@ canonical plan 保存多次响应的并集，不把单次清单变短视为整�
 智谱 GLM 资源包固定置顶。所有来源均从无需登录的官方页面或页面公开加载的版本化
 JavaScript 中解析；登录后才能看到且没有公开价目表的会员不发布价格。
 
-Kimi 会员按公开表头定位月付列，兼容人民币地区页和 `kimi.ai` 中文国际页的 USD 月付；
+2026-10-14 核验：Kimi 国际版公开月付为 Plus/Pro/Max/Ultra，分别 USD 19/39/99/199；
+旧 Moderato/Allegretto/Allegro/Vivace 的订阅续费规则仍由原站保留，本站不将新名称映射为旧套餐身份。
+Kimi 会员按公开表头定位月付列，兼容货币代码（如 `USD 19/月`）、货币符号和人民币地区页；
+年费总额及年付折合月价不混入月付报价。缺字段、负价、零价或异常数字会被拒绝。
 原币金额保持 USD，并沿用 FX 快照生成参考价；价格变化只与同币种历史基线比较，地区页
 从 CNY 迁移到 USD 时不会产生伪降价事件。TRAE 只使用公开价格页暴露的免登录数据；
 当前读取 `trae.ai` 全球官网定价页自身调用的公开免登录
@@ -141,9 +144,18 @@ VPS 的页面 SSR 返回 `isProductListFallback=true`，不可采用其中的旧
 无法返回完整四档月付报价，也拒绝写入并保留最后有效报价。VPS 与其他地区可能得到
 不同金额，不能混作同一轮价格；若官方公开入口不再提供可验证的价格载荷，采集失败。
 
-Huawei MaaS API 的健康检查要求至少 27 个报价、9 个已验证模型以及
+2026-10-14 核验的华为公开表（页面更新于 2026-10-12）已移除 DeepSeek-V4-Pro，
+保留其他模型的忙闲时/上下文/思考模式报价，共 11 个模型、51 条报价；这是实际下架，
+不重命名或复用旧报价身份，历史记录保留。Huawei MaaS API 的健康检查要求至少 51 个报价、11 个已验证模型以及
 cached-input/input/output 三类价格信号；价格数量达到门槛但缺少模型或价格类型仍会报
 `STRUCTURE_CHANGED`，不会写入不完整结果。
+
+GLM Coding Plan 官方入口在浏览器内跳转 `/glm-coding`。2026-10-14 的 Webpack 5 runtime
+以数字 chunk ID 分别映射名称和 JS hash；价格常量迁移到该路由依赖的共享 chunk。
+采集器从当前页面的 runtime/app 发现这些依赖，只解析最新声明的套餐版本，要求
+Lite/Pro/Max 月、季、年付九种唯一身份；季/年付取完整续费总额，不取折合月价。
+当前月付为 CNY 118/538/1078、季付 283.2/1291.2/2587.2、年付 991.2/4519.2/9055.2。
+只使用公开官方资产，第三方渲染响应不再作为价格来源；官网不完整时保留旧数据和错误。
 
 ## 保留的国内官方 API 采集（16）
 

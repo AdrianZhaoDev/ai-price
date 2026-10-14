@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   officialPageHealthCheck,
   parseBaichuanPricing,
@@ -80,7 +81,7 @@ describe("official table adapters", () => {
     expect(offers.every((offer) => offer.currency === "USD")).toBe(true);
     expect(offers.every((offer) => offer.region === "全球")).toBe(true);
     expect(
-      offers.every((offer) => offer.parserVersion === "kimi-membership-v2"),
+      offers.every((offer) => offer.parserVersion === "kimi-membership-v3"),
     ).toBe(true);
     const adapter = officialPageAdapters.find(
       (candidate) => candidate.id === "kimi-membership-official",
@@ -92,6 +93,179 @@ describe("official table adapters", () => {
     expect(
       parseKimiMembership(raw("<table><tr><th>方案</th></tr></table>")),
     ).toEqual([]);
+  });
+
+  it("reads Kimi's current USD monthly plans without treating annual equivalents as monthly prices", () => {
+    const body = `<table><tr><th>套餐</th><th>月付</th><th>年付总价</th><th>年付折合每月</th></tr>
+      <tr><td>Plus</td><td>USD 19/月</td><td>USD 180/年</td><td>USD 15/月</td></tr>
+      <tr><td>Pro</td><td>USD 39/月</td><td>USD 372/年</td><td>USD 31/月</td></tr>
+      <tr><td>Max</td><td>USD 99/月</td><td>USD 948/年</td><td>USD 79/月</td></tr>
+      <tr><td>Ultra</td><td>USD 199/月</td><td>USD 1908/年</td><td>USD 159/月</td></tr></table>`;
+    const offers = parseKimiMembership(raw(body));
+    expect(
+      offers.map((offer) => [
+        offer.canonicalPlanSlug,
+        offer.amountMinor,
+        offer.currency,
+        offer.billingPeriod,
+      ]),
+    ).toEqual([
+      ["kimi-plus-monthly", 1900, "USD", "month"],
+      ["kimi-pro-monthly", 3900, "USD", "month"],
+      ["kimi-max-monthly", 9900, "USD", "month"],
+      ["kimi-ultra-monthly", 19900, "USD", "month"],
+    ]);
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    )!;
+    expect(adapter.healthCheck(offers).ok).toBe(true);
+    for (const invalid of [
+      "USD -19/月",
+      "USD 0/月",
+      "USD 1e9/月",
+      "USD 1000000000/月",
+      "USD 10000.01/月",
+      "CNY 1000000000/月",
+      "CNY 100000.01/月",
+      "USD 19/年",
+      "USD 19 USD 15/月",
+      "JPY 1900/月",
+      "USD /月",
+    ]) {
+      expect(
+        adapter.healthCheck(
+          parseKimiMembership(raw(body.replace("USD 19/月", invalid))),
+        ).ok,
+      ).toBe(false);
+    }
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(raw(body.replace("USD 19/月", "USD 10000/月"))),
+      ).ok,
+    ).toBe(true);
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(
+          raw(
+            body.replaceAll("USD", "CNY").replace("CNY 19/月", "CNY 100000/月"),
+          ),
+        ),
+      ).ok,
+    ).toBe(true);
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(
+          raw(body.replace(/<tr><td>Ultra[\s\S]*?<\/tr>/, "")),
+        ),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("does not select an annual monthly-equivalent column placed before Kimi's monthly column", () => {
+    const body = `<table><tr><th>Plan</th><th>Annual (monthly equivalent)</th><th>Monthly</th></tr>
+      <tr><td>Plus</td><td>USD 15/month</td><td>USD 19/month</td></tr>
+      <tr><td>Pro</td><td>USD 31/month</td><td>USD 39/month</td></tr>
+      <tr><td>Max</td><td>USD 79/month</td><td>USD 99/month</td></tr>
+      <tr><td>Ultra</td><td>USD 159/month</td><td>USD 199/month</td></tr></table>`;
+    expect(
+      parseKimiMembership(raw(body)).map((offer) => offer.amountMinor),
+    ).toEqual([1900, 3900, 9900, 19900]);
+    expect(
+      parseKimiMembership(
+        raw(body.replace("<th>Monthly</th>", "<th>Yearly</th>")),
+      ),
+    ).toEqual([]);
+  });
+
+  it.each(["Enterprise", "Allegro", "Plus"])(
+    "rejects Kimi's four-row table when Ultra is replaced by %s",
+    (replacement) => {
+      const body = `<table><tr><th>套餐</th><th>月付</th></tr>
+        <tr><td>Plus</td><td>USD 19/月</td></tr>
+        <tr><td>Pro</td><td>USD 39/月</td></tr>
+        <tr><td>Max</td><td>USD 99/月</td></tr>
+        <tr><td>${replacement}</td><td>USD 199/月</td></tr></table>`;
+      const offers = parseKimiMembership(raw(body));
+      expect(offers).toHaveLength(4);
+      const adapter = officialPageAdapters.find(
+        (candidate) => candidate.id === "kimi-membership-official",
+      )!;
+      expect(adapter.healthCheck(offers)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: { missingPlans: ["kimi-ultra-monthly"] },
+      });
+    },
+  );
+
+  it("requires a single supported currency across Kimi's four plans", () => {
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    )!;
+    const body = `<table><tr><th>套餐</th><th>月付</th></tr>
+      <tr><td>Plus</td><td>USD 19/月</td></tr>
+      <tr><td>Pro</td><td>USD 39/月</td></tr>
+      <tr><td>Max</td><td>USD 99/月</td></tr>
+      <tr><td>Ultra</td><td>USD 199/月</td></tr></table>`;
+    const current = parseKimiMembership(raw(body));
+    expect(adapter.healthCheck(current).ok).toBe(true);
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(raw(body.replaceAll("USD", "CNY"))),
+      ).ok,
+    ).toBe(true);
+    for (const mixed of [
+      body.replace("USD 19/月", "CNY 19/月"),
+      body.replaceAll("USD", "CNY").replace("CNY 19/月", "USD 19/月"),
+    ]) {
+      const offers = parseKimiMembership(raw(mixed));
+      expect(offers).toHaveLength(4);
+      expect(adapter.healthCheck(offers)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: { currencies: ["CNY", "USD"] },
+      });
+    }
+    expect(
+      adapter.healthCheck(
+        current.map((offer) => ({ ...offer, currency: "EUR" })),
+      ).ok,
+    ).toBe(false);
+    for (const excessive of ["CNY 100000.01/月", "CNY 1000000000/月"]) {
+      const offers = parseKimiMembership(
+        raw(body.replaceAll("USD", "CNY").replace("CNY 19/月", excessive)),
+      );
+      expect(offers).toHaveLength(3);
+      expect(adapter.healthCheck(offers).ok).toBe(false);
+    }
+  });
+
+  it("accepts reordered current Kimi plans but rejects an extra or legacy plan set", () => {
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    )!;
+    const table = (names: string[]) =>
+      raw(
+        `<table><tr><th>套餐</th><th>月付</th></tr>${names
+          .map((name) => `<tr><td>${name}</td><td>USD 19/月</td></tr>`)
+          .join("")}</table>`,
+      );
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(table(["Ultra", "Max", "Pro", "Plus"])),
+      ).ok,
+    ).toBe(true);
+    for (const names of [
+      ["Plus", "Pro", "Max", "Ultra", "Enterprise"],
+      ["Moderato", "Allegretto", "Allegro", "Vivace"],
+    ]) {
+      expect(
+        adapter.healthCheck(parseKimiMembership(table(names))),
+      ).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+      });
+    }
   });
 
   it("parses MiniMax horizontal plans", () => {
@@ -682,12 +856,14 @@ ${completeRows}
     const glm = parseGlmCodingPlan(
       raw(
         [
+          'const a="V2",items=[',
           '{type:"lite",unitKey:"month",productId:"lite-v2",salePrice:49,renewAmount:49}',
           '{type:"pro",unitKey:"month",productId:"pro-v2",salePrice:149,renewAmount:149}',
           '{type:"max",unitKey:"month",productId:"max-v2",salePrice:469,renewAmount:469}',
           '{type:"lite",unitKey:"quarter",productId:"lite-quarter-v2",salePrice:132.3,renewAmount:132.3}',
           '{type:"pro",unitKey:"quarter",productId:"pro-quarter-v2",salePrice:402.3,renewAmount:402.3}',
           '{type:"max",unitKey:"quarter",productId:"max-quarter-v2",salePrice:1266.3,renewAmount:1266.3}',
+          '],b="V3",items=[',
           '{type:"lite",unitKey:"month",productId:"lite-v3",salePrice:118,renewAmount:118}',
           '{type:"pro",unitKey:"month",productId:"pro-v3",salePrice:538,renewAmount:538}',
           '{type:"max",unitKey:"month",productId:"max-v3",salePrice:1078,renewAmount:1078}',
@@ -697,6 +873,7 @@ ${completeRows}
           '{type:"lite",unitKey:"year",productId:"lite-year-v3",salePrice:82.6,renewAmount:991.2}',
           '{type:"pro",unitKey:"year",productId:"pro-year-v3",salePrice:376.6,renewAmount:4519.2}',
           '{type:"max",unitKey:"year",productId:"max-year-v3",salePrice:754.6,renewAmount:9055.2}',
+          "];",
         ].join(","),
       ),
     );
@@ -717,7 +894,7 @@ ${completeRows}
       "year",
     ]);
     expect(
-      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v7"),
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v8"),
     ).toBe(true);
   });
 
@@ -739,7 +916,7 @@ ${completeRows}
     ]);
   });
 
-  it("continues after a failed GLM chunk candidate", async () => {
+  it("loads remaining GLM candidates but rejects an unverified route dependency", async () => {
     const complete = raw(
       [
         '{type:"lite",unitKey:"month",productId:"lite-month",salePrice:118,renewAmount:118}',
@@ -760,36 +937,332 @@ ${completeRows}
 
     await expect(
       findCompleteGlmCodingPlanChunk(["first.js", "second.js"], loadChunk),
-    ).resolves.toBe(complete);
+    ).resolves.toBeNull();
     expect(loadChunk).toHaveBeenNthCalledWith(1, "first.js");
     expect(loadChunk).toHaveBeenNthCalledWith(2, "second.js");
   });
 
-  it("requires Huawei MaaS's current model and price-type baseline", () => {
-    const sample = parseGlmCodingPlan(
-      raw(
-        '{type:"lite",unitKey:"month",productId:"lite",salePrice:118,renewAmount:118}',
+  it("resolves the Coding Plan numeric dependencies using JS hashes rather than CSS hashes", () => {
+    const runtime =
+      'n.u=function(e){return"js/"+({2338:"ClaudeCode",999:"unrelated"}[e]||e)+"."+{2338:"e8038688",3323:"da514124",999:"ffffffff"}[e]+".js"},n.miniCssF=function(e){return"css/"+({2338:"ClaudeCode"}[e]||e)+"."+{2338:"64b6deed"}[e]+".css"},';
+    const app =
+      'path:"/glm-coding",component:()=>Promise.all([n.e(3323),n.e(2338)]).then(n.bind(n,46905)),meta:{}';
+    expect(glmCodingPlanPriceChunkPaths(runtime, app)).toEqual([
+      "ClaudeCode.e8038688.js",
+      "3323.da514124.js",
+    ]);
+    expect(
+      glmCodingPlanPriceChunkPaths(
+        runtime.replace('3323:"da514124"', '3323:"../bad"'),
+        app,
       ),
-    )[0]!;
-    const modelNames = [
-      "openPangu-2.0-Pro",
-      "openPangu-2.0-Flash",
-      "GLM-5.2",
-      "GLM-5.1",
-      "Kimi-K2.6",
-      "DeepSeek-V4-Pro",
-      "DeepSeek-V4-Flash",
-      "Qwen3-30B-A3B",
-      "Qwen3-32B",
-    ];
-    const priceTypes = ["cached_input", "input", "output"] as const;
-    const baseline = Array.from({ length: 27 }, (_, index) => ({
-      ...sample,
-      canonicalPlanSlug: `huawei-model-${index}`,
-      rawPlanName: `${modelNames[index % modelNames.length]} · Price ${index}`,
-      modelName: modelNames[index % modelNames.length],
-      priceType: priceTypes[index % priceTypes.length],
-    }));
+    ).toEqual(["ClaudeCode.e8038688.js"]);
+  });
+
+  it("does not fill a truncated new GLM version from old version prices", () => {
+    const body =
+      'const a="V2",items=[{type:"lite",unitKey:"month",productId:"old",salePrice:49,renewAmount:49}],b="V3",items=[{type:"pro",unitKey:"month",productId:"new",salePrice:538,renewAmount:538}]';
+    const offers = parseGlmCodingPlan(raw(body));
+    expect(offers.map((offer) => offer.canonicalPlanSlug)).toEqual([
+      "glm-coding-pro-month",
+    ]);
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "glm-coding-plan-official",
+    )!;
+    expect(adapter.healthCheck(offers).ok).toBe(false);
+    for (const fields of [
+      "salePrice:82.6",
+      "salePrice:82.6,renewAmount:NaN",
+      "salePrice:82.6,renewAmount:-991.2",
+      "salePrice:82.6,renewAmount:1e9",
+    ]) {
+      expect(
+        parseGlmCodingPlan(
+          raw(`{type:"lite",unitKey:"year",productId:"year",${fields}}`),
+        ),
+      ).toEqual([]);
+    }
+  });
+
+  it("selects GLM's highest numeric version independently of declaration order", () => {
+    const block = (version: number, price: number, count = 9) =>
+      `v${version}="V${version}",items=[${["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{type:"${plan}",unitKey:"${period}",productId:"v${version}-${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .slice(0, count)
+        .join(",")}]`;
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "glm-coding-plan-official",
+    )!;
+    for (const body of [
+      `const ${block(2, 49)},${block(3, 118)};`,
+      `const ${block(3, 118)},${block(2, 49)};`,
+      `const ${block(10, 118)},${block(3, 49)};`,
+    ]) {
+      const offers = parseGlmCodingPlan(raw(body));
+      expect(offers).toHaveLength(9);
+      expect(offers.every((offer) => offer.amountMinor === 11800)).toBe(true);
+      expect(adapter.healthCheck(offers).ok).toBe(true);
+    }
+    const incompleteLatest = parseGlmCodingPlan(
+      raw(`const ${block(3, 118, 8)},${block(2, 49)};`),
+    );
+    expect(incompleteLatest).toHaveLength(8);
+    expect(adapter.healthCheck(incompleteLatest).ok).toBe(false);
+  });
+
+  it("selects the highest GLM version across all route chunks and rejects ambiguous or incomplete current prices", async () => {
+    const block = (version: number, price: number, count = 9) =>
+      raw(
+        `const v="V${version}",items=[${["lite", "pro", "max"]
+          .flatMap((plan) =>
+            ["month", "quarter", "year"].map(
+              (period) =>
+                `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+            ),
+          )
+          .slice(0, count)
+          .join(",")}];`,
+      );
+    const old = block(2, 49);
+    const current = block(3, 118);
+    for (const candidates of [
+      [old, current],
+      [current, old],
+    ]) {
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(candidates[0])
+        .mockResolvedValueOnce(candidates[1]);
+      expect(
+        await findCompleteGlmCodingPlanChunk(
+          ["ClaudeCode.js", "3323.js"],
+          loader,
+        ),
+      ).toBe(current);
+      expect(loader).toHaveBeenCalledTimes(2);
+    }
+    for (const newer of [block(3, 118, 8), block(3, 118, 0)]) {
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(old)
+        .mockResolvedValueOnce(newer);
+      expect(
+        await findCompleteGlmCodingPlanChunk(["old.js", "new.js"], loader),
+      ).toBeNull();
+      const sameVersion = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValueOnce(current)
+        .mockResolvedValueOnce(newer);
+      expect(
+        await findCompleteGlmCodingPlanChunk(
+          ["full.js", "partial.js"],
+          sameVersion,
+        ),
+      ).toBeNull();
+    }
+    const conflicting = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(block(3, 99));
+    expect(
+      await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], conflicting),
+    ).toBeNull();
+    const identical = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValue(current);
+    expect(
+      await findCompleteGlmCodingPlanChunk(["a.js", "b.js"], identical),
+    ).toBe(current);
+    const uiConfiguration = raw(
+      'const u="V3",h=Object.freeze({pro:{productName:"标准版",desc:"团队管理"}});',
+    );
+    const withUi = vi
+      .fn<(path: string) => Promise<RawCollectionResult>>()
+      .mockResolvedValueOnce(uiConfiguration)
+      .mockResolvedValueOnce(current);
+    expect(
+      await findCompleteGlmCodingPlanChunk(
+        ["ClaudeCode.js", "shared.js"],
+        withUi,
+      ),
+    ).toBe(current);
+  });
+
+  it("rejects conflicting highest-version GLM declarations and duplicate plan prices within a chunk", () => {
+    const products = (price: number) =>
+      ["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .join(",");
+    const first = `const a="V3",items=[${products(118)}]`;
+    const same = `,b="V3",items=[${products(118)}];`;
+    const conflicting = `,b="V3",items=[${products(49)}];`;
+    expect(parseGlmCodingPlan(raw(first + same))).toHaveLength(9);
+    expect(() => parseGlmCodingPlan(raw(first + conflicting))).toThrow(
+      /Conflicting/,
+    );
+    expect(() => parseGlmCodingPlan(raw(`${first},b="V3",items=[];`))).toThrow(
+      /incomplete/,
+    );
+    expect(() =>
+      parseGlmCodingPlan(
+        raw(
+          `const a="V3",items=[${products(118)},{type:"lite",unitKey:"month",productId:"duplicate",salePrice:49,renewAmount:49}];`,
+        ),
+      ),
+    ).toThrow(/Conflicting/);
+  });
+
+  it("validates GLM decimal amounts before creating any display string", () => {
+    for (const period of ["month", "quarter", "year"]) {
+      const payload = (price: string) =>
+        raw(
+          `{type:"lite",unitKey:"${period}",productId:"plan",salePrice:${price},renewAmount:${price}}`,
+        );
+      for (const invalid of [
+        "0",
+        "0.0000006",
+        "0.000001",
+        "0.001",
+        "100000.001",
+        "1000000",
+        "1e9",
+        "NaN",
+        "-118",
+      ]) {
+        expect(parseGlmCodingPlan(payload(invalid))).toEqual([]);
+      }
+      for (const [valid, amountMinor] of [
+        ["0.01", 1],
+        ["118.25", 11825],
+        ["100000", 10000000],
+      ] as const) {
+        expect(parseGlmCodingPlan(payload(valid))).toMatchObject([
+          { amountMinor },
+        ]);
+      }
+    }
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"old",productName:"Lite",salePrice:0.0000006,unit:"month",version:"v2"}',
+        ),
+      ),
+    ).toEqual([]);
+    expect(parseGlmCodingPlan(raw("Lite\n￥0.0000006/月"))).toEqual([]);
+    const rendered = parseGlmCodingPlan(
+      raw("Lite\n￥118/月\n下个季度续费金额：￥0.0000006"),
+    );
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0].amountMinor).toBe(11800);
+  });
+
+  it("rejects newly added GLM compact plan types and billing periods", () => {
+    const products = ["lite", "pro", "max"]
+      .flatMap((plan) =>
+        ["month", "quarter", "year"].map(
+          (period) =>
+            `{type:"${plan}",unitKey:"${period}",productId:"${plan}-${period}",salePrice:118,renewAmount:118}`,
+        ),
+      )
+      .join(",");
+    for (const [plan, period] of [
+      ["ultra", "month"],
+      ["lite", "week"],
+      ["enterprise", "year"],
+      ["lite", "one_time"],
+    ]) {
+      expect(() =>
+        parseGlmCodingPlan(
+          raw(
+            `const a="V3",items=[${products},{type:"${plan}",unitKey:"${period}",productId:"new",salePrice:199,renewAmount:199}];`,
+          ),
+        ),
+      ).toThrow(/unverified plan or billing period/);
+      for (const extra of [
+        `{productId:"new",type:"${plan}",unitKey:"${period}",salePrice:199,renewAmount:199}`,
+        `{notes:{label:"details",values:[1,2]},unitKey:"${period}",productId:"new",type:"${plan}",salePrice:199,renewAmount:199}`,
+        `{"productId":"new","unitKey":"${period}","type":"${plan}","salePrice":199,"renewAmount":199}`,
+      ]) {
+        expect(() =>
+          parseGlmCodingPlan(raw(`const a="V3",items=[${products},${extra}];`)),
+        ).toThrow(/unverified plan or billing period/);
+      }
+    }
+  });
+
+  it("reads reordered nested GLM quote objects without reading comment, regex, or string decoys", () => {
+    const record =
+      '{notes:{a:1,b:[1,2]},productId:"real",renewAmount:118.25,type:"pro",salePrice:118.25,unitKey:"quarter"}';
+    const body = `/* {productId:"fake",type:"ultra",unitKey:"week",salePrice:1} */
+      const description='{productId:"fake",type:"ultra",unitKey:"week",salePrice:1}';
+      const pattern=/[{](productId|unitKey):[}]/g;
+      const a="V3",items=[${record}];`;
+    expect(parseGlmCodingPlan(raw(body))).toMatchObject([
+      { canonicalPlanSlug: "glm-coding-pro-quarter", amountMinor: 11825 },
+    ]);
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"real",type:"lite",unitKey:"month",salePrice:118/2,renewAmount:118}',
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"real",type:"lite",unitKey:"month",salePrice:118+2,renewAmount:118}',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores fake GLM version declarations in comments, strings, templates and regex literals", async () => {
+    const products = (price: number) =>
+      ["lite", "pro", "max"]
+        .flatMap((plan) =>
+          ["month", "quarter", "year"].map(
+            (period) =>
+              `{productId:"${plan}-${period}",type:"${plan}",unitKey:"${period}",salePrice:${price},renewAmount:${price}}`,
+          ),
+        )
+        .join(",");
+    const decoy = `,x="V4",items=[${products(49)}]`;
+    const actual = `const a="V3",items=[${products(118)}];`;
+    const escapedRegex = decoy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const body of [
+      `/*${decoy}*/${actual}`,
+      `${actual}/*${decoy}*/`,
+      `const description=${JSON.stringify(decoy)};${actual}`,
+      `const description=\`${decoy}\`;${actual}`,
+      `const pattern=/${escapedRegex}/g;${actual}`,
+      `function unused(a=0,x="V4",items=[]){return items;} ${actual}`,
+    ]) {
+      const offers = parseGlmCodingPlan(raw(body));
+      expect(offers).toHaveLength(9);
+      expect(offers.every((offer) => offer.amountMinor === 11800)).toBe(true);
+      const loader = vi
+        .fn<(path: string) => Promise<RawCollectionResult>>()
+        .mockResolvedValue(raw(body));
+      expect(
+        await findCompleteGlmCodingPlanChunk(["current.js"], loader),
+      ).not.toBeNull();
+    }
+  });
+
+  it("requires Huawei MaaS's current model and price-type baseline", () => {
+    const baseline = parseHuaweiMaaSApi(
+      raw(readFileSync("tests/fixtures/huawei-maas-2026-10-14.html", "utf8")),
+    );
     const adapter = officialPageAdapters.find(
       (candidate) => candidate.id === "huawei-maas-pricing-official",
     );
@@ -816,29 +1289,65 @@ ${completeRows}
     });
   });
 
+  it("rejects same-count Huawei tier replacements and duplicate identities", () => {
+    const html = readFileSync(
+      "tests/fixtures/huawei-maas-2026-10-14.html",
+      "utf8",
+    );
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "huawei-maas-pricing-official",
+    )!;
+    const baseline = parseHuaweiMaaSApi(raw(html));
+    for (const changedHtml of [
+      html.replace("0≤Token&lt;32K", "0≤Token&lt;64K"),
+      html.replace("<td>时段1</td>", "<td>时段3</td>"),
+    ]) {
+      const replacement = parseHuaweiMaaSApi(raw(changedHtml));
+      expect(replacement).toHaveLength(51);
+      expect(adapter.healthCheck(replacement)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: {
+          missingModels: [],
+          missingPriceTypes: [],
+          missingPlans: expect.any(Array),
+          unexpectedPlans: expect.any(Array),
+        },
+      });
+      expect(
+        adapter.healthCheck(replacement).details?.missingPlans,
+      ).not.toEqual([]);
+      expect(
+        adapter.healthCheck(replacement).details?.unexpectedPlans,
+      ).not.toEqual([]);
+    }
+    expect(adapter.healthCheck([baseline[1], ...baseline.slice(1)]).ok).toBe(
+      false,
+    );
+    expect(adapter.healthCheck([...baseline, baseline[0]]).ok).toBe(false);
+    expect(adapter.healthCheck([...baseline].reverse()).ok).toBe(true);
+    expect(
+      adapter.healthCheck(
+        baseline.map((offer) => ({
+          ...offer,
+          amountMinor: offer.amountMinor! + 1,
+        })),
+      ).ok,
+    ).toBe(true);
+  });
+
   it("accepts the current Huawei MaaS public pricing table", () => {
     const current = parseHuaweiMaaSApi(
-      raw(`<table>
-        <tr><th rowspan="2">模型名称</th><th rowspan="2">单次请求的Token数</th><th colspan="3">单价（元/百万Tokens）</th></tr>
-        <tr><th>输入（缓存命中）</th><th>输入</th><th>输出</th></tr>
-        <tr><td rowspan="2">openPangu-2.0-Pro</td><td>0≤Token&lt;32K</td><td>0.8</td><td>3.2</td><td>14.5</td></tr>
-        <tr><td>Token≥32K</td><td>1.2</td><td>4.8</td><td>17.6</td></tr>
-        <tr><td>openPangu-2.0-Flash</td><td>-</td><td>0.2</td><td>0.8</td><td>1.6</td></tr>
-        <tr><td>GLM-5.2</td><td>-</td><td>-</td><td>8</td><td>28</td></tr>
-        <tr><td rowspan="2">GLM-5.1</td><td>0≤Token&lt;32K</td><td>-</td><td>6</td><td>24</td></tr>
-        <tr><td>Token≥32K</td><td>-</td><td>8</td><td>28</td></tr>
-        <tr><td>Kimi-K2.6</td><td>-</td><td>-</td><td>6.5</td><td>27</td></tr>
-        <tr><td>DeepSeek-V4-Pro</td><td>-</td><td>-</td><td>12</td><td>24</td></tr>
-        <tr><td>DeepSeek-V4-Flash</td><td>-</td><td>-</td><td>1</td><td>2</td></tr>
-        <tr><td>Qwen3-30B-A3B</td><td>-</td><td>-</td><td>0.75</td><td>思考模式：7.5 非思考模式：3</td></tr>
-        <tr><td>Qwen3-32B</td><td>-</td><td>-</td><td>2</td><td>思考模式：20 非思考模式：8</td></tr>
-      </table>`),
+      raw(readFileSync("tests/fixtures/huawei-maas-2026-10-14.html", "utf8")),
     );
     const adapter = officialPageAdapters.find(
       (candidate) => candidate.id === "huawei-maas-pricing-official",
     );
 
-    expect(current).toHaveLength(27);
+    expect(current).toHaveLength(51);
+    expect(current.some((offer) => offer.modelName === "DeepSeek-V4-Pro")).toBe(
+      false,
+    );
     expect(current).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -868,6 +1377,54 @@ ${completeRows}
       ]),
     );
     expect(adapter?.healthCheck(current)).toMatchObject({ ok: true });
+    expect(adapter?.healthCheck(current.slice(0, -1)).ok).toBe(false);
+    const html = readFileSync(
+      "tests/fixtures/huawei-maas-2026-10-14.html",
+      "utf8",
+    );
+    for (const broken of [
+      html.replace("GLM-5.3", "unknown-model"),
+      html.replace("<td>0.75</td>", "<td>-1</td>"),
+      html.replace("<td>0.75</td>", "<td></td>"),
+      html.replace("<td>0.75</td>", "<td>1000000000</td>"),
+      html.replace("<td>0.75</td>", "<td>10000.01</td>"),
+      html.replace("<td>0.75</td>", "<td>0</td>"),
+      html.replace("<td>0.75</td>", "<td>0.000000001</td>"),
+      html.replace("<td>0.75</td>", "<td>0.000000006</td>"),
+      html.replace("<td>0.75</td>", "<td>0.0000006</td>"),
+      html.replace("<td>0.75</td>", "<td>10000.000000004</td>"),
+      html.replace("<td>0.75</td>", "<td>1e9</td>"),
+      html.replace("思考模式：7.5", "思考模式：1000000000"),
+      html.replace("思考模式：7.5", "思考模式：0"),
+      html.replace("思考模式：7.5", "思考模式：0.000000006"),
+      html.replace("思考模式：7.5", "思考模式：1e9"),
+    ]) {
+      expect(adapter?.healthCheck(parseHuaweiMaaSApi(raw(broken))).ok).toBe(
+        false,
+      );
+    }
+    expect(
+      adapter?.healthCheck(
+        parseHuaweiMaaSApi(
+          raw(html.replace("<td>0.75</td>", "<td>10000</td>")),
+        ),
+      ).ok,
+    ).toBe(true);
+    expect(
+      adapter?.healthCheck(
+        parseHuaweiMaaSApi(
+          raw(html.replace("<td>0.75</td>", "<td>0.000001</td>")),
+        ),
+      ).ok,
+    ).toBe(true);
+    for (const changedField of [{ currency: "USD" }, { unit: "/千 tokens" }]) {
+      expect(
+        adapter?.healthCheck([
+          { ...current[0], ...changedField },
+          ...current.slice(1),
+        ]).ok,
+      ).toBe(false);
+    }
   });
 
   it("parses GLM monthly and quarterly prices from the rendered fallback", () => {
@@ -926,7 +1483,7 @@ Max
       "month",
     ]);
     expect(
-      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v7"),
+      glm.every((offer) => offer.parserVersion === "glm-coding-plan-v8"),
     ).toBe(true);
     expect(officialPageHealthCheck(glm, 9)).toMatchObject({
       ok: false,

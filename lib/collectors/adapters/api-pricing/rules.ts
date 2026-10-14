@@ -775,7 +775,17 @@ export function parseHuaweiMaaSApi(
   const parseHuaweiPriceCell = (
     value: string | undefined,
   ): Array<{ value: number; tier?: string }> => {
-    if (!value) return [];
+    if (!value || /\d(?:\.\d+)?[eE][+-]?\d/.test(value)) return [];
+    const isRepresentablePrice = (amount: number) => {
+      const normalizedYuan = amount * unitInfo.multiplier;
+      // apiOffer displays six yuan decimals. Validate the original amount
+      // before rounding can turn an undersized/oversized value into a boundary.
+      return (
+        Number.isFinite(normalizedYuan) &&
+        normalizedYuan >= 0.000001 &&
+        normalizedYuan <= 10_000
+      );
+    };
     const labeledValues = [
       ...value.matchAll(
         /(非思考模式|思考模式|non[- ]thinking mode|thinking mode)\s*[:：]\s*(-?\d+(?:\.\d+)?)/gi,
@@ -784,9 +794,15 @@ export function parseHuaweiMaaSApi(
       tier: compactLabel(match[1]),
       value: Number(match[2]),
     }));
-    if (labeledValues.length > 0) return labeledValues;
+    if (labeledValues.length > 0) {
+      return labeledValues.every((price) => isRepresentablePrice(price.value))
+        ? labeledValues
+        : [];
+    }
     const parsed = numberFrom(value);
-    return parsed === null ? [] : [{ value: parsed }];
+    return parsed === null || !isRepresentablePrice(parsed)
+      ? []
+      : [{ value: parsed }];
   };
   if (priceTypeColumns.length > 0) {
     const tierEnd = Math.min(...priceTypeColumns.map((column) => column.index));
@@ -810,7 +826,7 @@ export function parseHuaweiMaaSApi(
                 apiOffer({
                   raw,
                   providerSlug: "huawei-maas-api",
-                  parserVersion: "huawei-maas-api-v7",
+                  parserVersion: "huawei-maas-api-v8",
                   modelName,
                   modelOrder: orderFor(modelName),
                   priceLabel: label,
@@ -866,7 +882,7 @@ export function parseHuaweiMaaSApi(
           apiOffer({
             raw,
             providerSlug: "huawei-maas-api",
-            parserVersion: "huawei-maas-api-v7",
+            parserVersion: "huawei-maas-api-v8",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel,
