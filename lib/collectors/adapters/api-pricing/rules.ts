@@ -810,7 +810,7 @@ export function parseHuaweiMaaSApi(
                 apiOffer({
                   raw,
                   providerSlug: "huawei-maas-api",
-                  parserVersion: "huawei-maas-api-v7",
+                  parserVersion: "huawei-maas-api-v8",
                   modelName,
                   modelOrder: orderFor(modelName),
                   priceLabel: label,
@@ -866,7 +866,7 @@ export function parseHuaweiMaaSApi(
           apiOffer({
             raw,
             providerSlug: "huawei-maas-api",
-            parserVersion: "huawei-maas-api-v7",
+            parserVersion: "huawei-maas-api-v8",
             modelName,
             modelOrder: orderFor(modelName),
             priceLabel,

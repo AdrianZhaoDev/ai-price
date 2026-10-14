@@ -199,11 +199,14 @@ export function parseKimiMembership(
       channel: "official_web" as const,
       sourceUrl: raw.sourceUrl,
       observedAt: raw.observedAt,
-      parserVersion: "kimi-membership-v2",
+      parserVersion: "kimi-membership-v3",
     };
-    if (/¥|￥/.test(displayPrice)) return [cnyOffer(offerInput)];
-    if (/\$/.test(displayPrice)) return [usdOffer(offerInput)];
-    return [];
+    const price = displayPrice.match(
+      /^(USD|US\$|\$|CNY|RMB|¥|￥)\s*(\d+(?:\.\d{1,2})?)\s*(?:\/(?:月|month)|per month)?$/i,
+    );
+    if (!price || Number(price[2]) <= 0) return [];
+    if (/^(?:CNY|RMB|¥|￥)$/i.test(price[1])) return [cnyOffer(offerInput)];
+    return [usdOffer(offerInput)];
   });
 }
 
@@ -961,16 +964,53 @@ export function parseHuaweiTokenPlan(
     });
 }
 
-const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v7";
+const GLM_CODING_PLAN_PARSER_VERSION = "glm-coding-plan-v8";
 const GLM_CODING_PLAN_MINIMUM_OFFERS = 9;
 
-export function glmCodingPlanPriceChunkPaths(runtimeBody: string): string[] {
+export function glmCodingPlanPriceChunkPaths(
+  runtimeBody: string,
+  appBody = "",
+): string[] {
   const paths: string[] = [];
   for (const match of runtimeBody.matchAll(
     /(?:"(ClaudeCode~(?:SpecialArea~)?subscribe-overview)"|"?(ClaudeCode)"?):"([a-f0-9]+)"/g,
   )) {
     const path = `${match[1] ?? match[2]}.${match[3]}.js`;
     if (!paths.includes(path)) paths.push(path);
+  }
+  // Webpack 5 separates numeric chunk IDs, names and JS hashes. Only follow
+  // dependencies of the official Coding Plan route, never the CSS hash map.
+  const loader = runtimeBody.match(/\.u=function\([^)]*\)\{([\s\S]*?)\},/)?.[1];
+  if (loader) {
+    const maps = [...loader.matchAll(/\{([^{}]*)\}\[\w+\]/g)].map(
+      (map) =>
+        new Map(
+          [...map[1].matchAll(/(\d+):"([^"\\]+)"/g)].map((entry) => [
+            entry[1],
+            entry[2],
+          ]),
+        ),
+    );
+    const [names, hashes] = maps;
+    const ids = new Set<string>();
+    for (const [id, name] of names ?? []) {
+      if (/^ClaudeCode(?:~(?:SpecialArea~)?subscribe-overview)?$/.test(name)) {
+        ids.add(id);
+      }
+    }
+    for (const route of appBody.matchAll(
+      /path:"\/(?:glm-coding|claude-code)",(?:name:[^,]+,)?component:\(\)=>Promise\.all\(\[([^\]]+)\]\)/g,
+    )) {
+      for (const match of route[1].matchAll(/\.e\((\d+)\)/g)) ids.add(match[1]);
+    }
+    for (const id of ids) {
+      const name = names?.get(id) ?? id;
+      const hash = hashes?.get(id);
+      if (!/^[\w~-]+$/.test(name) || !hash || !/^[a-f0-9]+$/.test(hash))
+        continue;
+      const path = `${name}.${hash}.js`;
+      if (!paths.includes(path)) paths.push(path);
+    }
   }
   return paths.sort((left, right) => {
     const leftIsPriceChunk = left.startsWith("ClaudeCode.");
@@ -1006,18 +1046,25 @@ export function parseGlmCodingPlan(
     year: "年付",
   } as const;
   const compactOffers = new Map<string, NormalizedOffer>();
-  for (const product of raw.body.matchAll(
+  const versions = [
+    ...raw.body.matchAll(/(?:\bconst\s+|,)[\w$]+="V\d+"(?=[,;])/g),
+  ];
+  const compactBody = versions.length
+    ? raw.body.slice(versions.at(-1)!.index)
+    : raw.body;
+  for (const product of compactBody.matchAll(
     /\{type:"(lite|pro|max)",unitKey:"(month|quarter|year)",productId:"[^"]+"[^}]{0,600}\}/gi,
   )) {
     const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
     const unit = product[2] as keyof typeof periodNames;
-    const salePrice = Number(product[0].match(/salePrice:([\d.]+)/)?.[1]);
-    const renewalTotal = Number(product[0].match(/renewAmount:([\d.]+)/)?.[1]);
-    const price =
-      unit === "month" || !Number.isFinite(renewalTotal)
-        ? salePrice
-        : renewalTotal;
-    if (!Number.isFinite(price)) continue;
+    const salePrice = Number(
+      product[0].match(/salePrice:(\d+(?:\.\d+)?)(?=[,}])/)?.[1],
+    );
+    const renewalTotal = Number(
+      product[0].match(/renewAmount:(\d+(?:\.\d+)?)(?=[,}])/)?.[1],
+    );
+    const price = unit === "month" ? salePrice : renewalTotal;
+    if (!Number.isFinite(price) || price <= 0) continue;
 
     compactOffers.set(
       `${plan}-${unit}`,
@@ -1034,7 +1081,8 @@ export function parseGlmCodingPlan(
       }),
     );
   }
-  if (compactOffers.size > 0) return [...compactOffers.values()];
+  if (compactOffers.size > 0 || versions.length > 0)
+    return [...compactOffers.values()];
 
   const dynamicOffers = [
     ...raw.body.matchAll(
@@ -1361,14 +1409,16 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "minimax-paygo-official": 67,
 };
 
-const HUAWEI_MAAS_MINIMUM_OFFERS = 27;
+const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",
+  "GLM-5.3",
+  "GLM-5.2-Arkts-Spark",
   "GLM-5.2",
   "GLM-5.1",
   "Kimi-K2.6",
-  "DeepSeek-V4-Pro",
+  "DeepSeek-V4.1-Flash",
   "DeepSeek-V4-Flash",
   "Qwen3-30B-A3B",
   "Qwen3-32B",
@@ -1668,7 +1718,20 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         observedAt: context.observedAt,
         signal: context.signal,
       });
-      const chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      let chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body);
+      if (/\.u=function\(/.test(runtime.body)) {
+        const appPath = $("script[src]")
+          .map((_, element) => $(element).attr("src"))
+          .get()
+          .find((src) => /\/app\.[a-f0-9]+\.js$/i.test(src));
+        if (!appPath)
+          throw new Error("GLM Coding Plan route asset was not found.");
+        const app = await fetchPage(new URL(appPath, runtimeUrl).toString(), {
+          observedAt: context.observedAt,
+          signal: context.signal,
+        });
+        chunkPaths = glmCodingPlanPriceChunkPaths(runtime.body, app.body);
+      }
       if (chunkPaths.length === 0) {
         throw new Error("GLM Coding Plan price chunk hash was not found.");
       }
@@ -1689,28 +1752,14 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
         "GLM Coding Plan price chunks did not contain all billing periods.",
       );
     } catch (primaryError) {
-      const renderedFallbackUrl =
-        "https://r.jina.ai/https://bigmodel.cn/claude-code";
-      try {
-        const rendered = await fetchPage(renderedFallbackUrl, {
-          observedAt: context.observedAt,
-          signal: context.signal,
-          timeoutMs: 30_000,
-          attempts: 2,
-        });
-        return { ...rendered, sourceUrl: this.sourceUrl };
-      } catch (fallbackError) {
-        throw new CollectionError(
-          "FETCH_FAILED",
-          "GLM Coding Plan official page and rendered fallback both failed.",
-          {
-            primaryUrl: this.sourceUrl,
-            fallbackUrl: renderedFallbackUrl,
-            primaryError: errorDiagnosticDetails(primaryError),
-            fallbackError: errorDiagnosticDetails(fallbackError),
-          },
-        );
-      }
+      throw new CollectionError(
+        "FETCH_FAILED",
+        "GLM Coding Plan official assets did not provide complete prices.",
+        {
+          primaryUrl: this.sourceUrl,
+          primaryError: errorDiagnosticDetails(primaryError),
+        },
+      );
     }
   }
 
@@ -1719,7 +1768,35 @@ class GlmCodingPlanAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
-    return officialPageHealthCheck(offers, GLM_CODING_PLAN_MINIMUM_OFFERS);
+    const base = officialPageHealthCheck(
+      offers,
+      GLM_CODING_PLAN_MINIMUM_OFFERS,
+    );
+    if (!base.ok) return base;
+    const ids = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+    const complete = ["lite", "pro", "max"].every((plan) =>
+      ["month", "quarter", "year"].every((period) =>
+        ids.has(`glm-coding-${plan}-${period}`),
+      ),
+    );
+    if (
+      !complete ||
+      ids.size !== offers.length ||
+      offers.some(
+        (offer) =>
+          offer.amountMinor === null ||
+          offer.amountMinor <= 0 ||
+          offer.amountMinor > 10_000_000,
+      )
+    ) {
+      return {
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        message:
+          "GLM Coding Plan billing periods were incomplete or duplicated.",
+      };
+    }
+    return base;
   }
 }
 
@@ -1878,7 +1955,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "kimi-membership-official",
     "kimi-membership",
     "https://www.kimi.ai/zh-hans/help/membership/membership-pricing",
-    "kimi-membership-v2",
+    "kimi-membership-v3",
     parseKimiMembership,
     undefined,
     ["USD"],
@@ -2073,7 +2150,7 @@ export const officialPageAdapters: PriceSourceAdapter[] = [
     "huawei-maas-pricing-official",
     "huawei-maas-api",
     "https://support.huaweicloud.com/price-maas/price-maas-0002.html",
-    "huawei-maas-api-v7",
+    "huawei-maas-api-v8",
     parseHuaweiMaaSApi,
   ),
   new OfficialPageAdapter(
