@@ -154,6 +154,55 @@ describe("official table adapters", () => {
     ).toBe(false);
   });
 
+  it.each(["Enterprise", "Allegro", "Plus"])(
+    "rejects Kimi's four-row table when Ultra is replaced by %s",
+    (replacement) => {
+      const body = `<table><tr><th>套餐</th><th>月付</th></tr>
+        <tr><td>Plus</td><td>USD 19/月</td></tr>
+        <tr><td>Pro</td><td>USD 39/月</td></tr>
+        <tr><td>Max</td><td>USD 99/月</td></tr>
+        <tr><td>${replacement}</td><td>USD 199/月</td></tr></table>`;
+      const offers = parseKimiMembership(raw(body));
+      expect(offers).toHaveLength(4);
+      const adapter = officialPageAdapters.find(
+        (candidate) => candidate.id === "kimi-membership-official",
+      )!;
+      expect(adapter.healthCheck(offers)).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+        details: { missingPlans: ["kimi-ultra-monthly"] },
+      });
+    },
+  );
+
+  it("accepts reordered current Kimi plans but rejects an extra or legacy plan set", () => {
+    const adapter = officialPageAdapters.find(
+      (candidate) => candidate.id === "kimi-membership-official",
+    )!;
+    const table = (names: string[]) =>
+      raw(
+        `<table><tr><th>套餐</th><th>月付</th></tr>${names
+          .map((name) => `<tr><td>${name}</td><td>USD 19/月</td></tr>`)
+          .join("")}</table>`,
+      );
+    expect(
+      adapter.healthCheck(
+        parseKimiMembership(table(["Ultra", "Max", "Pro", "Plus"])),
+      ).ok,
+    ).toBe(true);
+    for (const names of [
+      ["Plus", "Pro", "Max", "Ultra", "Enterprise"],
+      ["Moderato", "Allegretto", "Allegro", "Vivace"],
+    ]) {
+      expect(
+        adapter.healthCheck(parseKimiMembership(table(names))),
+      ).toMatchObject({
+        ok: false,
+        code: "STRUCTURE_CHANGED",
+      });
+    }
+  });
+
   it("parses MiniMax horizontal plans", () => {
     const offers = parseMiniMaxTokenPlan(
       raw(`<table><tr><th></th><th>Plus</th><th>Max</th></tr>

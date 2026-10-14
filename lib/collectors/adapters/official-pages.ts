@@ -1420,6 +1420,45 @@ const minimumOffersByAdapterId: Record<string, number> = {
   "minimax-paygo-official": 67,
 };
 
+const KIMI_MEMBERSHIP_REQUIRED_PLANS = [
+  "kimi-plus-monthly",
+  "kimi-pro-monthly",
+  "kimi-max-monthly",
+  "kimi-ultra-monthly",
+] as const;
+
+function kimiMembershipHealthCheck(offers: NormalizedOffer[]): SourceHealth {
+  const baseHealth = officialPageHealthCheck(
+    offers,
+    KIMI_MEMBERSHIP_REQUIRED_PLANS.length,
+  );
+  if (!baseHealth.ok) return baseHealth;
+
+  const planSlugs = new Set(offers.map((offer) => offer.canonicalPlanSlug));
+  const missingPlans = KIMI_MEMBERSHIP_REQUIRED_PLANS.filter(
+    (slug) => !planSlugs.has(slug),
+  );
+  if (
+    offers.length !== KIMI_MEMBERSHIP_REQUIRED_PLANS.length ||
+    planSlugs.size !== offers.length ||
+    missingPlans.length > 0 ||
+    offers.some((offer) => offer.billingPeriod !== "month")
+  ) {
+    return {
+      ok: false,
+      code: "STRUCTURE_CHANGED",
+      message:
+        "Kimi monthly price table did not match its verified four-plan baseline.",
+      details: {
+        requiredPlans: [...KIMI_MEMBERSHIP_REQUIRED_PLANS],
+        missingPlans,
+        parsedPlans: [...planSlugs].sort(),
+      },
+    };
+  }
+  return baseHealth;
+}
+
 const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
@@ -1682,6 +1721,9 @@ export class OfficialPageAdapter implements PriceSourceAdapter {
   }
 
   healthCheck(offers: NormalizedOffer[]): SourceHealth {
+    if (this.id === "kimi-membership-official") {
+      return kimiMembershipHealthCheck(offers);
+    }
     if (this.id === "huawei-maas-pricing-official") {
       return huaweiMaaSHealthCheck(offers);
     }
