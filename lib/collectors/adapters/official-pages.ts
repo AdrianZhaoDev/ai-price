@@ -1460,6 +1460,9 @@ function kimiMembershipHealthCheck(offers: NormalizedOffer[]): SourceHealth {
 }
 
 const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
+// CNY minor units per million tokens. Current public prices are far below this
+// loose ceiling; corrupted positive numbers must not become live quotes.
+const HUAWEI_MAAS_MAX_AMOUNT_MINOR = 1_000_000;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",
@@ -1564,11 +1567,18 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
   const unexpectedPlans = [...planSlugs].filter(
     (slug) => slug === null || !verifiedSlugs.has(slug),
   );
+  const abnormalOffers = offers.filter(
+    (offer) =>
+      offer.currency !== "CNY" ||
+      offer.unit !== "/百万 tokens" ||
+      offer.amountMinor! > HUAWEI_MAAS_MAX_AMOUNT_MINOR,
+  );
   if (
     missingModels.length > 0 ||
     missingPriceTypes.length > 0 ||
     missingPlans.length > 0 ||
     unexpectedPlans.length > 0 ||
+    abnormalOffers.length > 0 ||
     offers.length !== verifiedSlugs.size ||
     planSlugs.size !== offers.length
   ) {
@@ -1576,7 +1586,7 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
       ok: false,
       code: "STRUCTURE_CHANGED",
       message:
-        "Huawei MaaS price table did not include its verified model and price-type baseline.",
+        "Huawei MaaS price table did not match its verified quote baseline.",
       details: {
         modelCount: modelNames.size,
         requiredModels: [...HUAWEI_MAAS_REQUIRED_MODELS],
@@ -1585,6 +1595,13 @@ function huaweiMaaSHealthCheck(offers: NormalizedOffer[]): SourceHealth {
         missingPriceTypes,
         missingPlans,
         unexpectedPlans,
+        maximumAmountMinor: HUAWEI_MAAS_MAX_AMOUNT_MINOR,
+        abnormalOffers: abnormalOffers.map((offer) => ({
+          planSlug: offer.canonicalPlanSlug,
+          amountMinor: offer.amountMinor,
+          currency: offer.currency,
+          unit: offer.unit,
+        })),
       },
     };
   }

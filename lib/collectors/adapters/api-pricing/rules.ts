@@ -775,7 +775,7 @@ export function parseHuaweiMaaSApi(
   const parseHuaweiPriceCell = (
     value: string | undefined,
   ): Array<{ value: number; tier?: string }> => {
-    if (!value) return [];
+    if (!value || /\d(?:\.\d+)?[eE][+-]?\d/.test(value)) return [];
     const labeledValues = [
       ...value.matchAll(
         /(非思考模式|思考模式|non[- ]thinking mode|thinking mode)\s*[:：]\s*(-?\d+(?:\.\d+)?)/gi,

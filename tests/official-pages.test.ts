@@ -1043,10 +1043,30 @@ ${completeRows}
       html.replace("GLM-5.3", "unknown-model"),
       html.replace("<td>0.75</td>", "<td>-1</td>"),
       html.replace("<td>0.75</td>", "<td></td>"),
+      html.replace("<td>0.75</td>", "<td>1000000000</td>"),
+      html.replace("<td>0.75</td>", "<td>10000.01</td>"),
+      html.replace("<td>0.75</td>", "<td>1e9</td>"),
+      html.replace("思考模式：7.5", "思考模式：1000000000"),
+      html.replace("思考模式：7.5", "思考模式：1e9"),
     ]) {
       expect(adapter?.healthCheck(parseHuaweiMaaSApi(raw(broken))).ok).toBe(
         false,
       );
+    }
+    expect(
+      adapter?.healthCheck(
+        parseHuaweiMaaSApi(
+          raw(html.replace("<td>0.75</td>", "<td>10000</td>")),
+        ),
+      ).ok,
+    ).toBe(true);
+    for (const changedField of [{ currency: "USD" }, { unit: "/千 tokens" }]) {
+      expect(
+        adapter?.healthCheck([
+          { ...current[0], ...changedField },
+          ...current.slice(1),
+        ]).ok,
+      ).toBe(false);
     }
   });
 
