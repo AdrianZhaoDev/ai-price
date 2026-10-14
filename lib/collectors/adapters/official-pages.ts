@@ -1467,9 +1467,9 @@ const HUAWEI_MAAS_MINIMUM_OFFERS = 51;
 // CNY minor units per million tokens. Current public prices are far below this
 // loose ceiling; corrupted positive numbers must not become live quotes.
 const HUAWEI_MAAS_MAX_AMOUNT_MINOR = 1_000_000;
-// price_observations.amount_minor has scale 2; smaller positive values cannot
+// price_observations.amount_minor has scale 6; smaller positive values cannot
 // reliably preserve this paid-price baseline when persisted.
-const HUAWEI_MAAS_MIN_AMOUNT_MINOR = 0.01;
+const HUAWEI_MAAS_MIN_AMOUNT_MINOR = 0.000001;
 const HUAWEI_MAAS_REQUIRED_MODELS = [
   "openPangu-2.0-Pro",
   "openPangu-2.0-Flash",

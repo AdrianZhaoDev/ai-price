@@ -1095,7 +1095,7 @@ ${completeRows}
       html.replace("<td>0.75</td>", "<td>1000000000</td>"),
       html.replace("<td>0.75</td>", "<td>10000.01</td>"),
       html.replace("<td>0.75</td>", "<td>0</td>"),
-      html.replace("<td>0.75</td>", "<td>0.000001</td>"),
+      html.replace("<td>0.75</td>", "<td>0.000000001</td>"),
       html.replace("<td>0.75</td>", "<td>1e9</td>"),
       html.replace("思考模式：7.5", "思考模式：1000000000"),
       html.replace("思考模式：7.5", "思考模式：0"),
@@ -1115,7 +1115,7 @@ ${completeRows}
     expect(
       adapter?.healthCheck(
         parseHuaweiMaaSApi(
-          raw(html.replace("<td>0.75</td>", "<td>0.0001</td>")),
+          raw(html.replace("<td>0.75</td>", "<td>0.00000001</td>")),
         ),
       ).ok,
     ).toBe(true);
