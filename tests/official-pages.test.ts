@@ -1188,7 +1188,42 @@ ${completeRows}
           ),
         ),
       ).toThrow(/unverified plan or billing period/);
+      for (const extra of [
+        `{productId:"new",type:"${plan}",unitKey:"${period}",salePrice:199,renewAmount:199}`,
+        `{notes:{label:"details",values:[1,2]},unitKey:"${period}",productId:"new",type:"${plan}",salePrice:199,renewAmount:199}`,
+        `{"productId":"new","unitKey":"${period}","type":"${plan}","salePrice":199,"renewAmount":199}`,
+      ]) {
+        expect(() =>
+          parseGlmCodingPlan(raw(`const a="V3",items=[${products},${extra}];`)),
+        ).toThrow(/unverified plan or billing period/);
+      }
     }
+  });
+
+  it("reads reordered nested GLM quote objects without reading comment, regex, or string decoys", () => {
+    const record =
+      '{notes:{a:1,b:[1,2]},productId:"real",renewAmount:118.25,type:"pro",salePrice:118.25,unitKey:"quarter"}';
+    const body = `/* {productId:"fake",type:"ultra",unitKey:"week",salePrice:1} */
+      const description='{productId:"fake",type:"ultra",unitKey:"week",salePrice:1}';
+      const pattern=/[{](productId|unitKey):[}]/g;
+      const a="V3",items=[${record}];`;
+    expect(parseGlmCodingPlan(raw(body))).toMatchObject([
+      { canonicalPlanSlug: "glm-coding-pro-quarter", amountMinor: 11825 },
+    ]);
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"real",type:"lite",unitKey:"month",salePrice:118/2,renewAmount:118}',
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      parseGlmCodingPlan(
+        raw(
+          '{productId:"real",type:"lite",unitKey:"month",salePrice:118+2,renewAmount:118}',
+        ),
+      ),
+    ).toEqual([]);
   });
 
   it("requires Huawei MaaS's current model and price-type baseline", () => {

@@ -1054,12 +1054,176 @@ function validGlmCodingPriceText(value: string | undefined): value is string {
   return Number.isFinite(amount) && amount >= 0.01 && amount <= 100_000;
 }
 
+type GlmCompactProduct = Partial<
+  Record<"type" | "unitkey" | "productid" | "saleprice" | "renewamount", string>
+>;
+
+function glmCompactProducts(body: string): GlmCompactProduct[] {
+  if (!/\bproductId\b/i.test(body) || !/\bunitKey\b/i.test(body)) return [];
+  const tokens: {
+    text: string;
+    kind: "string" | "number" | "word" | "symbol" | "opaque";
+  }[] = [];
+  const regexPrefixes = new Set([
+    "=",
+    ":",
+    ",",
+    "(",
+    "[",
+    "{",
+    "!",
+    "?",
+    ";",
+    ">",
+    "return",
+  ]);
+  for (let index = 0; index < body.length;) {
+    const character = body[index];
+    if (/\s/.test(character)) {
+      index++;
+      continue;
+    }
+    if (character === "/" && body[index + 1] === "/") {
+      const end = body.indexOf("\n", index + 2);
+      index = end < 0 ? body.length : end + 1;
+      continue;
+    }
+    if (character === "/" && body[index + 1] === "*") {
+      const end = body.indexOf("*/", index + 2);
+      index = end < 0 ? body.length : end + 2;
+      continue;
+    }
+    if (['"', "'", "`"].includes(character)) {
+      const start = index++;
+      while (index < body.length && body[index] !== character) {
+        index += body[index] === "\\" ? 2 : 1;
+      }
+      const literal = body.slice(start, Math.min(++index, body.length));
+      let text: string | undefined;
+      try {
+        text =
+          character === '"'
+            ? JSON.parse(literal)
+            : literal.slice(1, -1).replace(/\\(['"\\])/g, "$1");
+      } catch {
+        /* Unsupported escape: retain a non-scalar token. */
+      }
+      tokens.push({
+        text: text ?? literal,
+        kind:
+          text !== undefined && !(character === "`" && text.includes("${"))
+            ? "string"
+            : "opaque",
+      });
+      continue;
+    }
+    const previous = tokens.at(-1);
+    if (character === "/" && (!previous || regexPrefixes.has(previous.text))) {
+      const start = index++;
+      let inClass = false;
+      while (index < body.length) {
+        const next = body[index++];
+        if (next === "\\") {
+          index++;
+          continue;
+        }
+        if (next === "[") inClass = true;
+        if (next === "]") inClass = false;
+        if (next === "/" && !inClass) break;
+      }
+      while (/[a-z]/i.test(body[index] ?? "")) index++;
+      tokens.push({ text: body.slice(start, index), kind: "opaque" });
+      continue;
+    }
+    const number = body
+      .slice(index)
+      .match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)?.[0];
+    if (number) {
+      tokens.push({ text: number, kind: "number" });
+      index += number.length;
+      continue;
+    }
+    const word = body.slice(index).match(/^[$A-Za-z_][\w$]*/)?.[0];
+    if (word) {
+      tokens.push({ text: word, kind: "word" });
+      index += word.length;
+      continue;
+    }
+    tokens.push({ text: character, kind: "symbol" });
+    index++;
+  }
+
+  const frames: {
+    opener: string;
+    fields: GlmCompactProduct;
+    literalId: boolean;
+    literalMoney: boolean;
+  }[] = [];
+  const products: GlmCompactProduct[] = [];
+  const keys = new Set([
+    "type",
+    "unitkey",
+    "productid",
+    "saleprice",
+    "renewamount",
+  ]);
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === "symbol" && ["{", "[", "("].includes(token.text)) {
+      frames.push({
+        opener: token.text,
+        fields: {},
+        literalId: false,
+        literalMoney: false,
+      });
+      continue;
+    }
+    if (token.kind === "symbol" && ["}", "]", ")"].includes(token.text)) {
+      const frame = frames.pop();
+      if (
+        frame?.opener === "{" &&
+        "productid" in frame.fields &&
+        ("type" in frame.fields || "unitkey" in frame.fields) &&
+        (frame.literalId ||
+          (frame.fields.type && frame.fields.unitkey && frame.literalMoney))
+      ) {
+        products.push(frame.fields);
+      }
+      continue;
+    }
+    const frame = frames.at(-1);
+    const key = token.text.toLowerCase() as keyof GlmCompactProduct;
+    if (
+      frame?.opener !== "{" ||
+      !["word", "string"].includes(token.kind) ||
+      !keys.has(key) ||
+      tokens[index + 1]?.text !== ":" ||
+      tokens[index + 1]?.kind !== "symbol" ||
+      !["{", ","].includes(tokens[index - 1]?.text ?? "")
+    )
+      continue;
+    const value = tokens[index + 2];
+    const delimiter = tokens[index + 3];
+    const literal = Boolean(
+      value &&
+      ["string", "number"].includes(value.kind) &&
+      delimiter?.kind === "symbol" &&
+      [",", "}"].includes(delimiter.text),
+    );
+    frame.fields[key] = literal ? value.text : undefined;
+    if (key === "productid")
+      frame.literalId = literal && value.kind === "string";
+    if (["saleprice", "renewamount"].includes(key) && literal)
+      frame.literalMoney = true;
+  }
+  return products;
+}
+
 function isGlmCodingPriceData(body: string): boolean {
   // The named ClaudeCode chunk also declares V2/V3 team UI configuration,
   // without any quote data. Billing tables are in shared route dependencies.
   return (
     /\bstepUnit:"[^"]+"/.test(body) ||
-    /\{type:"[^"]+",unitKey:"[^"]+",productId:"/.test(body) ||
+    glmCompactProducts(body).length > 0 ||
     /\b(?:items|plans|products|prices)=\[\s*\]/.test(body)
   );
 }
@@ -1157,26 +1321,20 @@ export function parseGlmCodingPlan(
     }
     return declarations[0];
   }
-  for (const product of raw.body.matchAll(
-    /\{type:"([^"]+)",unitKey:"([^"]+)",productId:"[^"]+"[^}]{0,600}\}/gi,
-  )) {
+  for (const product of glmCompactProducts(raw.body)) {
     if (
-      !/^(?:lite|pro|max)$/i.test(product[1]) ||
-      !/^(?:month|quarter|year)$/i.test(product[2])
+      !/^(?:lite|pro|max)$/i.test(product.type ?? "") ||
+      !/^(?:month|quarter|year)$/i.test(product.unitkey ?? "")
     ) {
       throw new CollectionError(
         "STRUCTURE_CHANGED",
         "GLM compact prices contain an unverified plan or billing period.",
       );
     }
-    const plan = `${product[1][0].toUpperCase()}${product[1].slice(1).toLowerCase()}`;
-    const unit = product[2].toLowerCase() as keyof typeof periodNames;
-    const salePrice = product[0].match(
-      /salePrice:(\d+(?:\.\d+)?)(?=[,}])/,
-    )?.[1];
-    const renewalTotal = product[0].match(
-      /renewAmount:(\d+(?:\.\d+)?)(?=[,}])/,
-    )?.[1];
+    const plan = `${product.type![0].toUpperCase()}${product.type!.slice(1).toLowerCase()}`;
+    const unit = product.unitkey!.toLowerCase() as keyof typeof periodNames;
+    const salePrice = product.saleprice;
+    const renewalTotal = product.renewamount;
     const price = unit === "month" ? salePrice : renewalTotal;
     if (!validGlmCodingPriceText(price)) continue;
 
